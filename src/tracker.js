@@ -1,4 +1,4 @@
-const users = {}; // memoria
+const users = {};
 
 export function initUsers(eliteUsers) {
   for (const discordId in eliteUsers) {
@@ -31,7 +31,7 @@ export function updateHeartbeat(data, onlineIds) {
   user.instances = data.instances;
 
   if (isOnline && data.instances > 0) {
-    user.time_active += 1; // 1 ciclo
+    user.time_active += 1;
     addXP(user);
   }
 }
@@ -39,9 +39,7 @@ export function updateHeartbeat(data, onlineIds) {
 function addXP(user) {
   let xp = 1 + (user.instances * 0.1);
 
-  const now = Date.now();
-
-  if (user.gp_boost_until > now) {
+  if (Date.now() < user.gp_boost_until) {
     xp *= 2;
   }
 
@@ -54,6 +52,8 @@ export function addGP(name) {
 
   user.gp += 1;
   user.gp_boost_until = Date.now() + (60 * 60 * 1000);
+
+  console.log(`🚀 Boost activado para ${name}`);
 }
 
 export function getUsers() {
