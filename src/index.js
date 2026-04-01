@@ -95,7 +95,7 @@ client.once("ready", async () => {
     }
   }, 1800000);
 });
-
+console.log("📩 Mensaje detectado en:", msg.channel.id);
 // 📩 Eventos de mensajes
 client.on("messageCreate", async (msg) => {
   try {
