@@ -1,20 +1,30 @@
 export function parseHeartbeat(message) {
-  const content =
-    message.content ||
-    message.embeds?.[0]?.description ||
-    message.embeds?.[0]?.title ||
-    "";
+  let content = message.content;
+
+  // 🔥 SI VIENE COMO EMBED
+  if (!content && message.embeds?.length > 0) {
+    const embed = message.embeds[0];
+
+    // reconstruimos el texto completo del embed
+    content = [
+      embed.title,
+      embed.description,
+      ...(embed.fields?.map(f => `${f.name}: ${f.value}`) || [])
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
 
   if (!content) return null;
 
   const lines = content.split("\n");
 
-  if (lines.length < 2) return null;
-
-  const name = lines[0].trim();
+  // nombre = primera línea válida
+  const name = lines[0]?.trim();
+  if (!name) return null;
 
   const onlineLine = lines.find(l =>
-    l.toLowerCase().includes("online:")
+    l.toLowerCase().includes("online")
   );
 
   if (!onlineLine) return null;
@@ -34,11 +44,13 @@ export function parseHeartbeat(message) {
 }
 
 export function parseGP(message) {
-  const content =
-    message.content ||
-    message.embeds?.[0]?.description ||
-    message.embeds?.[0]?.title ||
-    "";
+  let content = message.content;
+
+  if (!content && message.embeds?.length > 0) {
+    const embed = message.embeds[0];
+
+    content = embed.title || embed.description || "";
+  }
 
   if (!content) return null;
 
