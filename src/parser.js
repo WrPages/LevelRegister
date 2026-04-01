@@ -3,11 +3,12 @@ export function parseHeartbeat(message) {
 
   if (lines.length < 2) return null;
 
-  // 🧠 Nombre = primera línea
   const name = lines[0].trim();
 
-  // 🔍 Línea de instancias
-  const onlineLine = lines.find(l => l.toLowerCase().startsWith("online:"));
+  const onlineLine = lines.find(l =>
+    l.toLowerCase().startsWith("online:")
+  );
+
   if (!onlineLine) return null;
 
   let instances = 0;
@@ -22,4 +23,11 @@ export function parseHeartbeat(message) {
     name,
     instances
   };
+}
+
+// ✅ ESTA ES LA QUE TE FALTA
+export function parseGP(message) {
+  const firstLine = message.content.split("\n")[0].trim();
+
+  return firstLine;
 }
