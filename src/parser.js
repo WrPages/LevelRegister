@@ -1,23 +1,25 @@
 export function parseHeartbeat(message) {
-  const content = message.content;
+  const lines = message.content.split("\n");
 
-  // ejemplo: "User: wR98 | Instances: 10"
-  const nameMatch = content.match(/User:\s*(\w+)/i);
-  const instMatch = content.match(/Instances:\s*(\d+)/i);
+  if (lines.length < 2) return null;
 
-  if (!nameMatch) return null;
+  // 🧠 Nombre = primera línea
+  const name = lines[0].trim();
+
+  // 🔍 Línea de instancias
+  const onlineLine = lines.find(l => l.toLowerCase().startsWith("online:"));
+  if (!onlineLine) return null;
+
+  let instances = 0;
+
+  const value = onlineLine.split(":")[1].trim();
+
+  if (value.toLowerCase() !== "none") {
+    instances = value.split(",").length;
+  }
 
   return {
-    name: nameMatch[1],
-    instances: instMatch ? parseInt(instMatch[1]) : 0
+    name,
+    instances
   };
-}
-
-export function parseGP(message) {
-  const firstLine = message.content.split("\n")[0];
-
-  // ejemplo: "wR98 pulled ..."
-  const match = firstLine.match(/^(\w+)/);
-
-  return match ? match[1] : null;
 }
