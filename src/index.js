@@ -95,10 +95,11 @@ client.once("ready", async () => {
     }
   }, 1800000);
 });
-console.log("📩 Mensaje detectado en:", msg.channel.id);
+
 // 📩 Eventos de mensajes
 client.on("messageCreate", async (msg) => {
   try {
+    console.log("📩 Mensaje detectado en:", msg.channel.id);
     // HEARTBEAT
     if (msg.channel.id === process.env.HEARTBEAT_CHANNEL_ID) {
       const data = parseHeartbeat(msg);
