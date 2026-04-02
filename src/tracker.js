@@ -5,7 +5,8 @@ let STATS_CHANNEL_ID;
 let saveToGist;
 let trackingData;
 
-let liveMessageId = null;
+let liveMessage = null;
+let loopsStarted = false;
 
 const liveTracker = {};
 
@@ -18,7 +19,19 @@ export function initTracker(discordClient, statsChannelId, saveFn, trackingObj) 
   saveToGist = saveFn;
   trackingData = trackingObj || {};
 
-  // 🔥 Sanitizar datos cargados
+  sanitizeTrackingData();
+
+  if (!loopsStarted) {
+    loopsStarted = true;
+    startSecondLoop();
+    startTenMinuteBackup();
+  }
+}
+
+// =============================
+// LIMPIAR DATA
+// =============================
+function sanitizeTrackingData() {
   for (const key in trackingData) {
     if (!/^\d+$/.test(key)) {
       delete trackingData[key];
@@ -29,22 +42,30 @@ export function initTracker(discordClient, statsChannelId, saveFn, trackingObj) 
     trackingData[key].time = Number(trackingData[key].time) || 0;
     trackingData[key].gp = Number(trackingData[key].gp) || 0;
   }
-
-  startSecondLoop();
-  startTenMinuteBackup();
 }
 
 // =============================
-// CREAR MENSAJE LIVE
+// BUSCAR O CREAR MENSAJE
 // =============================
 export async function createLiveMessage() {
   const channel = await client.channels.fetch(STATS_CHANNEL_ID);
-  const msg = await channel.send("🏆 Tracker iniciado...");
-  liveMessageId = msg.id;
+
+  const messages = await channel.messages.fetch({ limit: 20 });
+
+  const existing = messages.find(
+    m => m.author.id === client.user.id
+  );
+
+  if (existing) {
+    liveMessage = existing;
+    return;
+  }
+
+  liveMessage = await channel.send("🏆 Iniciando tracker...");
 }
 
 // =============================
-// ACTUALIZAR INSTANCIAS
+// UPDATE INSTANCIAS
 // =============================
 export function updateUserInstances(discordId, instances) {
   if (!discordId) return;
@@ -69,7 +90,7 @@ export function updateUserInstances(discordId, instances) {
 }
 
 // =============================
-// BOOST GP
+// BOOST
 // =============================
 export function activateBoost(discordId) {
   if (!liveTracker[discordId]) return;
@@ -77,7 +98,7 @@ export function activateBoost(discordId) {
 }
 
 // =============================
-// LOOP CADA 1 SEGUNDO
+// LOOP 1 SEGUNDO
 // =============================
 function startSecondLoop() {
   setInterval(() => {
@@ -92,8 +113,7 @@ function startSecondLoop() {
         if (user.seconds >= 60) {
           user.seconds = 0;
 
-          trackingData[userId].time =
-            (Number(trackingData[userId].time) || 0) + 1;
+          trackingData[userId].time += 1;
 
           let xpGain = 2 + (user.instances * 0.5);
 
@@ -101,19 +121,17 @@ function startSecondLoop() {
             xpGain *= 2;
           }
 
-          trackingData[userId].xp =
-            (Number(trackingData[userId].xp) || 0) + xpGain;
+          trackingData[userId].xp += xpGain;
         }
       }
     }
 
     updateLiveMessage();
-
   }, 1000);
 }
 
 // =============================
-// BACKUP CADA 10 MIN
+// BACKUP 10 MIN
 // =============================
 function startTenMinuteBackup() {
   setInterval(async () => {
@@ -126,20 +144,17 @@ function startTenMinuteBackup() {
 // ACTUALIZAR MENSAJE
 // =============================
 async function updateLiveMessage() {
-  if (!liveMessageId) return;
-
-  const channel = await client.channels.fetch(STATS_CHANNEL_ID);
-  const message = await channel.messages.fetch(liveMessageId);
+  if (!liveMessage) return;
 
   let content = "🏆 **RANKING LIVE**\n\n";
 
   const sortedUsers = Object.entries(trackingData)
     .filter(([userId]) => /^\d+$/.test(userId))
-    .sort((a, b) => (Number(b[1].xp) || 0) - (Number(a[1].xp) || 0));
+    .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
 
   for (const [userId, data] of sortedUsers) {
-    const xp = Number(data?.xp) || 0;
-    const time = Number(data?.time) || 0;
+    const xp = Number(data.xp) || 0;
+    const time = Number(data.time) || 0;
 
     const live = liveTracker[userId] || {};
     const instances = live.instances || 0;
@@ -154,5 +169,5 @@ async function updateLiveMessage() {
     content += "Sin actividad aún.";
   }
 
-  await message.edit(content);
+  await liveMessage.edit(content);
 }
