@@ -63,6 +63,14 @@ client.once("ready", async () => {
       trackingData = {};
     }
 
+    // 🔥 LIMPIAR CLAVES INVÁLIDAS
+    for (const key in trackingData) {
+      if (!/^\d+$/.test(key)) {
+        console.log("🧹 Eliminando clave inválida:", key);
+        delete trackingData[key];
+      }
+    }
+
     initTracker(
       client,
       process.env.STATS_CHANNEL_ID,
@@ -137,6 +145,11 @@ client.on("messageCreate", async (msg) => {
       }
 
       trackingData[user.discord_id].gp += 1;
+
+      await updateGist(
+        process.env.GIST_TRACKING,
+        JSON.stringify(trackingData, null, 2)
+      );
 
       console.log(`💎 GP + Boost activado para ${name}`);
     }
