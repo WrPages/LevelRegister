@@ -1,68 +1,129 @@
-const users = {};
+// tracker.js
 
-export function initUsers(eliteUsers) {
-  for (const discordId in eliteUsers) {
-    const u = eliteUsers[discordId];
+let client;
+let STATS_CHANNEL_ID;
+let saveTrackingToGist;
+let trackingData;
 
-    users[u.name] = {
-      discord_id: discordId,
-      name: u.name,
-      main_id: u.main_id,
-      sec_id: u.sec_id,
+let liveMessageId = null;
 
-      time_active: 0,
-      xp: 0,
-      gp: 0,
-      instances: 0,
+// ===============================
+// ESTADO EN MEMORIA (LIVE)
+// ===============================
+const liveTracker = {};
 
-      gp_boost_until: 0
+// ===============================
+// INIT
+// ===============================
+export function initTracker(discordClient, statsChannelId, saveFn, trackingObj) {
+  client = discordClient;
+  STATS_CHANNEL_ID = statsChannelId;
+  saveTrackingToGist = saveFn;
+  trackingData = trackingObj;
+
+  startSecondLoop();
+  startThirtyMinuteLoop();
+}
+
+// ===============================
+// CREAR MENSAJE LIVE
+// ===============================
+export async function createLiveMessage() {
+  const channel = await client.channels.fetch(STATS_CHANNEL_ID);
+
+  const msg = await channel.send("🔥 Inicializando tracker...");
+  liveMessageId = msg.id;
+}
+
+// ===============================
+// CUANDO LLEGA HEARTBEAT
+// ===============================
+export function updateUserInstances(discordId, instances) {
+  if (!liveTracker[discordId]) {
+    liveTracker[discordId] = {
+      seconds: 0,
+      minutes: 0,
+      xpBuffer: 0,
+      instances: 0
     };
   }
+
+  liveTracker[discordId].instances = instances;
 }
 
-export function updateHeartbeat(data, onlineIds) {
-  const user = users[data.name];
-  if (!user) return;
+// ===============================
+// LOOP CADA 1 SEGUNDO
+// ===============================
+function startSecondLoop() {
+  setInterval(() => {
+    for (const userId in liveTracker) {
+      const user = liveTracker[userId];
 
-  const isOnline =
-    onlineIds.includes(user.main_id) ||
-    onlineIds.includes(user.sec_id);
+      if (user.instances > 0) {
+        user.seconds++;
 
-  user.instances = data.instances;
+        if (user.seconds >= 60) {
+          user.seconds = 0;
+          user.minutes++;
 
-  if (isOnline && data.instances > 0) {
-    user.time_active += 1;
-    addXP(user);
+          const xpGain = 1 + (user.instances * 0.2);
+          user.xpBuffer += xpGain;
+        }
+      }
+    }
+
+    updateLiveMessage();
+
+  }, 1000);
+}
+
+// ===============================
+// LOOP CADA 30 MIN
+// ===============================
+function startThirtyMinuteLoop() {
+  setInterval(async () => {
+
+    for (const userId in liveTracker) {
+      const user = liveTracker[userId];
+
+      if (!trackingData[userId]) {
+        trackingData[userId] = {
+          xp: 0,
+          time: 0,
+          gp: 0
+        };
+      }
+
+      if (user.minutes > 0) {
+        trackingData[userId].xp += user.xpBuffer;
+        trackingData[userId].time += user.minutes;
+
+        user.minutes = 0;
+        user.xpBuffer = 0;
+      }
+    }
+
+    await saveTrackingToGist(trackingData);
+
+  }, 30 * 60 * 1000);
+}
+
+// ===============================
+// ACTUALIZAR MENSAJE DISCORD
+// ===============================
+async function updateLiveMessage() {
+  if (!liveMessageId) return;
+
+  const channel = await client.channels.fetch(STATS_CHANNEL_ID);
+  const message = await channel.messages.fetch(liveMessageId);
+
+  let content = "🔥 **LIVE TRACKER**\n\n";
+
+  for (const userId in liveTracker) {
+    const u = liveTracker[userId];
+
+    content += `<@${userId}> | ⏱ ${u.minutes}m ${u.seconds}s | ⚡ XP: ${u.xpBuffer.toFixed(2)} | 🧩 Inst: ${u.instances}\n`;
   }
-}
 
-function addXP(user) {
-  let xp = 1 + (user.instances * 0.1);
-
-  if (Date.now() < user.gp_boost_until) {
-    xp *= 2;
-  }
-
-  user.xp += xp;
-}
-
-export function addGP(name) {
-  const user = users[name];
-  if (!user) return;
-
-  user.gp += 1;
-  user.gp_boost_until = Date.now() + (60 * 60 * 1000);
-
-  console.log(`🚀 Boost activado para ${name}`);
-}
-
-export function getUsers() {
-  return users;
-}
-
-export function resetLocalCounters() {
-  for (const u of Object.values(users)) {
-    u.time_active = 0;
-    u.xp = 0;
-  }
+  await message.edit(content);
 }
