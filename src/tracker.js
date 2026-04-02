@@ -1,3 +1,5 @@
+// tracker.js
+
 let client;
 let STATS_CHANNEL_ID;
 let saveToGist;
@@ -25,7 +27,7 @@ export function initTracker(discordClient, statsChannelId, saveFn, trackingObj) 
 // =============================
 export async function createLiveMessage() {
   const channel = await client.channels.fetch(STATS_CHANNEL_ID);
-  const msg = await channel.send("🔥 Inicializando tracker...");
+  const msg = await channel.send("🔥 Tracker iniciado...");
   liveMessageId = msg.id;
 }
 
@@ -53,7 +55,7 @@ export function updateUserInstances(discordId, instances) {
 }
 
 // =============================
-// BOOST
+// BOOST GP
 // =============================
 export function activateBoost(discordId) {
   if (!liveTracker[discordId]) return;
@@ -75,10 +77,9 @@ function startSecondLoop() {
         if (user.seconds >= 60) {
           user.seconds = 0;
 
-          // 🔥 SUMA DIRECTO AL TRACKING REAL
           trackingData[userId].time += 1;
 
-          let xpGain = 2 + (user.instances * 0.5); // más competitivo
+          let xpGain = 2 + (user.instances * 0.5);
 
           if (Date.now() < user.boostUntil) {
             xpGain *= 2;
@@ -95,17 +96,17 @@ function startSecondLoop() {
 }
 
 // =============================
-// RESPALDO CADA 10 MIN
+// BACKUP CADA 10 MIN
 // =============================
 function startTenMinuteBackup() {
   setInterval(async () => {
     await saveToGist(trackingData);
-    console.log("💾 Backup automático (10 min)");
+    console.log("💾 Backup 10 min");
   }, 10 * 60 * 1000);
 }
 
 // =============================
-// ACTUALIZAR MENSAJE DISCORD
+// ACTUALIZAR MENSAJE
 // =============================
 async function updateLiveMessage() {
   if (!liveMessageId) return;
@@ -113,17 +114,20 @@ async function updateLiveMessage() {
   const channel = await client.channels.fetch(STATS_CHANNEL_ID);
   const message = await channel.messages.fetch(liveMessageId);
 
-  let content = "🔥 **LIVE TRACKER**\n\n";
+  let content = "🏆 **RANKING LIVE**\n\n";
 
   const sortedUsers = Object.entries(trackingData)
+    .filter(([userId]) => /^\d+$/.test(userId))
     .sort((a, b) => b[1].xp - a[1].xp);
 
   for (const [userId, data] of sortedUsers) {
     const live = liveTracker[userId] || {};
     const boostActive =
-      live.boostUntil && Date.now() < live.boostUntil ? "🚀" : "";
+      live.boostUntil && Date.now() < live.boostUntil ? " 🚀" : "";
 
-    content += `<@${userId}> | 🏆 XP TOTAL: ${data.xp.toFixed(1)} | ⏱ Tiempo: ${data.time}m ${boostActive}\n`;
+    const instances = live.instances || 0;
+
+    content += `<@${userId}> | XP: ${data.xp.toFixed(1)} | ⏱ ${data.time}m | 🧩 ${instances}${boostActive}\n`;
   }
 
   await message.edit(content);
