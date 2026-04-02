@@ -1,58 +1,91 @@
-export function parseHeartbeat(message) {
-  let content = message.content;
+// ===============================
+// UTILIDAD: reconstruir mensaje
+// ===============================
+function extractFullContent(message) {
+  let content = "";
 
-  // 🔥 SI VIENE COMO EMBED
-  if (!content && message.embeds?.length > 0) {
-    const embed = message.embeds[0];
-
-    // reconstruimos el texto completo del embed
-    content = [
-      embed.title,
-      embed.description,
-      ...(embed.fields?.map(f => `${f.name}: ${f.value}`) || [])
-    ]
-      .filter(Boolean)
-      .join("\n");
+  // Texto normal
+  if (message.content) {
+    content += message.content + "\n";
   }
 
+  // Embeds (pueden venir varios)
+  if (message.embeds && message.embeds.length > 0) {
+    for (const embed of message.embeds) {
+      if (embed.title) content += embed.title + "\n";
+      if (embed.description) content += embed.description + "\n";
+
+      if (embed.fields && embed.fields.length > 0) {
+        for (const field of embed.fields) {
+          content += `${field.name}: ${field.value}\n`;
+        }
+      }
+    }
+  }
+
+  return content.trim();
+}
+
+// ===============================
+// HEARTBEAT PARSER
+// ===============================
+export function parseHeartbeat(message) {
+  const content = extractFullContent(message);
   if (!content) return null;
 
-  const lines = content.split("\n");
+  const lines = content
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
 
-  // nombre = primera línea válida
-  const name = lines[0]?.trim();
+  if (lines.length === 0) return null;
+
+  // 🧠 Primera línea válida = nombre
+  const name = lines[0];
   if (!name) return null;
 
+  // 🔍 Buscar línea que empiece con "Online:"
   const onlineLine = lines.find(l =>
-    l.toLowerCase().includes("online")
+    l.toLowerCase().startsWith("online:")
   );
 
   if (!onlineLine) return null;
 
+  const value = onlineLine.split(":")[1]?.trim();
+  if (!value) return null;
+
   let instances = 0;
 
-  const value = onlineLine.split(":")[1]?.trim();
-
-  if (value && value.toLowerCase() !== "none") {
-    instances = value.split(",").length;
+  if (value.toLowerCase() !== "none") {
+    instances = value
+      .split(",")
+      .map(v => v.trim())
+      .filter(Boolean).length;
   }
 
   return {
-    name,
+    name: name.toLowerCase().trim(),
     instances
   };
 }
 
+// ===============================
+// GP PARSER
+// ===============================
 export function parseGP(message) {
-  let content = message.content;
-
-  if (!content && message.embeds?.length > 0) {
-    const embed = message.embeds[0];
-
-    content = embed.title || embed.description || "";
-  }
-
+  const content = extractFullContent(message);
   if (!content) return null;
 
-  return content.split("\n")[0].trim();
+  const firstLine = content
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean)[0];
+
+  if (!firstLine) return null;
+
+  // normalmente es algo tipo:
+  // "Cynical Chery pulled..."
+  const name = firstLine.split(" pulled")[0];
+
+  return name.toLowerCase().trim();
 }
