@@ -3,23 +3,22 @@ import dotenv from "dotenv";
 import { getGist, updateGist } from "./gist.js";
 import { parseHeartbeat, parseGP } from "./parser.js";
 import {
-  initUsers,
-  updateHeartbeat,
-  addGP,
-  getUsers,
-  resetLocalCounters
+  initTracker,
+  createLiveMessage,
+  updateUserInstances,
+  activateBoost
 } from "./tracker.js";
-import { buildStats } from "./display.js";
 
 dotenv.config();
 
-// ✅ VALIDACIÓN DE VARIABLES
+// =============================
+// VALIDAR VARIABLES
+// =============================
 const REQUIRED_ENV = [
   "DISCORD_TOKEN",
   "GP_CHANNEL_ID",
   "HEARTBEAT_CHANNEL_ID",
   "STATS_CHANNEL_ID",
-  "GIST_TOKEN",
   "GIST_USERS",
   "GIST_ONLINE",
   "GIST_TRACKING"
@@ -42,28 +41,47 @@ const client = new Client({
 
 let eliteUsers = {};
 let onlineIds = [];
+let trackingData = {};
 
+// =============================
+// READY
+// =============================
 client.once("ready", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
   try {
-    // 🔹 Cargar usuarios
     const usersRaw = await getGist(process.env.GIST_USERS);
     eliteUsers = JSON.parse(usersRaw);
 
-    // 🔹 Cargar online
     const onlineRaw = await getGist(process.env.GIST_ONLINE);
     onlineIds = cleanOnlineIds(onlineRaw);
 
-    initUsers(eliteUsers);
+    try {
+      const trackingRaw = await getGist(process.env.GIST_TRACKING);
+      trackingData = JSON.parse(trackingRaw);
+    } catch {
+      trackingData = {};
+    }
 
-    console.log(`👥 Usuarios cargados: ${Object.keys(eliteUsers).length}`);
+    initTracker(
+      client,
+      process.env.STATS_CHANNEL_ID,
+      async (data) => {
+        await updateGist(
+          process.env.GIST_TRACKING,
+          JSON.stringify(data, null, 2)
+        );
+      },
+      trackingData
+    );
+
+    await createLiveMessage();
 
   } catch (err) {
-    console.error("❌ Error cargando gists:", err.message);
+    console.error("❌ Error cargando GISTS:", err.message);
   }
 
-  // 🔄 Actualizar online cada minuto
+  // Actualizar online cada minuto
   setInterval(async () => {
     try {
       const onlineRaw = await getGist(process.env.GIST_ONLINE);
@@ -72,62 +90,92 @@ client.once("ready", async () => {
       console.error("❌ Error actualizando online:", err.message);
     }
   }, 60000);
-
-  // 💾 Guardar + mostrar cada 30 min
-  setInterval(async () => {
-    try {
-      const users = getUsers();
-
-      await updateGist(process.env.GIST_TRACKING, users);
-
-      const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
-
-      if (channel) {
-        await channel.send(buildStats(users));
-      }
-
-      console.log("💾 Datos guardados y enviados");
-
-      resetLocalCounters();
-
-    } catch (err) {
-      console.error("❌ Error guardando datos:", err.message);
-    }
-  }, 1800000);
 });
 
-// 📩 Eventos de mensajes
+// =============================
+// MENSAJES
+// =============================
 client.on("messageCreate", async (msg) => {
   try {
-    console.log("📩 Mensaje detectado en:", msg.channel.id);
+
     // HEARTBEAT
     if (msg.channel.id === process.env.HEARTBEAT_CHANNEL_ID) {
       const data = parseHeartbeat(msg);
-      if (data) {
-        updateHeartbeat(data, onlineIds);
+      if (!data) return;
+
+      const user = findUserByName(data.name);
+      if (!user) return;
+
+      const isOnline =
+        onlineIds.includes(user.main_id) ||
+        onlineIds.includes(user.sec_id);
+
+      if (!isOnline) {
+        updateUserInstances(user.discord_id, 0);
+        return;
       }
+
+      updateUserInstances(user.discord_id, data.instances);
     }
 
     // GP
     if (msg.channel.id === process.env.GP_CHANNEL_ID) {
       const name = parseGP(msg);
-      if (name) {
-        console.log(`💎 GP detectado: ${name}`);
-        addGP(name);
+      if (!name) return;
+
+      const user = findUserByName(name);
+      if (!user) return;
+
+      activateBoost(user.discord_id);
+
+      if (!trackingData[user.discord_id]) {
+        trackingData[user.discord_id] = {
+          xp: 0,
+          time: 0,
+          gp: 0
+        };
       }
+
+      trackingData[user.discord_id].gp += 1;
+
+      console.log(`💎 GP + Boost activado para ${name}`);
     }
 
   } catch (err) {
-    console.error("❌ Error en messageCreate:", err.message);
+    console.error("❌ Error messageCreate:", err.message);
   }
 });
 
-// 🧹 Limpieza de IDs
+// =============================
+// HELPERS
+// =============================
 function cleanOnlineIds(raw) {
   return raw
     .split("\n")
     .map(id => id.trim())
     .filter(id => id.length > 0);
+}
+
+function normalize(str) {
+  return str.toLowerCase().trim();
+}
+
+function findUserByName(name) {
+  const normalized = normalize(name);
+
+  for (const discordId in eliteUsers) {
+    const user = eliteUsers[discordId];
+
+    if (normalize(user.name) === normalized) {
+      return {
+        discord_id: discordId,
+        main_id: user.main_id,
+        sec_id: user.sec_id
+      };
+    }
+  }
+
+  return null;
 }
 
 client.login(process.env.DISCORD_TOKEN);
