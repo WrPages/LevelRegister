@@ -5,15 +5,24 @@ let STATS_CHANNEL_ID;
 let saveToGist;
 let trackingData;
 
-let liveMessage = null;
-let loopsStarted = false;
+let liveMessageId = null;
+let secondLoop = null;
+let backupLoop = null;
 
 const liveTracker = {};
 
 // =============================
-// INIT
+// INIT (SOLO UNA VEZ)
 // =============================
-export function initTracker(discordClient, statsChannelId, saveFn, trackingObj) {
+export async function initTracker(
+  discordClient,
+  statsChannelId,
+  saveFn,
+  trackingObj
+) {
+  // 🔥 Si ya estaba inicializado no volver a iniciar
+  if (client) return;
+
   client = discordClient;
   STATS_CHANNEL_ID = statsChannelId;
   saveToGist = saveFn;
@@ -21,11 +30,12 @@ export function initTracker(discordClient, statsChannelId, saveFn, trackingObj) 
 
   sanitizeTrackingData();
 
-  if (!loopsStarted) {
-    loopsStarted = true;
-    startSecondLoop();
-    startTenMinuteBackup();
-  }
+  await findOrCreateMessage();
+
+  startSecondLoop();
+  startBackupLoop();
+
+  console.log("✅ Tracker inicializado correctamente");
 }
 
 // =============================
@@ -47,25 +57,30 @@ function sanitizeTrackingData() {
 // =============================
 // BUSCAR O CREAR MENSAJE
 // =============================
-export async function createLiveMessage() {
+async function findOrCreateMessage() {
   const channel = await client.channels.fetch(STATS_CHANNEL_ID);
 
-  const messages = await channel.messages.fetch({ limit: 20 });
+  const messages = await channel.messages.fetch({ limit: 50 });
 
   const existing = messages.find(
-    m => m.author.id === client.user.id
+    m =>
+      m.author.id === client.user.id &&
+      m.content?.includes("RANKING LIVE")
   );
 
   if (existing) {
-    liveMessage = existing;
+    liveMessageId = existing.id;
+    console.log("♻️ Mensaje reutilizado");
     return;
   }
 
-  liveMessage = await channel.send("🏆 Iniciando tracker...");
+  const msg = await channel.send("🏆 RANKING LIVE\nIniciando...");
+  liveMessageId = msg.id;
+  console.log("🆕 Mensaje creado");
 }
 
 // =============================
-// UPDATE INSTANCIAS
+// ACTUALIZAR INSTANCIAS
 // =============================
 export function updateUserInstances(discordId, instances) {
   if (!discordId) return;
@@ -94,14 +109,16 @@ export function updateUserInstances(discordId, instances) {
 // =============================
 export function activateBoost(discordId) {
   if (!liveTracker[discordId]) return;
-  liveTracker[discordId].boostUntil = Date.now() + (60 * 60 * 1000);
+  liveTracker[discordId].boostUntil = Date.now() + 3600000;
 }
 
 // =============================
 // LOOP 1 SEGUNDO
 // =============================
 function startSecondLoop() {
-  setInterval(() => {
+  if (secondLoop) return; // 🔥 evita duplicado
+
+  secondLoop = setInterval(() => {
     for (const userId in liveTracker) {
       const user = liveTracker[userId];
 
@@ -127,47 +144,58 @@ function startSecondLoop() {
     }
 
     updateLiveMessage();
+
   }, 1000);
 }
 
 // =============================
 // BACKUP 10 MIN
 // =============================
-function startTenMinuteBackup() {
-  setInterval(async () => {
+function startBackupLoop() {
+  if (backupLoop) return; // 🔥 evita duplicado
+
+  backupLoop = setInterval(async () => {
     await saveToGist(trackingData);
-    console.log("💾 Backup 10 min");
-  }, 10 * 60 * 1000);
+    console.log("💾 Backup 10 min guardado");
+  }, 600000);
 }
 
 // =============================
 // ACTUALIZAR MENSAJE
 // =============================
 async function updateLiveMessage() {
-  if (!liveMessage) return;
+  if (!liveMessageId) return;
 
-  let content = "🏆 **RANKING LIVE**\n\n";
+  try {
+    const channel = await client.channels.fetch(STATS_CHANNEL_ID);
+    const message = await channel.messages.fetch(liveMessageId);
 
-  const sortedUsers = Object.entries(trackingData)
-    .filter(([userId]) => /^\d+$/.test(userId))
-    .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
+    let content = "🏆 **RANKING LIVE**\n\n";
 
-  for (const [userId, data] of sortedUsers) {
-    const xp = Number(data.xp) || 0;
-    const time = Number(data.time) || 0;
+    const sortedUsers = Object.entries(trackingData)
+      .filter(([id]) => /^\d+$/.test(id))
+      .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
 
-    const live = liveTracker[userId] || {};
-    const instances = live.instances || 0;
+    for (const [userId, data] of sortedUsers) {
+      const xp = Number(data.xp) || 0;
+      const time = Number(data.time) || 0;
 
-    const boostActive =
-      live.boostUntil && Date.now() < live.boostUntil ? " 🚀" : "";
+      const live = liveTracker[userId] || {};
+      const instances = live.instances || 0;
 
-    content += `<@${userId}> | XP: ${xp.toFixed(1)} | ⏱ ${time}m | 🧩 ${instances}${boostActive}\n`;
+      const boost =
+        live.boostUntil && Date.now() < live.boostUntil ? " 🚀" : "";
+
+      content += `<@${userId}> | XP: ${xp.toFixed(1)} | ⏱ ${time}m | 🧩 ${instances}${boost}\n`;
+    }
+
+    if (sortedUsers.length === 0) {
+      content += "Sin actividad aún.";
+    }
+
+    await message.edit(content);
+
+  } catch (err) {
+    console.log("⚠️ No se pudo editar mensaje (reintentará)");
   }
-
-  if (sortedUsers.length === 0) {
-    content += "Sin actividad aún.";
-  }
-
-  await liveMessage.edit(content);
 }
