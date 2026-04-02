@@ -1,7 +1,6 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import dotenv from "dotenv";
 import { getGist, updateGist } from "./gist.js";
-import { parseHeartbeat, parseGP } from "./parser.js";
 
 dotenv.config();
 
@@ -66,13 +65,11 @@ client.once("ready", async () => {
   }
 
   sanitizeTracking();
-
   await findOrCreateMessage();
 
   startSecondLoop();
   startBackupLoop();
 
-  // refrescar online cada minuto
   setInterval(async () => {
     onlineIds = cleanOnlineIds(
       await getGist(process.env.GIST_ONLINE)
@@ -87,12 +84,30 @@ client.on("messageCreate", async (msg) => {
 
   // HEARTBEAT
   if (msg.channel.id === process.env.HEARTBEAT_CHANNEL_ID) {
-    const data = parseHeartbeat(msg);
-    if (!data) return;
+
+    const content = buildFullContent(msg);
+    if (!content) return;
+
+    const lines = content.split("\n");
+    const name = lines[0]?.trim();
+    if (!name) return;
+
+    const onlineLine = lines.find(l =>
+      l.toLowerCase().includes("online")
+    );
+
+    if (!onlineLine) return;
+
+    let instances = 0;
+    const value = onlineLine.split(":")[1]?.trim();
+
+    if (value && value.toLowerCase() !== "none") {
+      instances = value.split(",").length;
+    }
 
     const matched = Object.entries(eliteUsers).find(
       ([discordId, user]) =>
-        user.name?.toLowerCase() === data.name?.toLowerCase() &&
+        user.name?.toLowerCase() === name.toLowerCase() &&
         onlineIds.includes(user.main_id)
     );
 
@@ -108,7 +123,7 @@ client.on("messageCreate", async (msg) => {
       };
     }
 
-    liveTracker[discordId].instances = data.instances || 0;
+    liveTracker[discordId].instances = instances;
 
     if (!trackingData[discordId]) {
       trackingData[discordId] = {
@@ -121,12 +136,15 @@ client.on("messageCreate", async (msg) => {
 
   // GP
   if (msg.channel.id === process.env.GP_CHANNEL_ID) {
-    const name = parseGP(msg);
-    if (!name) return;
+
+    const content = buildFullContent(msg);
+    if (!content) return;
+
+    const name = content.split("\n")[0].trim();
 
     const matched = Object.entries(eliteUsers).find(
       ([discordId, user]) =>
-        user.name?.toLowerCase() === name?.toLowerCase()
+        user.name?.toLowerCase() === name.toLowerCase()
     );
 
     if (!matched) return;
@@ -136,7 +154,7 @@ client.on("messageCreate", async (msg) => {
     if (!liveTracker[discordId]) return;
 
     liveTracker[discordId].boostUntil =
-      Date.now() + (60 * 60 * 1000);
+      Date.now() + 3600000;
   }
 });
 
@@ -265,6 +283,24 @@ function cleanOnlineIds(raw) {
     .split("\n")
     .map(id => id.trim())
     .filter(Boolean);
+}
+
+function buildFullContent(message) {
+  let content = message.content;
+
+  if (!content && message.embeds?.length > 0) {
+    const embed = message.embeds[0];
+
+    content = [
+      embed.title,
+      embed.description,
+      ...(embed.fields?.map(f => `${f.name}: ${f.value}`) || [])
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return content;
 }
 
 client.login(process.env.DISCORD_TOKEN);
