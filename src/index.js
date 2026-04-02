@@ -4,26 +4,6 @@ import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
-// =============================
-// VALIDACIÓN ENV
-// =============================
-const REQUIRED_ENV = [
-  "DISCORD_TOKEN",
-  "GP_CHANNEL_ID",
-  "HEARTBEAT_CHANNEL_ID",
-  "STATS_CHANNEL_ID",
-  "GIST_USERS",
-  "GIST_ONLINE",
-  "GIST_TRACKING"
-];
-
-for (const key of REQUIRED_ENV) {
-  if (!process.env[key]) {
-    console.error(`❌ Falta variable: ${key}`);
-    process.exit(1);
-  }
-}
-
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -47,18 +27,13 @@ let backupLoop = null;
 // =============================
 // READY
 // =============================
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
   try {
-    eliteUsers = JSON.parse(await getGist(process.env.GIST_USERS));
-
-    onlineIds = cleanOnlineIds(
-      await getGist(process.env.GIST_ONLINE)
-    );
-
-    const trackingRaw = await getGist(process.env.GIST_TRACKING);
-    trackingData = trackingRaw ? JSON.parse(trackingRaw) : {};
+    eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
+    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+    trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
   } catch (err) {
     console.error("❌ Error cargando Gists:", err.message);
@@ -82,7 +57,6 @@ client.once("ready", async () => {
 // =============================
 client.on("messageCreate", async (msg) => {
 
-  // HEARTBEAT
   if (msg.channel.id === process.env.HEARTBEAT_CHANNEL_ID) {
 
     const content = buildFullContent(msg);
@@ -95,12 +69,10 @@ client.on("messageCreate", async (msg) => {
     const onlineLine = lines.find(l =>
       l.toLowerCase().includes("online")
     );
-
     if (!onlineLine) return;
 
     let instances = 0;
     const value = onlineLine.split(":")[1]?.trim();
-
     if (value && value.toLowerCase() !== "none") {
       instances = value.split(",").length;
     }
@@ -134,7 +106,6 @@ client.on("messageCreate", async (msg) => {
     }
   }
 
-  // GP
   if (msg.channel.id === process.env.GP_CHANNEL_ID) {
 
     const content = buildFullContent(msg);
@@ -196,7 +167,7 @@ function startSecondLoop() {
 }
 
 // =============================
-// BACKUP 10 MIN
+// BACKUP
 // =============================
 function startBackupLoop() {
   if (backupLoop) return;
@@ -259,9 +230,7 @@ async function updateLiveMessage() {
           ? " 🚀"
           : "";
 
-      content += `<@${userId}> | XP ${xp.toFixed(
-        1
-      )} | ⏱ ${time}m | 🧩 ${instances}${boost}\n`;
+      content += `<@${userId}> | XP ${xp.toFixed(1)} | ⏱ ${time}m | 🧩 ${instances}${boost}\n`;
     }
 
     await message.edit(content);
@@ -270,8 +239,27 @@ async function updateLiveMessage() {
 }
 
 // =============================
+// UTILIDADES SEGURAS
+// =============================
+function safeParse(data) {
+  if (!data) return {};
+  if (typeof data === "object") return data;
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
 function sanitizeTracking() {
+  if (typeof trackingData !== "object") trackingData = {};
+
   for (const key in trackingData) {
+    if (typeof trackingData[key] !== "object") {
+      trackingData[key] = { xp: 0, time: 0, gp: 0 };
+    }
+
     trackingData[key].xp = Number(trackingData[key].xp) || 0;
     trackingData[key].time = Number(trackingData[key].time) || 0;
     trackingData[key].gp = Number(trackingData[key].gp) || 0;
@@ -279,10 +267,8 @@ function sanitizeTracking() {
 }
 
 function cleanOnlineIds(raw) {
-  return raw
-    .split("\n")
-    .map(id => id.trim())
-    .filter(Boolean);
+  if (!raw) return [];
+  return raw.split("\n").map(x => x.trim()).filter(Boolean);
 }
 
 function buildFullContent(message) {
@@ -290,7 +276,6 @@ function buildFullContent(message) {
 
   if (!content && message.embeds?.length > 0) {
     const embed = message.embeds[0];
-
     content = [
       embed.title,
       embed.description,
