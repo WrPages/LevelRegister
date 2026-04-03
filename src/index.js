@@ -1,7 +1,10 @@
-import { Client, GatewayIntentBits, AttachmentBuilder, EmbedBuilder } from "discord.js";
+
+
+
+
+import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
 import dotenv from "dotenv";
 import { getGist, updateGist } from "./gist.js";
-import { createCanvas } from "canvas";
 
 dotenv.config();
 
@@ -21,7 +24,7 @@ let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF (RAÍZ REPO)
+// 🧬 EVOLUCIÓN + GIF
 // =============================
 function getPokemonData(totalXP) {
 
@@ -67,72 +70,6 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
-// 🎨 GENERAR TARJETA
-// =============================
-async function generateCard(userId) {
-
-  const s = liveTracker[userId];
-  const t = trackingData[userId] || {};
-
-  if (!s) return null;
-
-  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-  const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-  const level = Math.floor(totalXP / 100);
-
-  const { stage, progress } = getPokemonData(totalXP);
-
-  const canvas = createCanvas(600, 800);
-  const ctx = canvas.getContext("2d");
-
-  // Fondo
-  ctx.fillStyle = "#0f172a";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Nombre
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 40px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(s.name, 300, 60);
-
-  // Línea
-  ctx.fillRect(50, 100, 500, 2);
-
-  // Evolución texto
-  ctx.font = "20px Arial";
-  ctx.fillText(`Evolución: ${stage}`, 50, 320);
-
-  // Barra progreso
-  ctx.fillStyle = "#1e293b";
-  ctx.fillRect(50, 350, 500, 20);
-
-  ctx.fillStyle = "#22c55e";
-  ctx.fillRect(50, 350, 500 * progress, 20);
-
-  // Stats
-  ctx.font = "24px Arial";
-  ctx.textAlign = "left";
-
-  let y = 420;
-
-  const lines = [
-    `Nivel: ${level}`,
-    `XP: ${totalXP.toFixed(2)}`,
-    `Tiempo: ${totalTime}m`,
-    `Instancias: ${s.instances}`,
-    `Packs: ${s.packs}`,
-    `GP: ${t.gp || 0}`
-  ];
-
-  for (const line of lines) {
-    ctx.fillText(line, 50, y);
-    y += 40;
-  }
-
-  return canvas.toBuffer();
-}
-
-// =============================
 client.once("ready", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
@@ -175,24 +112,32 @@ client.on("messageCreate", async (msg) => {
     if (!s) return msg.reply("❌ Usuario sin datos.");
 
     const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-    const { stage, gif } = getPokemonData(totalXP);
+    const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+    const level = Math.floor(totalXP / 100);
 
-    const buffer = await generateCard(targetId);
+    const { stage, gif, progress } = getPokemonData(totalXP);
 
-    const attachment = new AttachmentBuilder(buffer, {
-      name: "card.png"
-    });
+    const progressBar = "🟩".repeat(Math.floor(progress * 10)) +
+                        "⬛".repeat(10 - Math.floor(progress * 10));
 
     const embed = new EmbedBuilder()
       .setTitle(`🧠 ${s.name}`)
-      .setDescription(`Evolución actual: ${stage}`)
-      .setImage(gif) // 🔥 GIF REAL (SE MUEVE)
+      .setDescription(`
+🎖 **Nivel:** ${level}
+📈 **XP:** ${totalXP.toFixed(2)}
+
+⏱ **Tiempo:** ${totalTime}m
+🧩 **Instancias:** ${s.instances}
+📦 **Packs:** ${s.packs}
+💎 **GP:** ${t.gp}
+
+🧬 **Evolución:** ${stage}
+${progressBar}
+`)
+      .setImage(gif) // 🔥 GIF ANIMADO
       .setColor(0x00AE86);
 
-    return msg.channel.send({
-      embeds: [embed],
-      files: [attachment]
-    });
+    return msg.channel.send({ embeds: [embed] });
   }
 
   // =============================
