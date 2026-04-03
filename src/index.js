@@ -41,18 +41,95 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🔥 PARSEO COMPLETO HEARTBEAT
+// 🔥 DETECTOR GP
+// =============================
+client.on("messageCreate", async (msg) => {
+
+  if (msg.channel.id !== process.env.GP_CHANNEL_ID) return;
+
+  let content = msg.content;
+
+  if (!content && msg.embeds.length > 0) {
+    const e = msg.embeds[0];
+    content = `${e.title || ""}\n${e.description || ""}`;
+  }
+
+  if (!content) return;
+
+  if (!content.includes("God Pack found")) return;
+
+  const firstLine = content.split("\n")[0];
+
+  const mentionMatch = firstLine.match(/<@!?(\d+)>/);
+
+  let discordId = null;
+
+  if (mentionMatch) {
+    discordId = mentionMatch[1];
+  }
+
+  // fallback por nombre
+  if (!discordId) {
+    const name = firstLine.replace("@", "").split(" ")[0];
+
+    const normalize = s => s?.toLowerCase().trim();
+
+    const matched = Object.entries(eliteUsers).find(
+      ([_, user]) =>
+        normalize(user.name).includes(normalize(name))
+    );
+
+    if (matched) {
+      discordId = matched[0];
+    }
+  }
+
+  if (!discordId) return;
+
+  console.log("🔥 GP DETECTADO PARA:", discordId);
+
+  if (!trackingData[discordId]) {
+    trackingData[discordId] = {
+      xp: 0,
+      time: 0,
+      name: "Unknown",
+      packs: 0,
+      gp: 0
+    };
+  }
+
+  if (!liveTracker[discordId]) {
+    liveTracker[discordId] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: trackingData[discordId].name,
+      packs: 0
+    };
+  }
+
+  // 🎯 EFECTOS
+  trackingData[discordId].xp += 1000;
+  trackingData[discordId].gp += 1;
+
+  liveTracker[discordId].boostUntil =
+    Date.now() + 3600000;
+
+  await updateGist(process.env.GIST_TRACKING, trackingData);
+});
+
+// =============================
+// PARSE HEARTBEAT
 // =============================
 function parseHeartbeat(content) {
   const lines = content.split("\n");
 
   const name = lines[0]?.trim();
-
   const onlineLine = lines.find(l => l.startsWith("Online:"));
   const packsLine = lines.find(l => l.includes("Packs:"));
 
   let instances = 0;
-  let ppm = 0;
   let packs = 0;
 
   if (onlineLine) {
@@ -63,14 +140,11 @@ function parseHeartbeat(content) {
   }
 
   if (packsLine) {
-    const match = packsLine.match(/Packs:\s*(\d+).*Avg:\s*([\d.]+)/);
-    if (match) {
-      packs = Number(match[1]);
-      ppm = Number(match[2]);
-    }
+    const match = packsLine.match(/Packs:\s*(\d+)/);
+    if (match) packs = Number(match[1]);
   }
 
-  return { name, instances, ppm, packs };
+  return { name, instances, packs };
 }
 
 // =============================
@@ -115,8 +189,8 @@ async function bootstrapFromHistory() {
       sessionXP: 0,
       sessionTime: 0,
       instances: data.instances,
+      boostUntil: 0,
       name: data.name,
-      ppm: data.ppm,
       packs: data.packs
     };
   }
@@ -141,8 +215,8 @@ function startLoop() {
           sessionXP: 0,
           sessionTime: 0,
           instances: 1,
+          boostUntil: 0,
           name: user.name,
-          ppm: 0,
           packs: 0
         };
       }
@@ -151,8 +225,12 @@ function startLoop() {
 
       tracker.sessionTime += 1;
 
-      const xpPerSecond =
+      let xpPerSecond =
         (2 + tracker.instances * 0.5) / 60;
+
+      if (Date.now() < tracker.boostUntil) {
+        xpPerSecond *= 2;
+      }
 
       tracker.sessionXP += xpPerSecond;
     }
@@ -163,7 +241,7 @@ function startLoop() {
 }
 
 // =============================
-// 💾 BACKUP
+// BACKUP
 // =============================
 function startBackupLoop() {
   setInterval(async () => {
@@ -175,22 +253,20 @@ function startBackupLoop() {
           xp: 0,
           time: 0,
           name: liveTracker[id].name,
-          ppm: 0,
-          packs: 0
+          packs: 0,
+          gp: 0
         };
       }
 
-      const session = liveTracker[id];
+      const s = liveTracker[id];
 
-      trackingData[id].xp += session.sessionXP;
-      trackingData[id].time += Math.floor(session.sessionTime / 60);
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].name = s.name;
+      trackingData[id].packs = s.packs;
 
-      trackingData[id].name = session.name;
-      trackingData[id].ppm = session.ppm;
-      trackingData[id].packs = session.packs;
-
-      session.sessionXP = 0;
-      session.sessionTime = 0;
+      s.sessionXP = 0;
+      s.sessionTime = 0;
     }
 
     await updateGist(process.env.GIST_TRACKING, trackingData);
@@ -200,8 +276,6 @@ function startBackupLoop() {
   }, 600000);
 }
 
-// =============================
-// MENSAJE
 // =============================
 async function createMessage() {
   const channel = await client.channels.fetch(
@@ -223,25 +297,23 @@ async function updateMessage() {
 
   let content = "🏆 TRACKING EN VIVO\n\n";
 
-  for (const [id, session] of Object.entries(liveTracker)) {
+  for (const [id, s] of Object.entries(liveTracker)) {
 
-    const total = trackingData[id] || {
-      xp: 0,
-      time: 0
-    };
+    const t = trackingData[id] || { xp: 0, time: 0, gp: 0 };
 
-    const totalXP = total.xp + session.sessionXP;
-    const totalTime = total.time + Math.floor(session.sessionTime / 60);
-
+    const totalXP = t.xp + s.sessionXP;
+    const totalTime = t.time + Math.floor(s.sessionTime / 60);
     const level = Math.floor(totalXP / 100);
 
-    content += `👤 ${session.name}
+    const boost = Date.now() < s.boostUntil ? "🚀" : "";
+
+    content += `👤 ${s.name}
 🎖 Nivel ${level}
 XP ${totalXP.toFixed(2)}
 ⏱ ${totalTime}m
-🧩 ${session.instances}
-📦 Packs: ${session.packs}
-⚡ ${session.ppm} packs/min
+🧩 ${s.instances}
+📦 Packs: ${s.packs}
+💎 GP: ${t.gp} ${boost}
 
 `;
   }
@@ -262,8 +334,8 @@ function sanitizeTracking() {
   for (const k in trackingData) {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
-    trackingData[k].ppm = Number(trackingData[k].ppm) || 0;
     trackingData[k].packs = Number(trackingData[k].packs) || 0;
+    trackingData[k].gp = Number(trackingData[k].gp) || 0;
   }
 }
 
