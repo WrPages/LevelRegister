@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import dotenv from "dotenv";
+import { getGist } from "./gist.js";
 
 dotenv.config();
 
@@ -12,104 +13,126 @@ const client = new Client({
 });
 
 // =============================
+let eliteUsers = {};
+let onlineIds = [];
 let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
 client.once("ready", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
+
+  eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
+  onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+
+  await bootstrapFromHistory();
   await createMessage();
+
   startLoop();
+
+  // actualizar online cada minuto
+  setInterval(async () => {
+    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+  }, 60000);
 });
 
 // =============================
-// DETECTOR DE HEARTBEAT (FIX REAL)
+// 🔥 BOOTSTRAP DESDE HISTORIAL
 // =============================
-client.on("messageCreate", async (msg) => {
+async function bootstrapFromHistory() {
+  const channel = await client.channels.fetch(
+    process.env.HEARTBEAT_CHANNEL_ID
+  );
 
-  // 🔥 DEBUG
-  console.log("------");
-  console.log("Canal:", msg.channel.id);
-  console.log("Webhook:", msg.webhookId);
-  console.log("Contenido:", msg.content);
-  console.log("Embeds:", msg.embeds.length);
+  const messages = await channel.messages.fetch({ limit: 50 });
 
-  // ❗ QUITA FILTRO PARA DEBUG
-  // if (msg.channel.id !== process.env.HEARTBEAT_CHANNEL_ID) return;
+  for (const msg of messages.values()) {
 
-  // =============================
-  // EXTRAER CONTENIDO REAL
-  // =============================
-  let content = msg.content;
+    let content = msg.content;
 
-  if (!content && msg.embeds.length > 0) {
-    const e = msg.embeds[0];
-    content = `${e.title || ""}\n${e.description || ""}`;
+    if (!content && msg.embeds.length > 0) {
+      const e = msg.embeds[0];
+      content = `${e.title || ""}\n${e.description || ""}`;
+    }
+
+    if (!content) continue;
+
+    const lines = content.split("\n");
+    const name = lines[0]?.trim();
+    if (!name) continue;
+
+    const onlineLine = lines.find(l => l.startsWith("Online:"));
+    if (!onlineLine) continue;
+
+    let instances = 0;
+    const value = onlineLine.split(":")[1]?.trim();
+
+    if (value && value.toLowerCase() !== "none") {
+      instances = value.split(",").length;
+    }
+
+    const normalize = s => s?.toLowerCase().trim();
+
+    const matched = Object.entries(eliteUsers).find(
+      ([_, user]) => normalize(user.name) === normalize(name)
+    );
+
+    if (!matched) continue;
+
+    const [discordId, user] = matched;
+
+    const isOnline =
+      onlineIds.includes(user.main_id) ||
+      onlineIds.includes(user.sec_id);
+
+    if (!isOnline) continue;
+
+    if (!liveTracker[discordId]) {
+      liveTracker[discordId] = {
+        time: 0,
+        xp: 0,
+        instances: instances
+      };
+    }
+
+    // SOLO tomar el primero válido (el más reciente)
   }
 
-  if (!content) return;
-
-  console.log("📦 CONTENIDO FINAL:\n", content);
-
-  // =============================
-  // PARSEO REAL PARA TU FORMATO
-  // =============================
-  const lines = content.split("\n");
-
-  const name = lines[0]?.trim();
-  if (!name) return;
-
-  const onlineLine = lines.find(l => l.startsWith("Online:"));
-  if (!onlineLine) return;
-
-  let instances = 0;
-
-  const value = onlineLine.split(":")[1]?.trim();
-
-  if (value && value.toLowerCase() !== "none") {
-    instances = value.split(",").length;
-  }
-
-  console.log("👤 Usuario:", name);
-  console.log("🧩 Instancias:", instances);
-
-  // =============================
-  // TRACKING SIMPLE
-  // =============================
-  if (!liveTracker[name]) {
-    liveTracker[name] = {
-      time: 0,
-      xp: 0,
-      instances: 0,
-      lastSeen: Date.now()
-    };
-  }
-
-  liveTracker[name].instances = instances;
-  liveTracker[name].lastSeen = Date.now();
-});
+  console.log("✅ Bootstrap completado:", liveTracker);
+}
 
 // =============================
-// LOOP TIEMPO REAL
+// LOOP PRINCIPAL
 // =============================
 function startLoop() {
   setInterval(() => {
 
-    for (const name in liveTracker) {
-      const user = liveTracker[name];
+    for (const [discordId, user] of Object.entries(eliteUsers)) {
 
-      // si no hay heartbeat reciente → offline
-      if (Date.now() - user.lastSeen > 30000) {
-        user.instances = 0;
-        continue;
+      const isOnline =
+        onlineIds.includes(user.main_id) ||
+        onlineIds.includes(user.sec_id);
+
+      // si no está online → no contar
+      if (!isOnline) continue;
+
+      if (!liveTracker[discordId]) {
+        liveTracker[discordId] = {
+          time: 0,
+          xp: 0,
+          instances: 1
+        };
       }
 
-      if (user.instances > 0) {
-        user.time += 1;
+      const tracker = liveTracker[discordId];
 
-        const xpPerSecond = (2 + user.instances * 0.5) / 60;
-        user.xp += xpPerSecond;
-      }
+      // sumar tiempo SIEMPRE mientras esté online
+      tracker.time += 1;
+
+      const xpPerSecond =
+        (2 + tracker.instances * 0.5) / 60;
+
+      tracker.xp += xpPerSecond;
     }
 
     updateMessage();
@@ -118,14 +141,14 @@ function startLoop() {
 }
 
 // =============================
-// MENSAJE EN DISCORD
+// MENSAJE DISCORD
 // =============================
 async function createMessage() {
   const channel = await client.channels.fetch(
     process.env.STATS_CHANNEL_ID
   );
 
-  const msg = await channel.send("Iniciando tracking...");
+  const msg = await channel.send("🔥 Iniciando tracking...");
   liveMessageId = msg.id;
 }
 
@@ -138,20 +161,35 @@ async function updateMessage() {
 
   const msg = await channel.messages.fetch(liveMessageId);
 
-  let content = "🔥 TRACKING EN VIVO\n\n";
+  let content = "🏆 TRACKING EN VIVO\n\n";
 
-  for (const name in liveTracker) {
-    const u = liveTracker[name];
+  for (const [id, data] of Object.entries(liveTracker)) {
 
-    content += `**${name}**
-⏱ ${u.time}s
-XP ${u.xp.toFixed(2)}
-🧩 ${u.instances}
+    content += `<@${id}>
+⏱ ${data.time}s
+XP ${data.xp.toFixed(2)}
+🧩 ${data.instances}
 
 `;
   }
 
   await msg.edit(content);
+}
+
+// =============================
+// UTILS
+// =============================
+function safeParse(data) {
+  try {
+    return typeof data === "object" ? data : JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+function cleanOnlineIds(raw) {
+  if (!raw) return [];
+  return raw.split("\n").map(x => x.trim()).filter(Boolean);
 }
 
 client.login(process.env.DISCORD_TOKEN);
