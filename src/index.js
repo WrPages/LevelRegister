@@ -1,6 +1,7 @@
-import { Client, GatewayIntentBits } from "discord.js";
+import { Client, GatewayIntentBits, AttachmentBuilder, EmbedBuilder } from "discord.js";
 import dotenv from "dotenv";
 import { getGist, updateGist } from "./gist.js";
+import { createCanvas } from "canvas";
 
 dotenv.config();
 
@@ -18,6 +19,118 @@ let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
 let liveMessageId = null;
+
+// =============================
+// 🧬 EVOLUCIÓN + GIF (RAÍZ REPO)
+// =============================
+function getPokemonData(totalXP) {
+
+  const stages = [
+    {
+      name: "🥚 Huevo",
+      min: 0,
+      max: 400,
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/charmander.gif"
+    },
+    {
+      name: "🐣 Fase 1",
+      min: 400,
+      max: 800,
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/bulbasaur.gif"
+      
+    },
+    {
+      name: "🐤 Fase 2",
+      min: 800,
+      max: 1200,
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/ivysaur.gif"
+    },
+    {
+      name: "🦅 Fase Final",
+      min: 1200,
+      max: Infinity,
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/venusaur.gif"
+    }
+  ];
+
+  const current = stages.find(s => totalXP >= s.min && totalXP < s.max);
+
+  const progress = current.max === Infinity
+    ? 1
+    : (totalXP - current.min) / (current.max - current.min);
+
+  return {
+    stage: current.name,
+    gif: current.gif,
+    progress
+  };
+}
+
+// =============================
+// 🎨 GENERAR TARJETA
+// =============================
+async function generateCard(userId) {
+
+  const s = liveTracker[userId];
+  const t = trackingData[userId] || {};
+
+  if (!s) return null;
+
+  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+  const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+  const level = Math.floor(totalXP / 100);
+
+  const { stage, progress } = getPokemonData(totalXP);
+
+  const canvas = createCanvas(600, 800);
+  const ctx = canvas.getContext("2d");
+
+  // Fondo
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Nombre
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 40px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(s.name, 300, 60);
+
+  // Línea
+  ctx.fillRect(50, 100, 500, 2);
+
+  // Evolución texto
+  ctx.font = "20px Arial";
+  ctx.fillText(`Evolución: ${stage}`, 50, 320);
+
+  // Barra progreso
+  ctx.fillStyle = "#1e293b";
+  ctx.fillRect(50, 350, 500, 20);
+
+  ctx.fillStyle = "#22c55e";
+  ctx.fillRect(50, 350, 500 * progress, 20);
+
+  // Stats
+  ctx.font = "24px Arial";
+  ctx.textAlign = "left";
+
+  let y = 420;
+
+  const lines = [
+    `Nivel: ${level}`,
+    `XP: ${totalXP.toFixed(2)}`,
+    `Tiempo: ${totalTime}m`,
+    `Instancias: ${s.instances}`,
+    `Packs: ${s.packs}`,
+    `GP: ${t.gp || 0}`
+  ];
+
+  for (const line of lines) {
+    ctx.fillText(line, 50, y);
+    y += 40;
+  }
+
+  return canvas.toBuffer();
+}
 
 // =============================
 client.once("ready", async () => {
@@ -41,10 +154,50 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🔥 DETECTOR GP (FIX SEGURO)
+// 🧠 COMANDOS + GP
 // =============================
 client.on("messageCreate", async (msg) => {
 
+  // =============================
+  // 🧠 PERFIL
+  // =============================
+  if (msg.content.startsWith("!profile")) {
+
+    let targetId = msg.author.id;
+
+    if (msg.mentions.users.first()) {
+      targetId = msg.mentions.users.first().id;
+    }
+
+    const s = liveTracker[targetId];
+    const t = trackingData[targetId] || {};
+
+    if (!s) return msg.reply("❌ Usuario sin datos.");
+
+    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+    const { stage, gif } = getPokemonData(totalXP);
+
+    const buffer = await generateCard(targetId);
+
+    const attachment = new AttachmentBuilder(buffer, {
+      name: "card.png"
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🧠 ${s.name}`)
+      .setDescription(`Evolución actual: ${stage}`)
+      .setImage(gif) // 🔥 GIF REAL (SE MUEVE)
+      .setColor(0x00AE86);
+
+    return msg.channel.send({
+      embeds: [embed],
+      files: [attachment]
+    });
+  }
+
+  // =============================
+  // 🔥 DETECTOR GP
+  // =============================
   if (msg.channel.id !== process.env.GP_CHANNEL_ID) return;
 
   let content = msg.content;
@@ -54,21 +207,18 @@ client.on("messageCreate", async (msg) => {
     content = `${e.title || ""}\n${e.description || ""}`;
   }
 
-  if (!content) return;
-  if (!content.includes("God Pack found")) return;
+  if (!content || !content.includes("God Pack found")) return;
 
   const firstLine = content.split("\n")[0];
   const normalize = s => s?.toLowerCase().trim();
 
   let discordId = null;
 
-  // 1️⃣ MENCIÓN
   const mentionMatch = firstLine.match(/<@!?(\d+)>/);
   if (mentionMatch && eliteUsers[mentionMatch[1]]) {
     discordId = mentionMatch[1];
   }
 
-  // 2️⃣ NOMBRE EXACTO
   if (!discordId) {
     const rawName = firstLine.replace("@", "").split(" ")[0];
 
@@ -80,33 +230,13 @@ client.on("messageCreate", async (msg) => {
     if (matched) discordId = matched[0];
   }
 
-  // 3️⃣ FALLBACK CONTROLADO
-  if (!discordId) {
-    const rawName = firstLine.replace("@", "").split(" ")[0];
+  if (!discordId) return;
 
-    const possible = Object.entries(eliteUsers).filter(
-      ([_, user]) =>
-        normalize(user.name).includes(normalize(rawName))
-    );
-
-    if (possible.length === 1) {
-      discordId = possible[0][0];
-    }
-  }
-
-  if (!discordId) {
-    console.log("⚠️ GP sin usuario válido:", firstLine);
-    return;
-  }
-
-  console.log("🔥 GP PARA:", discordId);
-
-  // asegurar data
   if (!trackingData[discordId]) {
     trackingData[discordId] = {
       xp: 0,
       time: 0,
-      name: eliteUsers[discordId]?.name || "Unknown",
+      name: "Unknown",
       packs: 0,
       gp: 0
     };
@@ -123,42 +253,84 @@ client.on("messageCreate", async (msg) => {
     };
   }
 
-  // 🎯 EFECTOS
   trackingData[discordId].xp += 1000;
   trackingData[discordId].gp += 1;
-
-  liveTracker[discordId].boostUntil =
-    Date.now() + 3600000;
+  liveTracker[discordId].boostUntil = Date.now() + 3600000;
 
   await updateGist(process.env.GIST_TRACKING, trackingData);
 });
 
 // =============================
-// PARSE HEARTBEAT
-// =============================
-function parseHeartbeat(content) {
-  const lines = content.split("\n");
+function startLoop() {
+  setInterval(() => {
 
-  const name = lines[0]?.trim();
-  const onlineLine = lines.find(l => l.startsWith("Online:"));
-  const packsLine = lines.find(l => l.includes("Packs:"));
+    for (const [discordId, user] of Object.entries(eliteUsers)) {
 
-  let instances = 0;
-  let packs = 0;
+      const isOnline =
+        onlineIds.includes(user.main_id) ||
+        onlineIds.includes(user.sec_id);
 
-  if (onlineLine) {
-    const value = onlineLine.split(":")[1]?.trim();
-    if (value && value.toLowerCase() !== "none") {
-      instances = value.split(",").length;
+      if (!isOnline) continue;
+
+      if (!liveTracker[discordId]) {
+        liveTracker[discordId] = {
+          sessionXP: 0,
+          sessionTime: 0,
+          instances: 1,
+          boostUntil: 0,
+          name: user.name,
+          packs: 0
+        };
+      }
+
+      const t = liveTracker[discordId];
+
+      t.sessionTime += 1;
+
+      let xpPerSecond = (2 + t.instances * 0.5) / 60;
+
+      if (Date.now() < t.boostUntil) {
+        xpPerSecond *= 2;
+      }
+
+      t.sessionXP += xpPerSecond;
     }
-  }
 
-  if (packsLine) {
-    const match = packsLine.match(/Packs:\s*(\d+)/);
-    if (match) packs = Number(match[1]);
-  }
+    updateMessage();
 
-  return { name, instances, packs };
+  }, 1000);
+}
+
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+
+    for (const id in liveTracker) {
+
+      if (!trackingData[id]) {
+        trackingData[id] = {
+          xp: 0,
+          time: 0,
+          name: liveTracker[id].name,
+          packs: 0,
+          gp: 0
+        };
+      }
+
+      const s = liveTracker[id];
+
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].name = s.name;
+      trackingData[id].packs = s.packs;
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+
+  }, 600000);
 }
 
 // =============================
@@ -211,79 +383,29 @@ async function bootstrapFromHistory() {
 }
 
 // =============================
-function startLoop() {
-  setInterval(() => {
+function parseHeartbeat(content) {
+  const lines = content.split("\n");
 
-    for (const [discordId, user] of Object.entries(eliteUsers)) {
+  const name = lines[0]?.trim();
+  const onlineLine = lines.find(l => l.startsWith("Online:"));
+  const packsLine = lines.find(l => l.includes("Packs:"));
 
-      const isOnline =
-        onlineIds.includes(user.main_id) ||
-        onlineIds.includes(user.sec_id);
+  let instances = 0;
+  let packs = 0;
 
-      if (!isOnline) continue;
-
-      if (!liveTracker[discordId]) {
-        liveTracker[discordId] = {
-          sessionXP: 0,
-          sessionTime: 0,
-          instances: 1,
-          boostUntil: 0,
-          name: user.name,
-          packs: 0
-        };
-      }
-
-      const t = liveTracker[discordId];
-
-      t.sessionTime += 1;
-
-      let xpPerSecond =
-        (2 + t.instances * 0.5) / 60;
-
-      if (Date.now() < t.boostUntil) {
-        xpPerSecond *= 2;
-      }
-
-      t.sessionXP += xpPerSecond;
+  if (onlineLine) {
+    const value = onlineLine.split(":")[1]?.trim();
+    if (value && value.toLowerCase() !== "none") {
+      instances = value.split(",").length;
     }
+  }
 
-    updateMessage();
+  if (packsLine) {
+    const match = packsLine.match(/Packs:\s*(\d+)/);
+    if (match) packs = Number(match[1]);
+  }
 
-  }, 1000);
-}
-
-// =============================
-function startBackupLoop() {
-  setInterval(async () => {
-
-    for (const id in liveTracker) {
-
-      if (!trackingData[id]) {
-        trackingData[id] = {
-          xp: 0,
-          time: 0,
-          name: liveTracker[id].name,
-          packs: 0,
-          gp: 0
-        };
-      }
-
-      const s = liveTracker[id];
-
-      trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
-      trackingData[id].name = s.name;
-      trackingData[id].packs = s.packs;
-
-      s.sessionXP = 0;
-      s.sessionTime = 0;
-    }
-
-    await updateGist(process.env.GIST_TRACKING, trackingData);
-
-    console.log("💾 Gist actualizado");
-
-  }, 600000);
+  return { name, instances, packs };
 }
 
 // =============================
@@ -309,21 +431,14 @@ async function updateMessage() {
 
   for (const [id, s] of Object.entries(liveTracker)) {
 
-    const t = trackingData[id] || { xp: 0, time: 0, gp: 0 };
-
+    const t = trackingData[id] || { xp: 0, gp: 0 };
     const totalXP = t.xp + s.sessionXP;
-    const totalTime = t.time + Math.floor(s.sessionTime / 60);
     const level = Math.floor(totalXP / 100);
-
-    const boost = Date.now() < s.boostUntil ? "🚀" : "";
 
     content += `👤 ${s.name}
 🎖 Nivel ${level}
 XP ${totalXP.toFixed(2)}
-⏱ ${totalTime}m
-🧩 ${s.instances}
-📦 Packs: ${s.packs}
-💎 GP: ${t.gp} ${boost}
+💎 GP: ${t.gp}
 
 `;
   }
