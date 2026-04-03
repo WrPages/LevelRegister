@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import dotenv from "dotenv";
-import { getGist } from "./gist.js";
+import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
@@ -15,7 +15,8 @@ const client = new Client({
 // =============================
 let eliteUsers = {};
 let onlineIds = [];
-let liveTracker = {};
+let trackingData = {}; // 💾 persistente
+let liveTracker = {};  // ⚡ sesión
 let liveMessageId = null;
 
 // =============================
@@ -24,11 +25,15 @@ client.once("ready", async () => {
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
+
+  sanitizeTracking();
 
   await bootstrapFromHistory();
   await createMessage();
 
   startLoop();
+  startBackupLoop();
 
   setInterval(async () => {
     onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
@@ -88,18 +93,16 @@ async function bootstrapFromHistory() {
 
     if (!liveTracker[discordId]) {
       liveTracker[discordId] = {
-        time: 0,
-        xp: 0,
-        instances: instances
+        sessionXP: 0,
+        sessionTime: 0,
+        instances
       };
     }
   }
-
-  console.log("✅ Bootstrap completado:", liveTracker);
 }
 
 // =============================
-// LOOP
+// LOOP TIEMPO REAL
 // =============================
 function startLoop() {
   setInterval(() => {
@@ -114,25 +117,54 @@ function startLoop() {
 
       if (!liveTracker[discordId]) {
         liveTracker[discordId] = {
-          time: 0,
-          xp: 0,
+          sessionXP: 0,
+          sessionTime: 0,
           instances: 1
         };
       }
 
       const tracker = liveTracker[discordId];
 
-      tracker.time += 1;
+      tracker.sessionTime += 1;
 
       const xpPerSecond =
         (2 + tracker.instances * 0.5) / 60;
 
-      tracker.xp += xpPerSecond;
+      tracker.sessionXP += xpPerSecond;
     }
 
     updateMessage();
 
   }, 1000);
+}
+
+// =============================
+// 💾 BACKUP CADA 10 MIN
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+
+    for (const id in liveTracker) {
+
+      if (!trackingData[id]) {
+        trackingData[id] = { xp: 0, time: 0 };
+      }
+
+      const session = liveTracker[id];
+
+      trackingData[id].xp += session.sessionXP;
+      trackingData[id].time += Math.floor(session.sessionTime / 60);
+
+      // reset sesión parcial (pero no todo)
+      session.sessionXP = 0;
+      session.sessionTime = 0;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+
+    console.log("💾 Gist actualizado correctamente");
+
+  }, 600000); // 10 minutos
 }
 
 // =============================
@@ -158,22 +190,20 @@ async function updateMessage() {
 
   let content = "🏆 TRACKING EN VIVO\n\n";
 
-  for (const [id, data] of Object.entries(liveTracker)) {
+  for (const [id, session] of Object.entries(liveTracker)) {
 
-    const level = Math.floor(data.xp / 100);
-    const currentXP = data.xp % 100;
-    const progressBars = Math.floor(currentXP / 10);
+    const total = trackingData[id] || { xp: 0, time: 0 };
 
-    const bar =
-      "▓".repeat(progressBars) +
-      "░".repeat(10 - progressBars);
+    const totalXP = total.xp + session.sessionXP;
+    const totalTime = total.time + Math.floor(session.sessionTime / 60);
+
+    const level = Math.floor(totalXP / 100);
 
     content += `<@${id}>
 🎖 Nivel ${level}
-XP ${data.xp.toFixed(2)} (${currentXP.toFixed(1)}/100)
-📊 ${bar}
-⏱ ${data.time}s
-🧩 ${data.instances}
+XP ${totalXP.toFixed(2)}
+⏱ ${totalTime}m
+🧩 ${session.instances}
 
 `;
   }
@@ -189,6 +219,13 @@ function safeParse(data) {
     return typeof data === "object" ? data : JSON.parse(data);
   } catch {
     return {};
+  }
+}
+
+function sanitizeTracking() {
+  for (const k in trackingData) {
+    trackingData[k].xp = Number(trackingData[k].xp) || 0;
+    trackingData[k].time = Number(trackingData[k].time) || 0;
   }
 }
 
