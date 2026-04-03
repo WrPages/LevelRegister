@@ -134,7 +134,7 @@ client.on("messageCreate", async (msg) => {
 🧬 **Evolución:** ${stage}
 ${progressBar}
 `)
-      .setImage(gif) // 🔥 GIF ANIMADO
+      .setImage(gif + "?v=" + Date.now()) // 🔥 GIF ANIMADO
       .setColor(0x00AE86);
 
     return msg.channel.send({ embeds: [embed] });
