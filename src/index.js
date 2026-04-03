@@ -1,7 +1,3 @@
-
-
-
-
 import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
 import dotenv from "dotenv";
 import { getGist, updateGist } from "./gist.js";
@@ -12,8 +8,8 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 // =============================
@@ -24,48 +20,49 @@ let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF
+// 🧬 EVOLUCIÓN + GIF (FIX URL)
 // =============================
 function getPokemonData(totalXP) {
-
   const stages = [
     {
       name: "🥚 Huevo",
       min: 0,
       max: 400,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/charmander.gif"
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/charmander.gif",
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/bulbasaur.gif"
-      
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/bulbasaur.gif",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/ivysaur.gif"
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/ivysaur.gif",
     },
     {
       name: "🦅 Fase Final",
       min: 1200,
       max: Infinity,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/venusaur.gif"
-    }
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/venusaur.gif",
+    },
   ];
 
-  const current = stages.find(s => totalXP >= s.min && totalXP < s.max);
+  const current = stages.find(
+    (s) => totalXP >= s.min && totalXP < s.max
+  );
 
-  const progress = current.max === Infinity
-    ? 1
-    : (totalXP - current.min) / (current.max - current.min);
+  const progress =
+    current.max === Infinity
+      ? 1
+      : (totalXP - current.min) / (current.max - current.min);
 
   return {
     stage: current.name,
     gif: current.gif,
-    progress
+    progress,
   };
 }
 
@@ -78,28 +75,21 @@ client.once("ready", async () => {
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
   sanitizeTracking();
-
   await bootstrapFromHistory();
   await createMessage();
 
   startLoop();
   startBackupLoop();
-
-  setInterval(async () => {
-    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
-  }, 60000);
 });
 
 // =============================
 // 🧠 COMANDOS + GP
 // =============================
 client.on("messageCreate", async (msg) => {
-
   // =============================
   // 🧠 PERFIL
   // =============================
   if (msg.content.startsWith("!profile")) {
-
     let targetId = msg.author.id;
 
     if (msg.mentions.users.first()) {
@@ -112,30 +102,32 @@ client.on("messageCreate", async (msg) => {
     if (!s) return msg.reply("❌ Usuario sin datos.");
 
     const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-    const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+    const totalTime =
+      (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+
     const level = Math.floor(totalXP / 100);
 
     const { stage, gif, progress } = getPokemonData(totalXP);
 
-    const progressBar = "🟩".repeat(Math.floor(progress * 10)) +
-                        "⬛".repeat(10 - Math.floor(progress * 10));
+    const progressBar =
+      "🟩".repeat(Math.floor(progress * 10)) +
+      "⬛".repeat(10 - Math.floor(progress * 10));
 
     const embed = new EmbedBuilder()
       .setTitle(`🧠 ${s.name}`)
-      .setDescription(`
-🎖 **Nivel:** ${level}
+      .setDescription(
+        `🎖 **Nivel:** ${level}
 📈 **XP:** ${totalXP.toFixed(2)}
-
 ⏱ **Tiempo:** ${totalTime}m
 🧩 **Instancias:** ${s.instances}
 📦 **Packs:** ${s.packs}
-💎 **GP:** ${t.gp}
+💎 **GP:** ${t.gp || 0}
 
 🧬 **Evolución:** ${stage}
-${progressBar}
-`)
-      .setImage(gif + "?v=" + Date.now()) // 🔥 GIF ANIMADO
-      .setColor(0x00AE86);
+${progressBar}`
+      )
+      .setImage(gif) // ✅ FIX SIN ?v=
+      .setColor(0x00ae86);
 
     return msg.channel.send({ embeds: [embed] });
   }
@@ -155,11 +147,12 @@ ${progressBar}
   if (!content || !content.includes("God Pack found")) return;
 
   const firstLine = content.split("\n")[0];
-  const normalize = s => s?.toLowerCase().trim();
+  const normalize = (s) => s?.toLowerCase().trim();
 
   let discordId = null;
 
   const mentionMatch = firstLine.match(/<@!?(\d+)>/);
+
   if (mentionMatch && eliteUsers[mentionMatch[1]]) {
     discordId = mentionMatch[1];
   }
@@ -183,7 +176,7 @@ ${progressBar}
       time: 0,
       name: "Unknown",
       packs: 0,
-      gp: 0
+      gp: 0,
     };
   }
 
@@ -194,23 +187,35 @@ ${progressBar}
       instances: 1,
       boostUntil: 0,
       name: trackingData[discordId].name,
-      packs: 0
+      packs: 0,
     };
   }
 
   trackingData[discordId].xp += 1000;
   trackingData[discordId].gp += 1;
-  liveTracker[discordId].boostUntil = Date.now() + 3600000;
 
-  await updateGist(process.env.GIST_TRACKING, trackingData);
+  liveTracker[discordId].boostUntil =
+    Date.now() + 3600000;
+
+  await updateGist(
+    process.env.GIST_TRACKING,
+    trackingData
+  );
 });
 
 // =============================
+// 🔁 LOOP PRINCIPAL (FIX ONLINE)
+// =============================
 function startLoop() {
-  setInterval(() => {
+  setInterval(async () => {
+    // ✅ ACTUALIZA ONLINE SIEMPRE
+    onlineIds = cleanOnlineIds(
+      await getGist(process.env.GIST_ONLINE)
+    );
 
-    for (const [discordId, user] of Object.entries(eliteUsers)) {
-
+    for (const [discordId, user] of Object.entries(
+      eliteUsers
+    )) {
       const isOnline =
         onlineIds.includes(user.main_id) ||
         onlineIds.includes(user.sec_id);
@@ -224,7 +229,7 @@ function startLoop() {
           instances: 1,
           boostUntil: 0,
           name: user.name,
-          packs: 0
+          packs: 0,
         };
       }
 
@@ -232,7 +237,8 @@ function startLoop() {
 
       t.sessionTime += 1;
 
-      let xpPerSecond = (2 + t.instances * 0.5) / 60;
+      let xpPerSecond =
+        (2 + t.instances * 0.5) / 60;
 
       if (Date.now() < t.boostUntil) {
         xpPerSecond *= 2;
@@ -242,30 +248,29 @@ function startLoop() {
     }
 
     updateMessage();
-
   }, 1000);
 }
 
 // =============================
 function startBackupLoop() {
   setInterval(async () => {
-
     for (const id in liveTracker) {
-
       if (!trackingData[id]) {
         trackingData[id] = {
           xp: 0,
           time: 0,
           name: liveTracker[id].name,
           packs: 0,
-          gp: 0
+          gp: 0,
         };
       }
 
       const s = liveTracker[id];
 
       trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].time += Math.floor(
+        s.sessionTime / 60
+      );
       trackingData[id].name = s.name;
       trackingData[id].packs = s.packs;
 
@@ -273,8 +278,10 @@ function startBackupLoop() {
       s.sessionTime = 0;
     }
 
-    await updateGist(process.env.GIST_TRACKING, trackingData);
-
+    await updateGist(
+      process.env.GIST_TRACKING,
+      trackingData
+    );
   }, 600000);
 }
 
@@ -284,10 +291,11 @@ async function bootstrapFromHistory() {
     process.env.HEARTBEAT_CHANNEL_ID
   );
 
-  const messages = await channel.messages.fetch({ limit: 50 });
+  const messages = await channel.messages.fetch({
+    limit: 50,
+  });
 
   for (const msg of messages.values()) {
-
     let content = msg.content;
 
     if (!content && msg.embeds.length > 0) {
@@ -300,10 +308,15 @@ async function bootstrapFromHistory() {
     const data = parseHeartbeat(content);
     if (!data.name) continue;
 
-    const normalize = s => s?.toLowerCase().trim();
+    const normalize = (s) =>
+      s?.toLowerCase().trim();
 
-    const matched = Object.entries(eliteUsers).find(
-      ([_, user]) => normalize(user.name) === normalize(data.name)
+    const matched = Object.entries(
+      eliteUsers
+    ).find(
+      ([_, user]) =>
+        normalize(user.name) ===
+        normalize(data.name)
     );
 
     if (!matched) continue;
@@ -322,7 +335,7 @@ async function bootstrapFromHistory() {
       instances: data.instances,
       boostUntil: 0,
       name: data.name,
-      packs: data.packs
+      packs: data.packs,
     };
   }
 }
@@ -332,21 +345,28 @@ function parseHeartbeat(content) {
   const lines = content.split("\n");
 
   const name = lines[0]?.trim();
-  const onlineLine = lines.find(l => l.startsWith("Online:"));
-  const packsLine = lines.find(l => l.includes("Packs:"));
+  const onlineLine = lines.find((l) =>
+    l.startsWith("Online:")
+  );
+  const packsLine = lines.find((l) =>
+    l.includes("Packs:")
+  );
 
   let instances = 0;
   let packs = 0;
 
   if (onlineLine) {
     const value = onlineLine.split(":")[1]?.trim();
+
     if (value && value.toLowerCase() !== "none") {
       instances = value.split(",").length;
     }
   }
 
   if (packsLine) {
-    const match = packsLine.match(/Packs:\s*(\d+)/);
+    const match = packsLine.match(
+      /Packs:\s*(\d+)/
+    );
     if (match) packs = Number(match[1]);
   }
 
@@ -359,10 +379,16 @@ async function createMessage() {
     process.env.STATS_CHANNEL_ID
   );
 
-  const msg = await channel.send("🔥 Iniciando tracking...");
+  const msg = await channel.send(
+    "🔥 Iniciando tracking..."
+  );
+
   liveMessageId = msg.id;
 }
 
+// =============================
+// 📊 LIVE MESSAGE (FIX TIEMPO)
+// =============================
 async function updateMessage() {
   if (!liveMessageId) return;
 
@@ -370,22 +396,31 @@ async function updateMessage() {
     process.env.STATS_CHANNEL_ID
   );
 
-  const msg = await channel.messages.fetch(liveMessageId);
+  const msg = await channel.messages.fetch(
+    liveMessageId
+  );
 
   let content = "🏆 TRACKING EN VIVO\n\n";
 
-  for (const [id, s] of Object.entries(liveTracker)) {
+  for (const [id, s] of Object.entries(
+    liveTracker
+  )) {
+    const t = trackingData[id] || {
+      xp: 0,
+      gp: 0,
+      time: 0,
+    };
 
-    const t = trackingData[id] || { xp: 0, gp: 0 };
     const totalXP = t.xp + s.sessionXP;
+    const totalTime =
+      (t.time || 0) +
+      Math.floor((s.sessionTime || 0) / 60);
+
     const level = Math.floor(totalXP / 100);
 
-    content += `👤 ${s.name}
-🎖 Nivel ${level}
-XP ${totalXP.toFixed(2)}
-💎 GP: ${t.gp}
-
-`;
+    content += `👤 ${s.name} 🎖 Nivel ${level} ⏱ ${totalTime}m XP ${totalXP.toFixed(
+      2
+    )} 💎 GP: ${t.gp}\n`;
   }
 
   await msg.edit(content);
@@ -394,7 +429,9 @@ XP ${totalXP.toFixed(2)}
 // =============================
 function safeParse(data) {
   try {
-    return typeof data === "object" ? data : JSON.parse(data);
+    return typeof data === "object"
+      ? data
+      : JSON.parse(data);
   } catch {
     return {};
   }
@@ -402,16 +439,27 @@ function safeParse(data) {
 
 function sanitizeTracking() {
   for (const k in trackingData) {
-    trackingData[k].xp = Number(trackingData[k].xp) || 0;
-    trackingData[k].time = Number(trackingData[k].time) || 0;
-    trackingData[k].packs = Number(trackingData[k].packs) || 0;
-    trackingData[k].gp = Number(trackingData[k].gp) || 0;
+    trackingData[k].xp =
+      Number(trackingData[k].xp) || 0;
+    trackingData[k].time =
+      Number(trackingData[k].time) || 0;
+    trackingData[k].packs =
+      Number(trackingData[k].packs) || 0;
+    trackingData[k].gp =
+      Number(trackingData[k].gp) || 0;
   }
 }
 
 function cleanOnlineIds(raw) {
   if (!raw) return [];
-  return raw.split("\n").map(x => x.trim()).filter(Boolean);
+
+  return raw
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
 }
 
 client.login(process.env.DISCORD_TOKEN);
+
+
+
