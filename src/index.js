@@ -34,7 +34,6 @@ client.once("clientReady", async () => {
     eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
     onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
     trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-
   } catch (err) {
     console.error("❌ Error cargando Gists:", err.message);
   }
@@ -57,6 +56,9 @@ client.once("clientReady", async () => {
 // =============================
 client.on("messageCreate", async (msg) => {
 
+  // =============================
+  // HEARTBEAT
+  // =============================
   if (msg.channel.id === process.env.HEARTBEAT_CHANNEL_ID) {
 
     const content = buildFullContent(msg);
@@ -77,15 +79,30 @@ client.on("messageCreate", async (msg) => {
       instances = value.split(",").length;
     }
 
+    const normalize = (str) =>
+      str?.toLowerCase().trim();
+
     const matched = Object.entries(eliteUsers).find(
       ([discordId, user]) =>
-        user.name?.toLowerCase() === name.toLowerCase() &&
-        onlineIds.includes(user.main_id)
+        normalize(user.name) === normalize(name)
     );
+
+    // DEBUG (puedes comentar luego)
+    // console.log("📩 Nombre detectado:", name);
+    // console.log("👥 Usuarios:", Object.values(eliteUsers).map(u => u.name));
 
     if (!matched) return;
 
-    const [discordId] = matched;
+    const [discordId, user] = matched;
+
+    const isOnline =
+      onlineIds.includes(user.main_id) ||
+      onlineIds.includes(user.sec_id);
+
+    // console.log("🟢 Online IDs:", onlineIds);
+    // console.log("🎯 Match:", discordId, "Online:", isOnline);
+
+    if (!isOnline) return;
 
     if (!liveTracker[discordId]) {
       liveTracker[discordId] = {
@@ -106,6 +123,9 @@ client.on("messageCreate", async (msg) => {
     }
   }
 
+  // =============================
+  // GP BOOST
+  // =============================
   if (msg.channel.id === process.env.GP_CHANNEL_ID) {
 
     const content = buildFullContent(msg);
@@ -113,9 +133,12 @@ client.on("messageCreate", async (msg) => {
 
     const name = content.split("\n")[0].trim();
 
+    const normalize = (str) =>
+      str?.toLowerCase().trim();
+
     const matched = Object.entries(eliteUsers).find(
       ([discordId, user]) =>
-        user.name?.toLowerCase() === name.toLowerCase()
+        normalize(user.name) === normalize(name)
     );
 
     if (!matched) return;
@@ -235,7 +258,9 @@ async function updateLiveMessage() {
 
     await message.edit(content);
 
-  } catch {}
+  } catch (err) {
+    console.error("❌ Error actualizando mensaje:", err.message);
+  }
 }
 
 // =============================
