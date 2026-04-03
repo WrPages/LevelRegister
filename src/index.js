@@ -13,8 +13,6 @@ const client = new Client({
 });
 
 // =============================
-// DATA GLOBAL
-// =============================
 let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
@@ -24,8 +22,6 @@ let liveMessageId = null;
 let secondLoop = null;
 let backupLoop = null;
 
-// =============================
-// READY
 // =============================
 client.once("clientReady", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
@@ -52,13 +48,8 @@ client.once("clientReady", async () => {
 });
 
 // =============================
-// MENSAJES
-// =============================
 client.on("messageCreate", async (msg) => {
 
-  // =============================
-  // HEARTBEAT
-  // =============================
   if (msg.channel.id === process.env.HEARTBEAT_CHANNEL_ID) {
 
     const content = buildFullContent(msg);
@@ -87,10 +78,6 @@ client.on("messageCreate", async (msg) => {
         normalize(user.name) === normalize(name)
     );
 
-    // DEBUG (puedes comentar luego)
-    // console.log("📩 Nombre detectado:", name);
-    // console.log("👥 Usuarios:", Object.values(eliteUsers).map(u => u.name));
-
     if (!matched) return;
 
     const [discordId, user] = matched;
@@ -98,9 +85,6 @@ client.on("messageCreate", async (msg) => {
     const isOnline =
       onlineIds.includes(user.main_id) ||
       onlineIds.includes(user.sec_id);
-
-    // console.log("🟢 Online IDs:", onlineIds);
-    // console.log("🎯 Match:", discordId, "Online:", isOnline);
 
     if (!isOnline) return;
 
@@ -202,7 +186,60 @@ function startBackupLoop() {
 }
 
 // =============================
-// MENSAJE LIVE
+// MENSAJE LIVE (AQUÍ ESTÁ EL FIX REAL)
+// =============================
+async function updateLiveMessage() {
+  if (!liveMessageId) return;
+
+  try {
+    const channel = await client.channels.fetch(
+      process.env.STATS_CHANNEL_ID
+    );
+
+    const message = await channel.messages.fetch(liveMessageId);
+
+    let content = "🏆 **RANKING LIVE**\n\n";
+
+    const sorted = Object.entries(trackingData)
+      .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
+
+    for (const [userId, data] of sorted) {
+      const xpBase = Number(data.xp) || 0;
+      const time = Number(data.time) || 0;
+
+      const live = liveTracker[userId] || {};
+      const instances = live.instances || 0;
+      const seconds = live.seconds || 0;
+
+      let xpPreview = 0;
+
+      if (instances > 0) {
+        let xpPerMinute = 2 + (instances * 0.5);
+
+        if (Date.now() < live.boostUntil) {
+          xpPerMinute *= 2;
+        }
+
+        xpPreview = (xpPerMinute / 60) * seconds;
+      }
+
+      const totalXP = xpBase + xpPreview;
+
+      const boost =
+        live.boostUntil && Date.now() < live.boostUntil
+          ? " 🚀"
+          : "";
+
+      content += `<@${userId}> | XP ${totalXP.toFixed(2)} | ⏱ ${time}m | 🧩 ${instances}${boost}\n`;
+    }
+
+    await message.edit(content);
+
+  } catch (err) {
+    console.error("❌ Error actualizando mensaje:", err.message);
+  }
+}
+
 // =============================
 async function findOrCreateMessage() {
   const channel = await client.channels.fetch(
@@ -226,45 +263,6 @@ async function findOrCreateMessage() {
   liveMessageId = msg.id;
 }
 
-async function updateLiveMessage() {
-  if (!liveMessageId) return;
-
-  try {
-    const channel = await client.channels.fetch(
-      process.env.STATS_CHANNEL_ID
-    );
-
-    const message = await channel.messages.fetch(liveMessageId);
-
-    let content = "🏆 **RANKING LIVE**\n\n";
-
-    const sorted = Object.entries(trackingData)
-      .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
-
-    for (const [userId, data] of sorted) {
-      const xp = Number(data.xp) || 0;
-      const time = Number(data.time) || 0;
-
-      const live = liveTracker[userId] || {};
-      const instances = live.instances || 0;
-
-      const boost =
-        live.boostUntil && Date.now() < live.boostUntil
-          ? " 🚀"
-          : "";
-
-      content += `<@${userId}> | XP ${xp.toFixed(1)} | ⏱ ${time}m | 🧩 ${instances}${boost}\n`;
-    }
-
-    await message.edit(content);
-
-  } catch (err) {
-    console.error("❌ Error actualizando mensaje:", err.message);
-  }
-}
-
-// =============================
-// UTILIDADES SEGURAS
 // =============================
 function safeParse(data) {
   if (!data) return {};
