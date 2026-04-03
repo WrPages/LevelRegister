@@ -41,7 +41,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🔥 DETECTOR GP
+// 🔥 DETECTOR GP (FIX SEGURO)
 // =============================
 client.on("messageCreate", async (msg) => {
 
@@ -55,44 +55,58 @@ client.on("messageCreate", async (msg) => {
   }
 
   if (!content) return;
-
   if (!content.includes("God Pack found")) return;
 
   const firstLine = content.split("\n")[0];
-
-  const mentionMatch = firstLine.match(/<@!?(\d+)>/);
+  const normalize = s => s?.toLowerCase().trim();
 
   let discordId = null;
 
-  if (mentionMatch) {
+  // 1️⃣ MENCIÓN
+  const mentionMatch = firstLine.match(/<@!?(\d+)>/);
+  if (mentionMatch && eliteUsers[mentionMatch[1]]) {
     discordId = mentionMatch[1];
   }
 
-  // fallback por nombre
+  // 2️⃣ NOMBRE EXACTO
   if (!discordId) {
-    const name = firstLine.replace("@", "").split(" ")[0];
-
-    const normalize = s => s?.toLowerCase().trim();
+    const rawName = firstLine.replace("@", "").split(" ")[0];
 
     const matched = Object.entries(eliteUsers).find(
       ([_, user]) =>
-        normalize(user.name).includes(normalize(name))
+        normalize(user.name) === normalize(rawName)
     );
 
-    if (matched) {
-      discordId = matched[0];
+    if (matched) discordId = matched[0];
+  }
+
+  // 3️⃣ FALLBACK CONTROLADO
+  if (!discordId) {
+    const rawName = firstLine.replace("@", "").split(" ")[0];
+
+    const possible = Object.entries(eliteUsers).filter(
+      ([_, user]) =>
+        normalize(user.name).includes(normalize(rawName))
+    );
+
+    if (possible.length === 1) {
+      discordId = possible[0][0];
     }
   }
 
-  if (!discordId) return;
+  if (!discordId) {
+    console.log("⚠️ GP sin usuario válido:", firstLine);
+    return;
+  }
 
-  console.log("🔥 GP DETECTADO PARA:", discordId);
+  console.log("🔥 GP PARA:", discordId);
 
+  // asegurar data
   if (!trackingData[discordId]) {
     trackingData[discordId] = {
       xp: 0,
       time: 0,
-      name: "Unknown",
+      name: eliteUsers[discordId]?.name || "Unknown",
       packs: 0,
       gp: 0
     };
@@ -197,8 +211,6 @@ async function bootstrapFromHistory() {
 }
 
 // =============================
-// LOOP
-// =============================
 function startLoop() {
   setInterval(() => {
 
@@ -221,18 +233,18 @@ function startLoop() {
         };
       }
 
-      const tracker = liveTracker[discordId];
+      const t = liveTracker[discordId];
 
-      tracker.sessionTime += 1;
+      t.sessionTime += 1;
 
       let xpPerSecond =
-        (2 + tracker.instances * 0.5) / 60;
+        (2 + t.instances * 0.5) / 60;
 
-      if (Date.now() < tracker.boostUntil) {
+      if (Date.now() < t.boostUntil) {
         xpPerSecond *= 2;
       }
 
-      tracker.sessionXP += xpPerSecond;
+      t.sessionXP += xpPerSecond;
     }
 
     updateMessage();
@@ -240,8 +252,6 @@ function startLoop() {
   }, 1000);
 }
 
-// =============================
-// BACKUP
 // =============================
 function startBackupLoop() {
   setInterval(async () => {
