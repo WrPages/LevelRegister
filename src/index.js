@@ -20,7 +20,7 @@ let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF (FIX URL)
+// 🧬 EVOLUCIÓN + GIF (USANDO CDN ESTABLE)
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -28,25 +28,25 @@ function getPokemonData(totalXP) {
       name: "🥚 Huevo",
       min: 0,
       max: 400,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/charmander.gif",
+      gif: "https://media.tenor.com/1.gif", // 🔥 placeholder huevo (puedes cambiar luego)
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/bulbasaur.gif",
+      gif: "https://media.tenor.com/WXk4v6pS0SMAAAAC/bulbasaur.gif",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/ivysaur.gif",
+      gif: "https://media.tenor.com/j5tQXg8k0O8AAAAC/ivysaur.gif",
     },
     {
       name: "🦅 Fase Final",
       min: 1200,
       max: Infinity,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/venusaur.gif",
+      gif: "https://media.tenor.com/4j5Y7Y7V0u0AAAAC/venusaur.gif",
     },
   ];
 
@@ -83,12 +83,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🧠 COMANDOS + GP
-// =============================
 client.on("messageCreate", async (msg) => {
-  // =============================
-  // 🧠 PERFIL
-  // =============================
   if (msg.content.startsWith("!profile")) {
     let targetId = msg.author.id;
 
@@ -126,15 +121,12 @@ client.on("messageCreate", async (msg) => {
 🧬 **Evolución:** ${stage}
 ${progressBar}`
       )
-      .setImage(gif) // ✅ FIX SIN ?v=
+      .setImage(gif) // ✅ CDN externo (TENOR)
       .setColor(0x00ae86);
 
     return msg.channel.send({ embeds: [embed] });
   }
 
-  // =============================
-  // 🔥 DETECTOR GP
-  // =============================
   if (msg.channel.id !== process.env.GP_CHANNEL_ID) return;
 
   let content = msg.content;
@@ -204,11 +196,8 @@ ${progressBar}`
 });
 
 // =============================
-// 🔁 LOOP PRINCIPAL (FIX ONLINE)
-// =============================
 function startLoop() {
   setInterval(async () => {
-    // ✅ ACTUALIZA ONLINE SIEMPRE
     onlineIds = cleanOnlineIds(
       await getGist(process.env.GIST_ONLINE)
     );
@@ -387,8 +376,6 @@ async function createMessage() {
 }
 
 // =============================
-// 📊 LIVE MESSAGE (FIX TIEMPO)
-// =============================
 async function updateMessage() {
   if (!liveMessageId) return;
 
@@ -460,6 +447,4 @@ function cleanOnlineIds(raw) {
 }
 
 client.login(process.env.DISCORD_TOKEN);
-
-
 
