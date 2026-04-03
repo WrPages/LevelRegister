@@ -26,13 +26,9 @@ let backupLoop = null;
 client.once("clientReady", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
-  try {
-    eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
-    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
-    trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-  } catch (err) {
-    console.error("❌ Error cargando Gists:", err.message);
-  }
+  eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
+  onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
   sanitizeTracking();
   await findOrCreateMessage();
@@ -41,9 +37,7 @@ client.once("clientReady", async () => {
   startBackupLoop();
 
   setInterval(async () => {
-    onlineIds = cleanOnlineIds(
-      await getGist(process.env.GIST_ONLINE)
-    );
+    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   }, 60000);
 });
 
@@ -70,12 +64,10 @@ client.on("messageCreate", async (msg) => {
       instances = value.split(",").length;
     }
 
-    const normalize = (str) =>
-      str?.toLowerCase().trim();
+    const normalize = (str) => str?.toLowerCase().trim();
 
     const matched = Object.entries(eliteUsers).find(
-      ([discordId, user]) =>
-        normalize(user.name) === normalize(name)
+      ([_, user]) => normalize(user.name) === normalize(name)
     );
 
     if (!matched) return;
@@ -90,20 +82,19 @@ client.on("messageCreate", async (msg) => {
 
     if (!liveTracker[discordId]) {
       liveTracker[discordId] = {
-        seconds: 0,
+        sessionXP: 0,
+        sessionTime: 0,
         instances: 0,
-        boostUntil: 0
+        boostUntil: 0,
+        lastSeen: Date.now()
       };
     }
 
     liveTracker[discordId].instances = instances;
+    liveTracker[discordId].lastSeen = Date.now();
 
     if (!trackingData[discordId]) {
-      trackingData[discordId] = {
-        xp: 0,
-        time: 0,
-        gp: 0
-      };
+      trackingData[discordId] = { xp: 0, time: 0, gp: 0 };
     }
   }
 
@@ -116,13 +107,10 @@ client.on("messageCreate", async (msg) => {
     if (!content) return;
 
     const name = content.split("\n")[0].trim();
-
-    const normalize = (str) =>
-      str?.toLowerCase().trim();
+    const normalize = (str) => str?.toLowerCase().trim();
 
     const matched = Object.entries(eliteUsers).find(
-      ([discordId, user]) =>
-        normalize(user.name) === normalize(name)
+      ([_, user]) => normalize(user.name) === normalize(name)
     );
 
     if (!matched) return;
@@ -137,7 +125,7 @@ client.on("messageCreate", async (msg) => {
 });
 
 // =============================
-// LOOP XP
+// LOOP TIEMPO REAL
 // =============================
 function startSecondLoop() {
   if (secondLoop) return;
@@ -147,23 +135,32 @@ function startSecondLoop() {
     for (const userId in liveTracker) {
       const user = liveTracker[userId];
 
-      if (!trackingData[userId]) continue;
+      // si no ha mandado heartbeat en 30s → se considera offline
+      if (Date.now() - user.lastSeen > 30000) {
+        user.instances = 0;
+        continue;
+      }
 
       if (user.instances > 0) {
-        user.seconds++;
 
-        if (user.seconds >= 60) {
-          user.seconds = 0;
+        user.sessionTime += 1;
 
+        let xpPerMinute = 2 + (user.instances * 0.5);
+
+        if (Date.now() < user.boostUntil) {
+          xpPerMinute *= 2;
+        }
+
+        const xpPerSecond = xpPerMinute / 60;
+
+        user.sessionXP += xpPerSecond;
+
+        // cada minuto se guarda en persistente
+        if (user.sessionTime % 60 === 0) {
           trackingData[userId].time += 1;
+          trackingData[userId].xp += user.sessionXP;
 
-          let xpGain = 2 + (user.instances * 0.5);
-
-          if (Date.now() < user.boostUntil) {
-            xpGain *= 2;
-          }
-
-          trackingData[userId].xp += xpGain;
+          user.sessionXP = 0;
         }
       }
     }
@@ -173,8 +170,6 @@ function startSecondLoop() {
   }, 1000);
 }
 
-// =============================
-// BACKUP
 // =============================
 function startBackupLoop() {
   if (backupLoop) return;
@@ -186,7 +181,7 @@ function startBackupLoop() {
 }
 
 // =============================
-// MENSAJE LIVE (AQUÍ ESTÁ EL FIX REAL)
+// MENSAJE EN VIVO
 // =============================
 async function updateLiveMessage() {
   if (!liveMessageId) return;
@@ -198,45 +193,27 @@ async function updateLiveMessage() {
 
     const message = await channel.messages.fetch(liveMessageId);
 
-    let content = "🏆 **RANKING LIVE**\n\n";
+    let content = "🏆 **RANKING LIVE (SESIÓN)**\n\n";
 
-    const sorted = Object.entries(trackingData)
-      .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
-
-    for (const [userId, data] of sorted) {
-      const xpBase = Number(data.xp) || 0;
-      const time = Number(data.time) || 0;
-
-      const live = liveTracker[userId] || {};
-      const instances = live.instances || 0;
-      const seconds = live.seconds || 0;
-
-      let xpPreview = 0;
-
-      if (instances > 0) {
-        let xpPerMinute = 2 + (instances * 0.5);
-
-        if (Date.now() < live.boostUntil) {
-          xpPerMinute *= 2;
-        }
-
-        xpPreview = (xpPerMinute / 60) * seconds;
-      }
-
-      const totalXP = xpBase + xpPreview;
+    for (const userId in liveTracker) {
+      const user = liveTracker[userId];
+      const total = trackingData[userId] || { xp: 0, time: 0 };
 
       const boost =
-        live.boostUntil && Date.now() < live.boostUntil
-          ? " 🚀"
-          : "";
+        Date.now() < user.boostUntil ? " 🚀" : "";
 
-      content += `<@${userId}> | XP ${totalXP.toFixed(2)} | ⏱ ${time}m | 🧩 ${instances}${boost}\n`;
+      content += `<@${userId}>
+🟢 Sesión: ${user.sessionTime}s | XP ${user.sessionXP.toFixed(2)}
+💾 Total: ${total.time}m | XP ${total.xp.toFixed(1)}
+🧩 Instancias: ${user.instances}${boost}
+
+`;
     }
 
     await message.edit(content);
 
   } catch (err) {
-    console.error("❌ Error actualizando mensaje:", err.message);
+    console.error("❌ Error actualizando:", err.message);
   }
 }
 
@@ -249,9 +226,7 @@ async function findOrCreateMessage() {
   const messages = await channel.messages.fetch({ limit: 50 });
 
   const existing = messages.find(
-    m =>
-      m.author.id === client.user.id &&
-      m.content.includes("RANKING LIVE")
+    m => m.author.id === client.user.id
   );
 
   if (existing) {
@@ -259,7 +234,7 @@ async function findOrCreateMessage() {
     return;
   }
 
-  const msg = await channel.send("🏆 RANKING LIVE\nIniciando...");
+  const msg = await channel.send("Iniciando tracking...");
   liveMessageId = msg.id;
 }
 
@@ -276,13 +251,7 @@ function safeParse(data) {
 }
 
 function sanitizeTracking() {
-  if (typeof trackingData !== "object") trackingData = {};
-
   for (const key in trackingData) {
-    if (typeof trackingData[key] !== "object") {
-      trackingData[key] = { xp: 0, time: 0, gp: 0 };
-    }
-
     trackingData[key].xp = Number(trackingData[key].xp) || 0;
     trackingData[key].time = Number(trackingData[key].time) || 0;
     trackingData[key].gp = Number(trackingData[key].gp) || 0;
