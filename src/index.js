@@ -15,8 +15,8 @@ const client = new Client({
 // =============================
 let eliteUsers = {};
 let onlineIds = [];
-let trackingData = {}; // 💾 persistente
-let liveTracker = {};  // ⚡ sesión
+let trackingData = {};
+let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
@@ -41,7 +41,38 @@ client.once("ready", async () => {
 });
 
 // =============================
-// BOOTSTRAP
+// 🔥 PARSEO COMPLETO HEARTBEAT
+// =============================
+function parseHeartbeat(content) {
+  const lines = content.split("\n");
+
+  const name = lines[0]?.trim();
+
+  const onlineLine = lines.find(l => l.startsWith("Online:"));
+  const packsLine = lines.find(l => l.includes("Packs:"));
+
+  let instances = 0;
+  let ppm = 0;
+  let packs = 0;
+
+  if (onlineLine) {
+    const value = onlineLine.split(":")[1]?.trim();
+    if (value && value.toLowerCase() !== "none") {
+      instances = value.split(",").length;
+    }
+  }
+
+  if (packsLine) {
+    const match = packsLine.match(/Packs:\s*(\d+).*Avg:\s*([\d.]+)/);
+    if (match) {
+      packs = Number(match[1]);
+      ppm = Number(match[2]);
+    }
+  }
+
+  return { name, instances, ppm, packs };
+}
+
 // =============================
 async function bootstrapFromHistory() {
   const channel = await client.channels.fetch(
@@ -61,24 +92,13 @@ async function bootstrapFromHistory() {
 
     if (!content) continue;
 
-    const lines = content.split("\n");
-    const name = lines[0]?.trim();
-    if (!name) continue;
-
-    const onlineLine = lines.find(l => l.startsWith("Online:"));
-    if (!onlineLine) continue;
-
-    let instances = 0;
-    const value = onlineLine.split(":")[1]?.trim();
-
-    if (value && value.toLowerCase() !== "none") {
-      instances = value.split(",").length;
-    }
+    const data = parseHeartbeat(content);
+    if (!data.name) continue;
 
     const normalize = s => s?.toLowerCase().trim();
 
     const matched = Object.entries(eliteUsers).find(
-      ([_, user]) => normalize(user.name) === normalize(name)
+      ([_, user]) => normalize(user.name) === normalize(data.name)
     );
 
     if (!matched) continue;
@@ -91,18 +111,19 @@ async function bootstrapFromHistory() {
 
     if (!isOnline) continue;
 
-    if (!liveTracker[discordId]) {
-      liveTracker[discordId] = {
-        sessionXP: 0,
-        sessionTime: 0,
-        instances
-      };
-    }
+    liveTracker[discordId] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: data.instances,
+      name: data.name,
+      ppm: data.ppm,
+      packs: data.packs
+    };
   }
 }
 
 // =============================
-// LOOP TIEMPO REAL
+// LOOP
 // =============================
 function startLoop() {
   setInterval(() => {
@@ -119,7 +140,10 @@ function startLoop() {
         liveTracker[discordId] = {
           sessionXP: 0,
           sessionTime: 0,
-          instances: 1
+          instances: 1,
+          name: user.name,
+          ppm: 0,
+          packs: 0
         };
       }
 
@@ -139,7 +163,7 @@ function startLoop() {
 }
 
 // =============================
-// 💾 BACKUP CADA 10 MIN
+// 💾 BACKUP
 // =============================
 function startBackupLoop() {
   setInterval(async () => {
@@ -147,7 +171,13 @@ function startBackupLoop() {
     for (const id in liveTracker) {
 
       if (!trackingData[id]) {
-        trackingData[id] = { xp: 0, time: 0 };
+        trackingData[id] = {
+          xp: 0,
+          time: 0,
+          name: liveTracker[id].name,
+          ppm: 0,
+          packs: 0
+        };
       }
 
       const session = liveTracker[id];
@@ -155,16 +185,19 @@ function startBackupLoop() {
       trackingData[id].xp += session.sessionXP;
       trackingData[id].time += Math.floor(session.sessionTime / 60);
 
-      // reset sesión parcial (pero no todo)
+      trackingData[id].name = session.name;
+      trackingData[id].ppm = session.ppm;
+      trackingData[id].packs = session.packs;
+
       session.sessionXP = 0;
       session.sessionTime = 0;
     }
 
     await updateGist(process.env.GIST_TRACKING, trackingData);
 
-    console.log("💾 Gist actualizado correctamente");
+    console.log("💾 Gist actualizado");
 
-  }, 600000); // 10 minutos
+  }, 600000);
 }
 
 // =============================
@@ -192,18 +225,23 @@ async function updateMessage() {
 
   for (const [id, session] of Object.entries(liveTracker)) {
 
-    const total = trackingData[id] || { xp: 0, time: 0 };
+    const total = trackingData[id] || {
+      xp: 0,
+      time: 0
+    };
 
     const totalXP = total.xp + session.sessionXP;
     const totalTime = total.time + Math.floor(session.sessionTime / 60);
 
     const level = Math.floor(totalXP / 100);
 
-    content += `<@${id}>
+    content += `👤 ${session.name}
 🎖 Nivel ${level}
 XP ${totalXP.toFixed(2)}
 ⏱ ${totalTime}m
 🧩 ${session.instances}
+📦 Packs: ${session.packs}
+⚡ ${session.ppm} packs/min
 
 `;
   }
@@ -211,8 +249,6 @@ XP ${totalXP.toFixed(2)}
   await msg.edit(content);
 }
 
-// =============================
-// UTILS
 // =============================
 function safeParse(data) {
   try {
@@ -226,6 +262,8 @@ function sanitizeTracking() {
   for (const k in trackingData) {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
+    trackingData[k].ppm = Number(trackingData[k].ppm) || 0;
+    trackingData[k].packs = Number(trackingData[k].packs) || 0;
   }
 }
 
