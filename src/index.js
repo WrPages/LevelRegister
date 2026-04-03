@@ -19,9 +19,6 @@ let trackingData = {};
 let liveTracker = {};
 let liveMessageId = null;
 
-let secondLoop = null;
-let backupLoop = null;
-
 // =============================
 client.once("clientReady", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
@@ -33,135 +30,100 @@ client.once("clientReady", async () => {
   sanitizeTracking();
   await findOrCreateMessage();
 
-  startSecondLoop();
-  startBackupLoop();
-
-  setInterval(async () => {
-    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
-  }, 60000);
+  startLoop();
 });
 
+// =============================
+// DEBUG GLOBAL (CLAVE)
 // =============================
 client.on("messageCreate", async (msg) => {
 
-  if (msg.channel.id === process.env.HEARTBEAT_CHANNEL_ID) {
+  console.log("📩 MENSAJE DETECTADO");
+  console.log("Canal:", msg.channel.id);
+  console.log("Autor:", msg.author?.tag);
+  console.log("Contenido RAW:", msg.content);
+  console.log("Embeds:", msg.embeds?.length);
 
-    const content = buildFullContent(msg);
-    if (!content) return;
+  // 🔥 IMPORTANTE: permite mensajes de bots/webhooks
+  if (msg.channel.id != process.env.HEARTBEAT_CHANNEL_ID) return;
 
-    const lines = content.split("\n");
-    const name = lines[0]?.trim();
-    if (!name) return;
+  console.log("✅ ES HEARTBEAT");
 
-    const onlineLine = lines.find(l =>
-      l.toLowerCase().includes("online")
-    );
-    if (!onlineLine) return;
+  const content = buildFullContent(msg);
 
-    let instances = 0;
-    const value = onlineLine.split(":")[1]?.trim();
-    if (value && value.toLowerCase() !== "none") {
-      instances = value.split(",").length;
-    }
+  console.log("📦 CONTENIDO PROCESADO:");
+  console.log(content);
 
-    const normalize = (str) => str?.toLowerCase().trim();
+  if (!content) return;
 
-    const matched = Object.entries(eliteUsers).find(
-      ([_, user]) => normalize(user.name) === normalize(name)
-    );
+  const lines = content.split("\n");
+  const name = lines[0]?.trim();
 
-    if (!matched) return;
+  console.log("👤 Nombre detectado:", name);
 
-    const [discordId, user] = matched;
+  const onlineLine = lines.find(l =>
+    l.toLowerCase().includes("online")
+  );
 
-    const isOnline =
-      onlineIds.includes(user.main_id) ||
-      onlineIds.includes(user.sec_id);
+  console.log("📡 Línea online:", onlineLine);
 
-    if (!isOnline) return;
+  if (!onlineLine) return;
 
-    if (!liveTracker[discordId]) {
-      liveTracker[discordId] = {
-        sessionXP: 0,
-        sessionTime: 0,
-        instances: 0,
-        boostUntil: 0,
-        lastSeen: Date.now()
-      };
-    }
+  let instances = 0;
+  const value = onlineLine.split(":")[1]?.trim();
 
-    liveTracker[discordId].instances = instances;
-    liveTracker[discordId].lastSeen = Date.now();
-
-    if (!trackingData[discordId]) {
-      trackingData[discordId] = { xp: 0, time: 0, gp: 0 };
-    }
+  if (value && value.toLowerCase() !== "none") {
+    instances = value.split(",").length;
   }
 
-  // =============================
-  // GP BOOST
-  // =============================
-  if (msg.channel.id === process.env.GP_CHANNEL_ID) {
+  console.log("🧩 Instancias:", instances);
 
-    const content = buildFullContent(msg);
-    if (!content) return;
+  const normalize = (s) => s?.toLowerCase().trim();
 
-    const name = content.split("\n")[0].trim();
-    const normalize = (str) => str?.toLowerCase().trim();
+  const matched = Object.entries(eliteUsers).find(
+    ([_, user]) => normalize(user.name) === normalize(name)
+  );
 
-    const matched = Object.entries(eliteUsers).find(
-      ([_, user]) => normalize(user.name) === normalize(name)
-    );
+  console.log("🎯 MATCH:", matched);
 
-    if (!matched) return;
+  if (!matched) return;
 
-    const [discordId] = matched;
+  const [discordId] = matched;
 
-    if (!liveTracker[discordId]) return;
+  if (!liveTracker[discordId]) {
+    liveTracker[discordId] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 0,
+      lastSeen: Date.now()
+    };
+  }
 
-    liveTracker[discordId].boostUntil =
-      Date.now() + 3600000;
+  liveTracker[discordId].instances = instances;
+  liveTracker[discordId].lastSeen = Date.now();
+
+  if (!trackingData[discordId]) {
+    trackingData[discordId] = { xp: 0, time: 0, gp: 0 };
   }
 });
 
 // =============================
-// LOOP TIEMPO REAL
+// LOOP SIMPLE
 // =============================
-function startSecondLoop() {
-  if (secondLoop) return;
+function startLoop() {
+  setInterval(() => {
 
-  secondLoop = setInterval(() => {
+    for (const id in liveTracker) {
+      const user = liveTracker[id];
 
-    for (const userId in liveTracker) {
-      const user = liveTracker[userId];
-
-      // si no ha mandado heartbeat en 30s → se considera offline
       if (Date.now() - user.lastSeen > 30000) {
         user.instances = 0;
         continue;
       }
 
       if (user.instances > 0) {
-
         user.sessionTime += 1;
-
-        let xpPerMinute = 2 + (user.instances * 0.5);
-
-        if (Date.now() < user.boostUntil) {
-          xpPerMinute *= 2;
-        }
-
-        const xpPerSecond = xpPerMinute / 60;
-
-        user.sessionXP += xpPerSecond;
-
-        // cada minuto se guarda en persistente
-        if (user.sessionTime % 60 === 0) {
-          trackingData[userId].time += 1;
-          trackingData[userId].xp += user.sessionXP;
-
-          user.sessionXP = 0;
-        }
+        user.sessionXP += 0.05;
       }
     }
 
@@ -171,50 +133,24 @@ function startSecondLoop() {
 }
 
 // =============================
-function startBackupLoop() {
-  if (backupLoop) return;
-
-  backupLoop = setInterval(async () => {
-    await updateGist(process.env.GIST_TRACKING, trackingData);
-    console.log("💾 Backup guardado");
-  }, 600000);
-}
-
-// =============================
-// MENSAJE EN VIVO
-// =============================
 async function updateLiveMessage() {
   if (!liveMessageId) return;
 
-  try {
-    const channel = await client.channels.fetch(
-      process.env.STATS_CHANNEL_ID
-    );
+  const channel = await client.channels.fetch(
+    process.env.STATS_CHANNEL_ID
+  );
 
-    const message = await channel.messages.fetch(liveMessageId);
+  const msg = await channel.messages.fetch(liveMessageId);
 
-    let content = "🏆 **RANKING LIVE (SESIÓN)**\n\n";
+  let content = "🔥 TRACKING EN VIVO\n\n";
 
-    for (const userId in liveTracker) {
-      const user = liveTracker[userId];
-      const total = trackingData[userId] || { xp: 0, time: 0 };
+  for (const id in liveTracker) {
+    const u = liveTracker[id];
 
-      const boost =
-        Date.now() < user.boostUntil ? " 🚀" : "";
-
-      content += `<@${userId}>
-🟢 Sesión: ${user.sessionTime}s | XP ${user.sessionXP.toFixed(2)}
-💾 Total: ${total.time}m | XP ${total.xp.toFixed(1)}
-🧩 Instancias: ${user.instances}${boost}
-
-`;
-    }
-
-    await message.edit(content);
-
-  } catch (err) {
-    console.error("❌ Error actualizando:", err.message);
+    content += `<@${id}> | ⏱ ${u.sessionTime}s | XP ${u.sessionXP.toFixed(2)}\n`;
   }
+
+  await msg.edit(content);
 }
 
 // =============================
@@ -223,38 +159,24 @@ async function findOrCreateMessage() {
     process.env.STATS_CHANNEL_ID
   );
 
-  const messages = await channel.messages.fetch({ limit: 50 });
-
-  const existing = messages.find(
-    m => m.author.id === client.user.id
-  );
-
-  if (existing) {
-    liveMessageId = existing.id;
-    return;
-  }
-
-  const msg = await channel.send("Iniciando tracking...");
+  const msg = await channel.send("Iniciando...");
   liveMessageId = msg.id;
 }
 
 // =============================
 function safeParse(data) {
-  if (!data) return {};
-  if (typeof data === "object") return data;
-
   try {
-    return JSON.parse(data);
+    return typeof data === "object" ? data : JSON.parse(data);
   } catch {
     return {};
   }
 }
 
 function sanitizeTracking() {
-  for (const key in trackingData) {
-    trackingData[key].xp = Number(trackingData[key].xp) || 0;
-    trackingData[key].time = Number(trackingData[key].time) || 0;
-    trackingData[key].gp = Number(trackingData[key].gp) || 0;
+  for (const k in trackingData) {
+    trackingData[k].xp = Number(trackingData[k].xp) || 0;
+    trackingData[k].time = Number(trackingData[k].time) || 0;
+    trackingData[k].gp = Number(trackingData[k].gp) || 0;
   }
 }
 
@@ -267,11 +189,11 @@ function buildFullContent(message) {
   let content = message.content;
 
   if (!content && message.embeds?.length > 0) {
-    const embed = message.embeds[0];
+    const e = message.embeds[0];
     content = [
-      embed.title,
-      embed.description,
-      ...(embed.fields?.map(f => `${f.name}: ${f.value}`) || [])
+      e.title,
+      e.description,
+      ...(e.fields?.map(f => `${f.name}: ${f.value}`) || [])
     ]
       .filter(Boolean)
       .join("\n");
