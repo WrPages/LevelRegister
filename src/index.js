@@ -30,14 +30,13 @@ client.once("ready", async () => {
 
   startLoop();
 
-  // actualizar online cada minuto
   setInterval(async () => {
     onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   }, 60000);
 });
 
 // =============================
-// 🔥 BOOTSTRAP DESDE HISTORIAL
+// BOOTSTRAP
 // =============================
 async function bootstrapFromHistory() {
   const channel = await client.channels.fetch(
@@ -94,15 +93,13 @@ async function bootstrapFromHistory() {
         instances: instances
       };
     }
-
-    // SOLO tomar el primero válido (el más reciente)
   }
 
   console.log("✅ Bootstrap completado:", liveTracker);
 }
 
 // =============================
-// LOOP PRINCIPAL
+// LOOP
 // =============================
 function startLoop() {
   setInterval(() => {
@@ -113,7 +110,6 @@ function startLoop() {
         onlineIds.includes(user.main_id) ||
         onlineIds.includes(user.sec_id);
 
-      // si no está online → no contar
       if (!isOnline) continue;
 
       if (!liveTracker[discordId]) {
@@ -126,7 +122,6 @@ function startLoop() {
 
       const tracker = liveTracker[discordId];
 
-      // sumar tiempo SIEMPRE mientras esté online
       tracker.time += 1;
 
       const xpPerSecond =
@@ -141,7 +136,7 @@ function startLoop() {
 }
 
 // =============================
-// MENSAJE DISCORD
+// MENSAJE
 // =============================
 async function createMessage() {
   const channel = await client.channels.fetch(
@@ -165,9 +160,19 @@ async function updateMessage() {
 
   for (const [id, data] of Object.entries(liveTracker)) {
 
+    const level = Math.floor(data.xp / 100);
+    const currentXP = data.xp % 100;
+    const progressBars = Math.floor(currentXP / 10);
+
+    const bar =
+      "▓".repeat(progressBars) +
+      "░".repeat(10 - progressBars);
+
     content += `<@${id}>
+🎖 Nivel ${level}
+XP ${data.xp.toFixed(2)} (${currentXP.toFixed(1)}/100)
+📊 ${bar}
 ⏱ ${data.time}s
-XP ${data.xp.toFixed(2)}
 🧩 ${data.instances}
 
 `;
