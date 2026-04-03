@@ -1,6 +1,5 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import dotenv from "dotenv";
-import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
@@ -13,127 +12,124 @@ const client = new Client({
 });
 
 // =============================
-let eliteUsers = {};
-let onlineIds = [];
-let trackingData = {};
 let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
-client.once("clientReady", async () => {
+client.once("ready", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
-
-  eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
-  onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
-  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-
-  sanitizeTracking();
-  await findOrCreateMessage();
-
+  await createMessage();
   startLoop();
 });
 
 // =============================
-// DEBUG GLOBAL (CLAVE)
+// DETECTOR DE HEARTBEAT (FIX REAL)
 // =============================
 client.on("messageCreate", async (msg) => {
 
-  console.log("📩 MENSAJE DETECTADO");
+  // 🔥 DEBUG
+  console.log("------");
   console.log("Canal:", msg.channel.id);
-  console.log("Autor:", msg.author?.tag);
-  console.log("Contenido RAW:", msg.content);
-  console.log("Embeds:", msg.embeds?.length);
+  console.log("Webhook:", msg.webhookId);
+  console.log("Contenido:", msg.content);
+  console.log("Embeds:", msg.embeds.length);
 
-  // 🔥 IMPORTANTE: permite mensajes de bots/webhooks
-  if (msg.channel.id != process.env.HEARTBEAT_CHANNEL_ID) return;
+  // ❗ QUITA FILTRO PARA DEBUG
+  // if (msg.channel.id !== process.env.HEARTBEAT_CHANNEL_ID) return;
 
-  console.log("✅ ES HEARTBEAT");
+  // =============================
+  // EXTRAER CONTENIDO REAL
+  // =============================
+  let content = msg.content;
 
-  const content = buildFullContent(msg);
-
-  console.log("📦 CONTENIDO PROCESADO:");
-  console.log(content);
+  if (!content && msg.embeds.length > 0) {
+    const e = msg.embeds[0];
+    content = `${e.title || ""}\n${e.description || ""}`;
+  }
 
   if (!content) return;
 
+  console.log("📦 CONTENIDO FINAL:\n", content);
+
+  // =============================
+  // PARSEO REAL PARA TU FORMATO
+  // =============================
   const lines = content.split("\n");
+
   const name = lines[0]?.trim();
+  if (!name) return;
 
-  console.log("👤 Nombre detectado:", name);
-
-  const onlineLine = lines.find(l =>
-    l.toLowerCase().includes("online")
-  );
-
-  console.log("📡 Línea online:", onlineLine);
-
+  const onlineLine = lines.find(l => l.startsWith("Online:"));
   if (!onlineLine) return;
 
   let instances = 0;
+
   const value = onlineLine.split(":")[1]?.trim();
 
   if (value && value.toLowerCase() !== "none") {
     instances = value.split(",").length;
   }
 
+  console.log("👤 Usuario:", name);
   console.log("🧩 Instancias:", instances);
 
-  const normalize = (s) => s?.toLowerCase().trim();
-
-  const matched = Object.entries(eliteUsers).find(
-    ([_, user]) => normalize(user.name) === normalize(name)
-  );
-
-  console.log("🎯 MATCH:", matched);
-
-  if (!matched) return;
-
-  const [discordId] = matched;
-
-  if (!liveTracker[discordId]) {
-    liveTracker[discordId] = {
-      sessionXP: 0,
-      sessionTime: 0,
+  // =============================
+  // TRACKING SIMPLE
+  // =============================
+  if (!liveTracker[name]) {
+    liveTracker[name] = {
+      time: 0,
+      xp: 0,
       instances: 0,
       lastSeen: Date.now()
     };
   }
 
-  liveTracker[discordId].instances = instances;
-  liveTracker[discordId].lastSeen = Date.now();
-
-  if (!trackingData[discordId]) {
-    trackingData[discordId] = { xp: 0, time: 0, gp: 0 };
-  }
+  liveTracker[name].instances = instances;
+  liveTracker[name].lastSeen = Date.now();
 });
 
 // =============================
-// LOOP SIMPLE
+// LOOP TIEMPO REAL
 // =============================
 function startLoop() {
   setInterval(() => {
 
-    for (const id in liveTracker) {
-      const user = liveTracker[id];
+    for (const name in liveTracker) {
+      const user = liveTracker[name];
 
+      // si no hay heartbeat reciente → offline
       if (Date.now() - user.lastSeen > 30000) {
         user.instances = 0;
         continue;
       }
 
       if (user.instances > 0) {
-        user.sessionTime += 1;
-        user.sessionXP += 0.05;
+        user.time += 1;
+
+        const xpPerSecond = (2 + user.instances * 0.5) / 60;
+        user.xp += xpPerSecond;
       }
     }
 
-    updateLiveMessage();
+    updateMessage();
 
   }, 1000);
 }
 
 // =============================
-async function updateLiveMessage() {
+// MENSAJE EN DISCORD
+// =============================
+async function createMessage() {
+  const channel = await client.channels.fetch(
+    process.env.STATS_CHANNEL_ID
+  );
+
+  const msg = await channel.send("Iniciando tracking...");
+  liveMessageId = msg.id;
+}
+
+async function updateMessage() {
   if (!liveMessageId) return;
 
   const channel = await client.channels.fetch(
@@ -144,62 +140,18 @@ async function updateLiveMessage() {
 
   let content = "🔥 TRACKING EN VIVO\n\n";
 
-  for (const id in liveTracker) {
-    const u = liveTracker[id];
+  for (const name in liveTracker) {
+    const u = liveTracker[name];
 
-    content += `<@${id}> | ⏱ ${u.sessionTime}s | XP ${u.sessionXP.toFixed(2)}\n`;
+    content += `**${name}**
+⏱ ${u.time}s
+XP ${u.xp.toFixed(2)}
+🧩 ${u.instances}
+
+`;
   }
 
   await msg.edit(content);
-}
-
-// =============================
-async function findOrCreateMessage() {
-  const channel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
-
-  const msg = await channel.send("Iniciando...");
-  liveMessageId = msg.id;
-}
-
-// =============================
-function safeParse(data) {
-  try {
-    return typeof data === "object" ? data : JSON.parse(data);
-  } catch {
-    return {};
-  }
-}
-
-function sanitizeTracking() {
-  for (const k in trackingData) {
-    trackingData[k].xp = Number(trackingData[k].xp) || 0;
-    trackingData[k].time = Number(trackingData[k].time) || 0;
-    trackingData[k].gp = Number(trackingData[k].gp) || 0;
-  }
-}
-
-function cleanOnlineIds(raw) {
-  if (!raw) return [];
-  return raw.split("\n").map(x => x.trim()).filter(Boolean);
-}
-
-function buildFullContent(message) {
-  let content = message.content;
-
-  if (!content && message.embeds?.length > 0) {
-    const e = message.embeds[0];
-    content = [
-      e.title,
-      e.description,
-      ...(e.fields?.map(f => `${f.name}: ${f.value}`) || [])
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  return content;
 }
 
 client.login(process.env.DISCORD_TOKEN);
