@@ -5,7 +5,7 @@ import {
   EmbedBuilder
 } from "discord.js";
 import dotenv from "dotenv";
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
@@ -164,15 +164,15 @@ async function updatePanels() {
 
     // ===== TEXTO =====
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 40px sans-serif";
+    ctx.font = "40px Righteous";
     ctx.fillText(s.name, 40, 70);
 
     ctx.fillStyle = "#00ffcc";
-    ctx.font = "28px sans-serif";
+    ctx.font = "24px Righteous";
     ctx.fillText(`Nivel ${level}`, 600, 70);
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "24px sans-serif";
+    ctx.font = "24px Righteous";
 
     ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 150);
     ctx.fillText(`Tiempo: ${totalTime}m`, 40, 190);
