@@ -129,23 +129,11 @@ client.on("messageCreate", async (msg) => {
       );
 
     // 🔥 GIF REAL
-    let file = null;
+  embed.setImage(gif);
 
-    try {
-      const res = await fetch(gif);
-      const buffer = await res.arrayBuffer();
-
-      file = new AttachmentBuilder(Buffer.from(buffer), {
-        name: "evo.gif",
-      });
-    } catch (e) {
-      console.log("gif error");
-    }
-
-    return msg.channel.send({
-      embeds: [embed],
-      files: file ? [file] : [],
-    });
+await channel.send({
+  embeds: [embed],
+});
   }
 
   // =============================
