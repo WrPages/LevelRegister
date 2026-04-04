@@ -377,16 +377,9 @@ async function updateMessage() {
 
   const msg = await channel.messages.fetch(liveMessageId);
 
-  const embed = new EmbedBuilder()
-    .setTitle("🏆 TRACKING EN VIVO")
-    .setColor(0x00ff99)
-    .setDescription("Jugadores activos en tiempo real");
-
-  let count = 0;
+  const embeds = [];
 
   for (const [id, s] of Object.entries(liveTracker)) {
-    if (count >= 25) break; // límite Discord
-
     const t = trackingData[id] || {
       xp: 0,
       gp: 0,
@@ -400,25 +393,27 @@ async function updateMessage() {
 
     const level = Math.floor(totalXP / 100);
 
-    embed.addFields({
-      name: `👤 ${s.name}`,
-      value:
-        `🎖 Nivel: ${level}\n` +
-        `📈 XP: ${totalXP.toFixed(0)}\n` +
-        `⏱ Tiempo: ${totalTime}m\n` +
-        `💎 GP: ${t.gp}`,
-      inline: true,
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x00ff99)
+      .setTitle(`🧠 ${s.name}`)
+      .setDescription(`🎖 Nivel ${level}`)
+      .addFields(
+        { name: "📈 XP", value: `${totalXP.toFixed(0)}`, inline: true },
+        { name: "⏱ Tiempo", value: `${totalTime}m`, inline: true },
+        { name: "💎 GP", value: `${t.gp}`, inline: true }
+      );
 
-    count++;
+    embeds.push(embed);
+
+    // ⚠️ límite duro de Discord
+    if (embeds.length >= 10) break;
   }
 
   await msg.edit({
-    content: "",
-    embeds: [embed],
+    content: "🏆 TRACKING EN VIVO",
+    embeds: embeds,
   });
 }
-
 // =============================
 async function createMessage() {
   const channel = await client.channels.fetch(
