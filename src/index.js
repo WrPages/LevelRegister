@@ -5,7 +5,7 @@ import {
   AttachmentBuilder
 } from "discord.js";
 import dotenv from "dotenv";
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas } from "canvas";
 
 dotenv.config();
 
@@ -24,10 +24,7 @@ client.once("clientReady", () => {
 
 // =============================
 client.on("messageCreate", async (msg) => {
-  console.log("MENSAJE:", msg.content);
-
   if (msg.content === "!card") {
-    console.log("🔥 GENERANDO CARTA");
     await sendCard(msg.channel);
   }
 });
@@ -35,7 +32,7 @@ client.on("messageCreate", async (msg) => {
 // =============================
 async function sendCard(channel) {
   try {
-    // ===== DATOS (luego los conectas a tu sistema real)
+    // ===== DATOS (luego conectas reales)
     const name = "KyuremBot";
     const level = 55;
     const xp = 5576;
@@ -43,75 +40,66 @@ async function sendCard(channel) {
     const gp = 1;
     const progress = 0.75;
 
-    // ===== CANVAS
-    const canvas = createCanvas(600, 800);
+    // =============================
+    // 🎴 CANVAS HORIZONTAL (HEADER)
+    // =============================
+    const canvas = createCanvas(800, 250);
     const ctx = canvas.getContext("2d");
 
-    // ===== FONDO
-    const bg = await loadImage("./assets/card.png");
-    ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
+    // Fondo oscuro pro
+    ctx.fillStyle = "#0d1117";
+    ctx.fillRect(0, 0, 800, 250);
 
-    // =============================
-    // 🔥 ESPACIO ARRIBA PARA EL GIF
-    // =============================
-    const offsetY = 100; // 🔥 clave para alineación
+    // Borde
+    ctx.strokeStyle = "#00ffcc";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(0, 0, 800, 250);
 
-    // ===== OVERLAY SUAVE
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.fillRect(0, offsetY, canvas.width, canvas.height - offsetY);
-
-    // ===== NOMBRE
+    // Nombre
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 34px Arial";
-    ctx.fillText(name, 40, offsetY + 60);
+    ctx.font = "bold 36px Arial";
+    ctx.fillText(name, 30, 60);
 
-    // ===== NIVEL
-    ctx.font = "bold 26px Arial";
-    ctx.fillText(`Lv ${level}`, 450, offsetY + 60);
-
-    // ===== CAJA STATS
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(40, offsetY + 120, 520, 250);
-
-    // ===== TEXTO STATS
+    // Nivel
     ctx.fillStyle = "#00ffcc";
+    ctx.font = "28px Arial";
+    ctx.fillText(`Lv ${level}`, 650, 60);
+
+    // Stats
+    ctx.fillStyle = "#aaaaaa";
     ctx.font = "22px Arial";
 
-    ctx.fillText(`XP: ${xp}`, 60, offsetY + 170);
-    ctx.fillText(`Tiempo: ${time}m`, 60, offsetY + 210);
-    ctx.fillText(`GP: ${gp}`, 60, offsetY + 250);
+    ctx.fillText(`XP: ${xp}`, 30, 120);
+    ctx.fillText(`Tiempo: ${time}m`, 30, 160);
+    ctx.fillText(`GP: ${gp}`, 30, 200);
 
-    // ===== BARRA XP
+    // Barra XP
     ctx.fillStyle = "#222";
-    ctx.fillRect(60, offsetY + 300, 480, 25);
+    ctx.fillRect(250, 150, 500, 20);
 
     ctx.fillStyle = "#00ff99";
-    ctx.fillRect(60, offsetY + 300, 480 * progress, 25);
+    ctx.fillRect(250, 150, 500 * progress, 20);
 
-    // ===== BORDE PRO
-    ctx.strokeStyle = "#00ffcc";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(20, 20, 560, 760);
-
-    // ===== EXPORTAR
+    // Exportar
     const attachment = new AttachmentBuilder(
       canvas.toBuffer(),
-      { name: "card.png" }
+      { name: "header.png" }
     );
 
     // =============================
-    // 🔥 GIF LIMPIO (SIN TEXTO)
+    // 🎥 GIF (ABAJO)
     // =============================
     const embed = new EmbedBuilder()
+      .setColor(0x000000)
       .setImage("https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif");
 
     // =============================
-    // 🚀 ORDEN PRO (ILUSIÓN)
+    // 🚀 ENVÍO (ALINEADO)
     // =============================
-    await channel.send({ embeds: [embed] }); // GIF primero
-    await channel.send({ files: [attachment] }); // carta después
+    await channel.send({ files: [attachment] });
+    await channel.send({ embeds: [embed] });
 
-    console.log("✅ CARTA PRO ENVIADA");
+    console.log("✅ CARD PANEL ENVIADO");
 
   } catch (err) {
     console.error("❌ ERROR:", err);
