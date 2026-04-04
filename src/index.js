@@ -5,11 +5,29 @@ import {
   EmbedBuilder
 } from "discord.js";
 import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
+// =============================
+// 🔤 REGISTRAR FUENTE (FIX)
+// =============================
+const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
+
+console.log("Font path:", fontPath);
+console.log("Font exists:", fs.existsSync(fontPath));
+
+if (fs.existsSync(fontPath)) {
+  registerFont(fontPath, { family: "Righteous" });
+  console.log("✅ Fuente Righteous cargada");
+} else {
+  console.log("❌ Fuente NO encontrada");
+}
+
+// =============================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -150,7 +168,6 @@ async function updatePanels() {
 
     const { gif, progress, stage } = getPokemonData(totalXP);
 
-    // 🎴 CANVAS 16:9
     const canvas = createCanvas(800, 450);
     const ctx = canvas.getContext("2d");
 
@@ -162,13 +179,13 @@ async function updatePanels() {
       ctx.fillRect(0, 0, 800, 450);
     }
 
-    // ===== TEXTO =====
+    // ===== TEXTO (Righteous) =====
     ctx.fillStyle = "#ffffff";
     ctx.font = "40px Righteous";
     ctx.fillText(s.name, 40, 70);
 
     ctx.fillStyle = "#00ffcc";
-    ctx.font = "24px Righteous";
+    ctx.font = "28px Righteous";
     ctx.fillText(`Nivel ${level}`, 600, 70);
 
     ctx.fillStyle = "#ffffff";
