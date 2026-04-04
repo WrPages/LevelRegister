@@ -6,7 +6,6 @@ import {
 } from "discord.js";
 import dotenv from "dotenv";
 import { createCanvas, loadImage } from "canvas";
-import { getGist } from "./gist.js";
 
 dotenv.config();
 
@@ -18,108 +17,81 @@ const client = new Client({
   ],
 });
 
-let eliteUsers = {};
-let onlineIds = [];
-let trackingData = {};
-let liveTracker = {};
-
 // =============================
-function getPokemonData(totalXP) {
-  return {
-    name: "🔥 Test Stage",
-    gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif?ex=69d1da52&is=69d088d2&hm=b9bdc9d57b7303ba9b46afaf43b64528a27cff0b0297b47347bc76aec4290063&",
-    progress: 0.5
-  };
-}
-
-// =============================
-client.once("clientReady", async () => {
+client.once("clientReady", () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
-
-  eliteUsers = await getGist(process.env.GIST_USERS) || {};
-  trackingData = await getGist(process.env.GIST_TRACKING) || {};
-
-  // 🔥 USER DE PRUEBA
-  liveTracker["test"] = {
-    name: "TestUser",
-    sessionXP: 500,
-    sessionTime: 300,
-    instances: 2
-  };
 });
 
 // =============================
 client.on("messageCreate", async (msg) => {
-
-  if (msg.content === "!testcard") {
-    console.log("🔥 comando recibido");
-
-    const fakeUser = liveTracker["test"];
-    const fakeData = { xp: 1000, time: 50, gp: 2 };
-
-    await sendCard(msg.channel, fakeUser, fakeData);
+  if (msg.content === "!card") {
+    await sendCard(msg.channel);
   }
-
 });
 
 // =============================
-async function sendCard(channel, s, t) {
-  try {
-    console.log("🎨 generando canvas");
+async function sendCard(channel) {
+  // ===== DATOS FAKE (puedes conectar luego a tu sistema)
+  const name = "KyuremBot";
+  const level = 55;
+  const xp = 5576;
+  const time = 904;
+  const gp = 1;
+  const progress = 0.75;
 
-    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-    const totalTime =
-      (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-    const level = Math.floor(totalXP / 100);
+  // ===== CANVAS
+  const canvas = createCanvas(500, 700);
+  const ctx = canvas.getContext("2d");
 
-    const evo = getPokemonData(totalXP);
+  // 🔥 FONDO (tu imagen en /assets/card.png)
+  const background = await loadImage("./assets/card.png");
+  ctx.drawImage(background, 0, 0, 500, 700);
 
-    const canvas = createCanvas(500, 700);
-    const ctx = canvas.getContext("2d");
+  // ===== TEXTO
+  ctx.fillStyle = "#ffffff";
 
-    // 🔥 CARGAR FONDO
-    const background = await loadImage("./assets/card.png");
-    ctx.drawImage(background, 0, 0, 500, 700);
+  ctx.font = "30px Arial";
+  ctx.fillText(name, 40, 80);
 
-    // TEXTO
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "28px Arial";
-    ctx.fillText(s.name, 40, 60);
+  ctx.font = "20px Arial";
+  ctx.fillText(`Nivel: ${level}`, 40, 130);
+  ctx.fillText(`XP: ${xp}`, 40, 170);
+  ctx.fillText(`Tiempo: ${time}m`, 40, 210);
+  ctx.fillText(`GP: ${gp}`, 40, 250);
 
-    ctx.font = "20px Arial";
-    ctx.fillText(`Nivel: ${level}`, 40, 100);
-    ctx.fillText(`XP: ${totalXP}`, 40, 140);
-    ctx.fillText(`Tiempo: ${totalTime}m`, 40, 180);
-    ctx.fillText(`GP: ${t.gp}`, 40, 220);
+  // ===== BARRA PROGRESO
+  ctx.fillStyle = "#222";
+  ctx.fillRect(40, 300, 420, 20);
 
-    // BARRA
-    ctx.fillStyle = "#333";
-    ctx.fillRect(40, 260, 400, 20);
+  ctx.fillStyle = "#00ff99";
+  ctx.fillRect(40, 300, 420 * progress, 20);
 
-    ctx.fillStyle = "#00ff99";
-    ctx.fillRect(40, 260, 400 * evo.progress, 20);
+  // ===== EXPORTAR
+  const attachment = new AttachmentBuilder(
+    canvas.toBuffer(),
+    { name: "card.png" }
+  );
 
-    const attachment = new AttachmentBuilder(
-      canvas.toBuffer(),
-      { name: "card.png" }
-    );
+  // =============================
+  // 🔥 GIF (EL TUYO)
+  // =============================
+  const embed = new EmbedBuilder()
+    .setColor(0x000000)
+    .setImage("https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif");
 
-    const embed = new EmbedBuilder()
-      .setTitle("🃏 CARD GENERADA")
-      .setDescription("Si ves esto + imagen abajo → FUNCIONA")
-      .setImage(evo.gif)
-      .setColor(0x00ff99);
+  // =============================
+  // 🚀 ENVÍO PRO (SEPARADO)
+  // =============================
 
-    await channel.send({
-      embeds: [embed],
-      files: [attachment],
-    });
+  // 1. carta
+  await channel.send({
+    files: [attachment],
+  });
 
-    console.log("✅ enviada");
-
-  } catch (err) {
-    console.error("❌ ERROR CANVAS:", err);
-  }
+  // 2. gif alineado
+  await channel.send({
+    embeds: [embed],
+  });
 }
 
 // =============================
