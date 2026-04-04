@@ -24,7 +24,7 @@ let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF (FIX REAL)
+// 🧬 EVOLUCIÓN + GIF
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -71,7 +71,7 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
@@ -79,7 +79,6 @@ client.once("ready", async () => {
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
   sanitizeTracking();
-  await bootstrapFromHistory();
   await createMessage();
 
   startLoop();
@@ -87,7 +86,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🎴 PROFILE (FIX TOTAL)
+// 🎴 PROFILE
 // =============================
 client.on("messageCreate", async (msg) => {
   if (!msg.content.startsWith("!profile")) return;
@@ -126,11 +125,9 @@ client.on("messageCreate", async (msg) => {
       { name: "📦 Packs", value: `${s.packs}`, inline: true },
       { name: "💎 GP", value: `${t.gp || 0}`, inline: true }
     )
-    .setImage(gif); // 🔥 AQUÍ FUNCIONA EL GIF
+    .setImage(gif);
 
-  return msg.channel.send({
-    embeds: [embed],
-  });
+  return msg.channel.send({ embeds: [embed] });
 });
 
 // =============================
@@ -209,7 +206,7 @@ async function updateMessage() {
         { name: "Tiempo", value: `${totalTime}m`, inline: true },
         { name: "GP", value: `${t.gp || 0}`, inline: true }
       )
-      .setImage(gif); // 🔥 GIF TAMBIÉN AQUÍ
+      .setImage(gif);
 
     embeds.push(embed);
 
@@ -230,6 +227,33 @@ async function createMessage() {
 
   const msg = await channel.send("🔥 Iniciando tracking...");
   liveMessageId = msg.id;
+}
+
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+    for (const id in liveTracker) {
+      if (!trackingData[id]) {
+        trackingData[id] = {
+          xp: 0,
+          time: 0,
+          name: liveTracker[id].name,
+          packs: 0,
+          gp: 0,
+        };
+      }
+
+      const s = liveTracker[id];
+
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+  }, 600000);
 }
 
 // =============================
