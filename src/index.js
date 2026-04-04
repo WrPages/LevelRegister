@@ -1,9 +1,10 @@
 import {
   Client,
   GatewayIntentBits,
-  AttachmentBuilder,
+  AttachmentBuilder
 } from "discord.js";
 import dotenv from "dotenv";
+import fetch from "node-fetch";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
@@ -24,7 +25,7 @@ let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF (GIF REAL FUNCIONANDO)
+// 🧬 EVOLUCIÓN + GIF (ESTABLE)
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -87,7 +88,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🧠 PERFIL BONITO (TARJETA)
+// 🎴 PERFIL PRO + GIF REAL
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!profile")) {
@@ -113,27 +114,30 @@ client.on("messageCreate", async (msg) => {
       "🟩".repeat(Math.floor(progress * 10)) +
       "⬛".repeat(10 - Math.floor(progress * 10));
 
-    // 🔥 TARJETA TIPO PERFIL (SIN EMBED)
+    // 🔥 DESCARGAR GIF → BUFFER
+    const res = await fetch(gif);
+    const buffer = await res.arrayBuffer();
+
+    const file = new AttachmentBuilder(Buffer.from(buffer), {
+      name: "pokemon.gif",
+    });
+
+    // 🎴 TARJETA VISUAL LIMPIA
     const content = `
-╔════════════════════════════╗
-   🧠 ${s.name.toUpperCase()}
-╠════════════════════════════╣
+━━━━━━━━━━━━━━━━━━━
+🧠  ${s.name.toUpperCase()}
+━━━━━━━━━━━━━━━━━━━
 🎖 Nivel: ${level}
 📈 XP: ${totalXP.toFixed(2)}
 ⏱ Tiempo: ${totalTime}m
 🧩 Instancias: ${s.instances}
 📦 Packs: ${s.packs}
 💎 GP: ${t.gp || 0}
-╠════════════════════════════╣
+
 🧬 Evolución: ${stage}
 ${progressBar}
-╚════════════════════════════╝
+━━━━━━━━━━━━━━━━━━━
 `;
-
-    // 🔥 GIF COMO ARCHIVO (100% FUNCIONA)
-    const file = new AttachmentBuilder(gif, {
-      name: "pokemon.gif",
-    });
 
     return msg.channel.send({
       content,
@@ -302,7 +306,8 @@ async function bootstrapFromHistory() {
     const data = parseHeartbeat(content);
     if (!data.name) continue;
 
-    const normalize = (s) => s?.toLowerCase().trim();
+    const normalize = (s) =>
+      s?.toLowerCase().trim();
 
     const matched = Object.entries(eliteUsers).find(
       ([_, user]) =>
@@ -430,4 +435,4 @@ function cleanOnlineIds(raw) {
     .filter(Boolean);
 }
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);login(process.env.DISCORD_TOKEN);
