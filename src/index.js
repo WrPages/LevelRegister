@@ -33,28 +33,28 @@ function getPokemonData(totalXP) {
       min: 0,
       max: 400,
       color: 0xaaaaaa,
-      gif: "https://cdn.discordapp.com/attachments/XXXX/egg.gif",
+      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
       color: 0x00ff99,
-      gif: "https://cdn.discordapp.com/attachments/XXXX/bulbasaur.gif",
+      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
       color: 0x0099ff,
-      gif: "https://cdn.discordapp.com/attachments/XXXX/ivysaur.gif",
+      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832678525243554/ivysaur.gif?ex=69d1da4e&is=69d088ce&hm=aef23997bea2456dbf87d2fbe47f4aefd41717290135d88fe8ca9e34f6a23b14&=&width=105&height=83",
     },
     {
       name: "🦅 Final",
       min: 1200,
       max: Infinity,
       color: 0xffcc00,
-      gif: "https://cdn.discordapp.com/attachments/XXXX/venusaur.gif",
+      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif?ex=69d1da52&is=69d088d2&hm=b9bdc9d57b7303ba9b46afaf43b64528a27cff0b0297b47347bc76aec4290063&=&width=133&height=96",
     },
   ];
 
