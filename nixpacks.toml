@@ -1,5 +1,12 @@
 [phases.setup]
-nixPkgs = ["cairo", "pango", "libpng", "libjpeg", "giflib"]
+nixPkgs = [
+  "nodejs_18",
+  "cairo",
+  "pango",
+  "libpng",
+  "libjpeg",
+  "giflib"
+]
 
 [phases.install]
 cmds = ["npm install"]
