@@ -132,7 +132,7 @@ async function sendCard(channel, s, t) {
         inline: true,
       },
       {
-        name: "⏱ Tiempo",
+        name: "⏱ Time",
         value: `${totalTime}m`,
         inline: true,
       },
