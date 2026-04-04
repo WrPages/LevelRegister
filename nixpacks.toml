@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["cairo", "pango", "libpng", "jpeg", "giflib"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = []
