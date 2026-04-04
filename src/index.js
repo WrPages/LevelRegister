@@ -2,8 +2,12 @@ import {
   Client,
   GatewayIntentBits,
   AttachmentBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } from "discord.js";
+
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -17,14 +21,8 @@ dotenv.config();
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 
-console.log("Font path:", fontPath);
-console.log("Font exists:", fs.existsSync(fontPath));
-
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "Righteous" });
-  console.log("✅ Fuente cargada");
-} else {
-  console.log("❌ Fuente NO encontrada");
 }
 
 // =============================
@@ -42,6 +40,28 @@ let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
 let userPanels = {};
+let userSettings = {}; // 🔥 NUEVO
+
+// =============================
+// 🧠 ROLES
+// =============================
+function getUserRole(member) {
+  const roles = member.roles.cache;
+
+  if (roles.some(r => r.name === "Champion"))
+    return { name: "Champion", color: "#FFD700" };
+
+  if (roles.some(r => r.name === "Elite_Four"))
+    return { name: "Elite Four", color: "#800080" };
+
+  if (roles.some(r => r.name === "Gym_Leader"))
+    return { name: "Gym Leader", color: "#0099ff" };
+
+  if (roles.some(r => r.name === "Trainer"))
+    return { name: "Trainer", color: "#00ff00" };
+
+  return { name: "Reroller", color: "#aaaaaa" };
+}
 
 // =============================
 function getPokemonData(totalXP) {
@@ -52,20 +72,7 @@ function getPokemonData(totalXP) {
     { name: "Final", min: 1200, max: Infinity, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif" },
   ];
 
-  const current = stages.find(
-    (s) => totalXP >= s.min && totalXP < s.max
-  );
-
-  const progress =
-    current.max === Infinity
-      ? 1
-      : (totalXP - current.min) / (current.max - current.min);
-
-  return {
-    stage: current.name,
-    gif: current.gif,
-    progress,
-  };
+  return stages.find(s => totalXP >= s.min && totalXP < s.max);
 }
 
 // =============================
@@ -79,46 +86,33 @@ client.once("clientReady", async () => {
   sanitizeTracking();
 
   startLoop();
-  startBackupLoop();
 });
 
 // =============================
 function startLoop() {
   setInterval(async () => {
-    onlineIds = cleanOnlineIds(
-      await getGist(process.env.GIST_ONLINE)
-    );
+    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
 
-    for (const [discordId, user] of Object.entries(eliteUsers)) {
+    for (const [id, user] of Object.entries(eliteUsers)) {
       const isOnline =
         onlineIds.includes(user.main_id) ||
         onlineIds.includes(user.sec_id);
 
       if (!isOnline) continue;
 
-      if (!liveTracker[discordId]) {
-        liveTracker[discordId] = {
+      if (!liveTracker[id]) {
+        liveTracker[id] = {
           sessionXP: 0,
           sessionTime: 0,
           instances: 1,
-          boostUntil: 0,
           name: user.name,
           packs: 0,
         };
       }
 
-      const t = liveTracker[discordId];
-
+      const t = liveTracker[id];
       t.sessionTime += 1;
-
-      let xpPerSecond =
-        (2 + t.instances * 0.5) / 60;
-
-      if (Date.now() < t.boostUntil) {
-        xpPerSecond *= 2;
-      }
-
-      t.sessionXP += xpPerSecond;
+      t.sessionXP += (2 + t.instances * 0.5) / 60;
     }
 
     await updatePanels();
@@ -130,77 +124,72 @@ function startLoop() {
 // 🎴 PANEL
 // =============================
 async function updatePanels() {
-  const channel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
   for (const [id, s] of Object.entries(liveTracker)) {
     const t = trackingData[id] || {};
 
-    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-    const totalTime =
-      (t.time || 0) +
-      Math.floor((s.sessionTime || 0) / 60);
+    if (!userSettings[id]) {
+      userSettings[id] = {
+        bg: null,
+        nameColor: "#ffffff",
+        textColor: "#ffffff",
+      };
+    }
 
+    const settings = userSettings[id];
+
+    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
     const level = Math.floor(totalXP / 100);
 
-    const { gif, stage } = getPokemonData(totalXP);
+    const poke = getPokemonData(totalXP);
+
+    const guild = channel.guild;
+    const member = await guild.members.fetch(id).catch(() => null);
+    const role = member ? getUserRole(member) : { name: "Reroller", color: "#aaa" };
 
     const canvas = createCanvas(800, 450);
     const ctx = canvas.getContext("2d");
 
+    // Fondo dinámico
     try {
-      const bg = await loadImage("./assets/card.png");
+      const bg = await loadImage(settings.bg || "./assets/card.png");
       ctx.drawImage(bg, 0, 0, 800, 450);
     } catch {
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, 800, 450);
     }
 
-    // ===== NUEVO DISEÑO =====
-    const role = t.role || "Reroller";
-
     // Nombre
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = settings.nameColor;
     ctx.font = "50px Righteous";
     ctx.fillText(s.name, 40, 80);
 
     // Rol
-    ctx.fillStyle = "#aaaaaa";
+    ctx.fillStyle = role.color;
     ctx.font = "22px Righteous";
-    ctx.fillText(role, 42, 110);
+    ctx.fillText(role.name, 42, 110);
 
     // Nivel
     ctx.fillStyle = "#00ffcc";
     ctx.font = "38px Righteous";
     ctx.fillText(`Lv ${level}`, 620, 80);
 
-    // Fase
-    ctx.fillStyle = "#00ffcc";
-    ctx.font = "22px Righteous";
-    ctx.fillText(stage, 620, 110);
-
     // Stats
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = settings.textColor;
     ctx.font = "24px Righteous";
 
     ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
-    ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
+    ctx.fillText(`Tiempo: ${Math.floor(s.sessionTime/60)}m`, 40, 210);
     ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
     ctx.fillText(`Packs: ${s.packs}`, 40, 290);
     ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
-    const file = new AttachmentBuilder(
-      canvas.toBuffer(),
-      { name: "card.png" }
-    );
+    const file = new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" });
 
     if (userPanels[id]) {
       try {
-        const msg = await channel.messages.fetch(
-          userPanels[id].messageId
-        );
-
+        const msg = await channel.messages.fetch(userPanels[id].messageId);
         await msg.edit({ files: [file] });
         continue;
       } catch {
@@ -211,14 +200,25 @@ async function updatePanels() {
     const sent = await channel.send({ files: [file] });
 
     const thread = await sent.startThread({
-      name: `GIF - ${s.name}`,
+      name: `Perfil - ${s.name}`,
       autoArchiveDuration: 1440,
     });
 
-    const embed = new EmbedBuilder()
-      .setColor(0x000000)
-      .setImage(gif);
+    // 🔘 BOTÓN EDITAR
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`edit_${id}`)
+        .setLabel("Editar perfil")
+        .setStyle(ButtonStyle.Primary)
+    );
 
+    await thread.send({
+      content: "Sube una imagen para fondo o usa comandos.",
+      components: [row],
+    });
+
+    // GIF
+    const embed = new EmbedBuilder().setImage(poke.gif);
     await thread.send({ embeds: [embed] });
 
     userPanels[id] = {
@@ -229,40 +229,61 @@ async function updatePanels() {
 }
 
 // =============================
-function startBackupLoop() {
-  setInterval(async () => {
-    for (const id in liveTracker) {
-      if (!trackingData[id]) {
-        trackingData[id] = {
-          xp: 0,
-          time: 0,
-          name: liveTracker[id].name,
-          packs: 0,
-          gp: 0,
-        };
-      }
+// 🔘 INTERACCIONES
+// =============================
+client.on("interactionCreate", async (i) => {
+  if (!i.isButton()) return;
 
-      const s = liveTracker[id];
+  const [, userId] = i.customId.split("_");
 
-      trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
-      trackingData[id].packs = s.packs;
+  if (i.user.id !== userId)
+    return i.reply({ content: "No es tu perfil.", ephemeral: true });
 
-      s.sessionXP = 0;
-      s.sessionTime = 0;
+  await i.reply({
+    content:
+      "🎨 Opciones:\n- Sube una imagen aquí para fondo\n- !namecolor #hex\n- !textcolor #hex",
+    ephemeral: true,
+  });
+});
+
+// =============================
+// 🖼️ GUARDAR FONDO DESDE DISCORD
+// =============================
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
+
+  const settings = userSettings[msg.author.id] || (userSettings[msg.author.id] = {});
+
+  // 📸 FONDO
+  if (msg.attachments.size > 0) {
+    const url = msg.attachments.first().url;
+
+    if (!url.match(/\.(png|jpg|jpeg)$/i)) {
+      return msg.reply("Solo imágenes PNG/JPG");
     }
 
-    await updateGist(process.env.GIST_TRACKING, trackingData);
+    settings.bg = url;
+    return msg.reply("Fondo actualizado ✅");
+  }
 
-  }, 600000);
-}
+  // 🎨 COLORES
+  if (msg.content.startsWith("!namecolor")) {
+    const color = msg.content.split(" ")[1];
+    settings.nameColor = color;
+    return msg.reply("Color nombre actualizado");
+  }
+
+  if (msg.content.startsWith("!textcolor")) {
+    const color = msg.content.split(" ")[1];
+    settings.textColor = color;
+    return msg.reply("Color texto actualizado");
+  }
+});
 
 // =============================
 function safeParse(data) {
   try {
-    return typeof data === "object"
-      ? data
-      : JSON.parse(data);
+    return typeof data === "object" ? data : JSON.parse(data);
   } catch {
     return {};
   }
