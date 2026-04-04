@@ -1,6 +1,7 @@
 import {
   Client,
   GatewayIntentBits,
+  EmbedBuilder,
   AttachmentBuilder
 } from "discord.js";
 import dotenv from "dotenv";
@@ -88,7 +89,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🎴 PERFIL PRO (BIEN HECHO)
+// 🎴 PERFIL (EMBED REAL + GIF)
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!profile")) {
@@ -110,17 +111,30 @@ client.on("messageCreate", async (msg) => {
 
     const { stage, gif, progress } = getPokemonData(totalXP);
 
-    // 🔥 barra PRO real
-    const filled = Math.round(progress * 10);
     const bar =
-      "█".repeat(filled) + "░".repeat(10 - filled);
+      "🟩".repeat(Math.floor(progress * 10)) +
+      "⬛".repeat(10 - Math.floor(progress * 10));
 
-    // 🔥 DESCARGAR GIF (SEGURO)
+    // ✅ EMBED REAL (ESTO ARREGLA TU PROBLEMA)
+    const embed = new EmbedBuilder()
+      .setColor(0x00ff99)
+      .setTitle(`🧠 ${s.name}`)
+      .setDescription(`🧬 **${stage}**\n${bar}`)
+      .addFields(
+        { name: "🎖 Nivel", value: `${level}`, inline: true },
+        { name: "📈 XP", value: `${totalXP.toFixed(0)}`, inline: true },
+        { name: "⏱ Tiempo", value: `${totalTime}m`, inline: true },
+        { name: "🧩 Instancias", value: `${s.instances}`, inline: true },
+        { name: "📦 Packs", value: `${s.packs}`, inline: true },
+        { name: "💎 GP", value: `${t.gp || 0}`, inline: true }
+      );
+
+    // 🔥 GIF REAL (attachment)
     let file = null;
 
     try {
       const res = await fetch(gif);
-      if (!res.ok) throw new Error("gif error");
+      if (!res.ok) throw new Error("gif fail");
 
       const buffer = await res.arrayBuffer();
 
@@ -128,28 +142,11 @@ client.on("messageCreate", async (msg) => {
         name: "evo.gif",
       });
     } catch (e) {
-      console.log("GIF ERROR:", e.message);
+      console.log("❌ GIF error:", e.message);
     }
 
-    // 🎴 TARJETA REAL (ESTILO PRO)
-    const card = `
-╔══════════════════════════╗
-        🧠 ${s.name.toUpperCase()}
-╠══════════════════════════╣
- 🎖 Nivel: ${level}
- 📈 XP: ${totalXP.toFixed(0)}
- ⏱ Tiempo: ${totalTime} min
- 🧩 Instancias: ${s.instances}
- 📦 Packs: ${s.packs}
- 💎 GP: ${t.gp || 0}
-╠══════════════════════════╣
- 🧬 ${stage}
- ${bar}
-╚══════════════════════════╝
-`;
-
     return msg.channel.send({
-      content: "```" + card + "```",
+      embeds: [embed],
       files: file ? [file] : [],
     });
   }
