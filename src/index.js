@@ -89,7 +89,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🎴 PERFIL (EMBED REAL + GIF)
+// 🎴 PROFILE (BONITO + GIF)
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!profile")) {
@@ -115,7 +115,6 @@ client.on("messageCreate", async (msg) => {
       "🟩".repeat(Math.floor(progress * 10)) +
       "⬛".repeat(10 - Math.floor(progress * 10));
 
-    // ✅ EMBED REAL (ESTO ARREGLA TU PROBLEMA)
     const embed = new EmbedBuilder()
       .setColor(0x00ff99)
       .setTitle(`🧠 ${s.name}`)
@@ -129,20 +128,18 @@ client.on("messageCreate", async (msg) => {
         { name: "💎 GP", value: `${t.gp || 0}`, inline: true }
       );
 
-    // 🔥 GIF REAL (attachment)
+    // 🔥 GIF REAL
     let file = null;
 
     try {
       const res = await fetch(gif);
-      if (!res.ok) throw new Error("gif fail");
-
       const buffer = await res.arrayBuffer();
 
       file = new AttachmentBuilder(Buffer.from(buffer), {
         name: "evo.gif",
       });
     } catch (e) {
-      console.log("❌ GIF error:", e.message);
+      console.log("gif error");
     }
 
     return msg.channel.send({
@@ -369,15 +366,7 @@ function parseHeartbeat(content) {
 }
 
 // =============================
-async function createMessage() {
-  const channel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
-
-  const msg = await channel.send("🔥 Iniciando tracking...");
-  liveMessageId = msg.id;
-}
-
+// 🏆 TRACKING BONITO (EMBED)
 // =============================
 async function updateMessage() {
   if (!liveMessageId) return;
@@ -388,9 +377,16 @@ async function updateMessage() {
 
   const msg = await channel.messages.fetch(liveMessageId);
 
-  let content = "🏆 TRACKING EN VIVO\n\n";
+  const embed = new EmbedBuilder()
+    .setTitle("🏆 TRACKING EN VIVO")
+    .setColor(0x00ff99)
+    .setDescription("Jugadores activos en tiempo real");
+
+  let count = 0;
 
   for (const [id, s] of Object.entries(liveTracker)) {
+    if (count >= 25) break; // límite Discord
+
     const t = trackingData[id] || {
       xp: 0,
       gp: 0,
@@ -404,12 +400,33 @@ async function updateMessage() {
 
     const level = Math.floor(totalXP / 100);
 
-    content += `👤 ${s.name} 🎖 Nivel ${level} ⏱ ${totalTime}m XP ${totalXP.toFixed(
-      2
-    )} 💎 GP: ${t.gp}\n`;
+    embed.addFields({
+      name: `👤 ${s.name}`,
+      value:
+        `🎖 Nivel: ${level}\n` +
+        `📈 XP: ${totalXP.toFixed(0)}\n` +
+        `⏱ Tiempo: ${totalTime}m\n` +
+        `💎 GP: ${t.gp}`,
+      inline: true,
+    });
+
+    count++;
   }
 
-  await msg.edit(content);
+  await msg.edit({
+    content: "",
+    embeds: [embed],
+  });
+}
+
+// =============================
+async function createMessage() {
+  const channel = await client.channels.fetch(
+    process.env.STATS_CHANNEL_ID
+  );
+
+  const msg = await channel.send("🔥 Iniciando tracking...");
+  liveMessageId = msg.id;
 }
 
 // =============================
