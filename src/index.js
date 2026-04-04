@@ -27,7 +27,7 @@ let liveTracker = {};
 function getPokemonData(totalXP) {
   return {
     name: "🔥 Test Stage",
-    gif: "https://media.tenor.com/3y0U7bVxZkQAAAAC/pokemon.gif",
+    gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif?ex=69d1da52&is=69d088d2&hm=b9bdc9d57b7303ba9b46afaf43b64528a27cff0b0297b47347bc76aec4290063&",
     progress: 0.5
   };
 }
