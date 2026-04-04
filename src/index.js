@@ -34,25 +34,25 @@ function getPokemonData(totalXP) {
       name: "🥚 Huevo",
       min: 0,
       max: 400,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/bulbasaur.gif",
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/charmander.gif",
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/bulbasaur.gif",
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/bulbasaur.gif",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/ivysaur.gif",
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/ivysaur.gif",
     },
     {
       name: "🦅 Final",
       min: 1200,
       max: Infinity,
-      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/refs/heads/main/venusaur.gif",
+      gif: "https://raw.githubusercontent.com/WrPages/PokeGif/main/venusaur.gif",
     },
   ];
 
