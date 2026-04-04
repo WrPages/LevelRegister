@@ -54,7 +54,7 @@ async function sendCard(channel) {
     // =============================
     // 🔥 ESPACIO ARRIBA PARA EL GIF
     // =============================
-    const offsetY = 200; // 🔥 clave para alineación
+    const offsetY = 100; // 🔥 clave para alineación
 
     // ===== OVERLAY SUAVE
     ctx.fillStyle = "rgba(0,0,0,0.25)";
