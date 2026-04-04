@@ -25,7 +25,7 @@ let liveTracker = {};
 let liveMessageId = null;
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF (ESTABLE)
+// 🧬 EVOLUCIÓN + GIF
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -33,25 +33,25 @@ function getPokemonData(totalXP) {
       name: "🥚 Huevo",
       min: 0,
       max: 400,
-      gif: "https://i.imgur.com/J5q8GQG.gif",
+      gif: "https://media.tenor.com/8j6pR8n0hO0AAAAC/pokemon-egg.gif",
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
-      gif: "https://i.imgur.com/1X4Jg3N.gif",
+      gif: "https://media.tenor.com/WXk4v6pS0SMAAAAC/bulbasaur.gif",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
-      gif: "https://i.imgur.com/0XKzn6P.gif",
+      gif: "https://media.tenor.com/j5tQXg8k0O8AAAAC/ivysaur.gif",
     },
     {
       name: "🦅 Fase Final",
       min: 1200,
       max: Infinity,
-      gif: "https://i.imgur.com/8k6M2YB.gif",
+      gif: "https://media.tenor.com/4j5Y7Y7V0u0AAAAC/venusaur.gif",
     },
   ];
 
@@ -88,7 +88,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🎴 PERFIL PRO + GIF REAL
+// 🎴 PERFIL PRO + GIF SEGURO
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!profile")) {
@@ -114,15 +114,23 @@ client.on("messageCreate", async (msg) => {
       "🟩".repeat(Math.floor(progress * 10)) +
       "⬛".repeat(10 - Math.floor(progress * 10));
 
-    // 🔥 DESCARGAR GIF → BUFFER
-    const res = await fetch(gif);
-    const buffer = await res.arrayBuffer();
+    // 🔥 DESCARGA SEGURA DEL GIF
+    let file = null;
 
-    const file = new AttachmentBuilder(Buffer.from(buffer), {
-      name: "pokemon.gif",
-    });
+    try {
+      const res = await fetch(gif);
 
-    // 🎴 TARJETA VISUAL LIMPIA
+      if (!res.ok) throw new Error("GIF fetch failed");
+
+      const buffer = await res.arrayBuffer();
+
+      file = new AttachmentBuilder(Buffer.from(buffer), {
+        name: "pokemon.gif",
+      });
+    } catch (err) {
+      console.log("❌ Error cargando GIF:", err.message);
+    }
+
     const content = `
 ━━━━━━━━━━━━━━━━━━━
 🧠  ${s.name.toUpperCase()}
@@ -141,7 +149,7 @@ ${progressBar}
 
     return msg.channel.send({
       content,
-      files: [file],
+      files: file ? [file] : [],
     });
   }
 
@@ -435,4 +443,4 @@ function cleanOnlineIds(raw) {
     .filter(Boolean);
 }
 
-client.login(process.env.DISCORD_TOKEN);login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);
