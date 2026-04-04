@@ -48,7 +48,7 @@ function getPokemonData(totalXP) {
       gif: "https://media.tenor.com/j5tQXg8k0O8AAAAC/ivysaur.gif",
     },
     {
-      name: "🦅 Fase Final",
+      name: "🦅 Final",
       min: 1200,
       max: Infinity,
       gif: "https://media.tenor.com/4j5Y7Y7V0u0AAAAC/venusaur.gif",
@@ -88,7 +88,7 @@ client.once("ready", async () => {
 });
 
 // =============================
-// 🎴 PERFIL PRO + GIF SEGURO
+// 🎴 PERFIL PRO (BIEN HECHO)
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!profile")) {
@@ -110,45 +110,46 @@ client.on("messageCreate", async (msg) => {
 
     const { stage, gif, progress } = getPokemonData(totalXP);
 
-    const progressBar =
-      "🟩".repeat(Math.floor(progress * 10)) +
-      "⬛".repeat(10 - Math.floor(progress * 10));
+    // 🔥 barra PRO real
+    const filled = Math.round(progress * 10);
+    const bar =
+      "█".repeat(filled) + "░".repeat(10 - filled);
 
-    // 🔥 DESCARGA SEGURA DEL GIF
+    // 🔥 DESCARGAR GIF (SEGURO)
     let file = null;
 
     try {
       const res = await fetch(gif);
-
-      if (!res.ok) throw new Error("GIF fetch failed");
+      if (!res.ok) throw new Error("gif error");
 
       const buffer = await res.arrayBuffer();
 
       file = new AttachmentBuilder(Buffer.from(buffer), {
-        name: "pokemon.gif",
+        name: "evo.gif",
       });
-    } catch (err) {
-      console.log("❌ Error cargando GIF:", err.message);
+    } catch (e) {
+      console.log("GIF ERROR:", e.message);
     }
 
-    const content = `
-━━━━━━━━━━━━━━━━━━━
-🧠  ${s.name.toUpperCase()}
-━━━━━━━━━━━━━━━━━━━
-🎖 Nivel: ${level}
-📈 XP: ${totalXP.toFixed(2)}
-⏱ Tiempo: ${totalTime}m
-🧩 Instancias: ${s.instances}
-📦 Packs: ${s.packs}
-💎 GP: ${t.gp || 0}
-
-🧬 Evolución: ${stage}
-${progressBar}
-━━━━━━━━━━━━━━━━━━━
+    // 🎴 TARJETA REAL (ESTILO PRO)
+    const card = `
+╔══════════════════════════╗
+        🧠 ${s.name.toUpperCase()}
+╠══════════════════════════╣
+ 🎖 Nivel: ${level}
+ 📈 XP: ${totalXP.toFixed(0)}
+ ⏱ Tiempo: ${totalTime} min
+ 🧩 Instancias: ${s.instances}
+ 📦 Packs: ${s.packs}
+ 💎 GP: ${t.gp || 0}
+╠══════════════════════════╣
+ 🧬 ${stage}
+ ${bar}
+╚══════════════════════════╝
 `;
 
     return msg.channel.send({
-      content,
+      content: "```" + card + "```",
       files: file ? [file] : [],
     });
   }
