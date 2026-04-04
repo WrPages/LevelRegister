@@ -21,10 +21,9 @@ let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
-let liveMessageId = null;
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF
+// 🧬 EVOLUCIÓN PRO
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -32,24 +31,28 @@ function getPokemonData(totalXP) {
       name: "🥚 Huevo",
       min: 0,
       max: 400,
+      color: 0xaaaaaa,
       gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
+      color: 0x00ff99,
       gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
+      color: 0x0099ff,
       gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832678525243554/ivysaur.gif?ex=69d1da4e&is=69d088ce&hm=aef23997bea2456dbf87d2fbe47f4aefd41717290135d88fe8ca9e34f6a23b14&=&width=105&height=83",
     },
     {
       name: "🦅 Final",
       min: 1200,
       max: Infinity,
+      color: 0xffcc00,
       gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif?ex=69d1da52&is=69d088d2&hm=b9bdc9d57b7303ba9b46afaf43b64528a27cff0b0297b47347bc76aec4290063&=&width=133&height=96",
     },
   ];
@@ -63,11 +66,7 @@ function getPokemonData(totalXP) {
       ? 1
       : (totalXP - current.min) / (current.max - current.min);
 
-  return {
-    stage: current.name,
-    gif: current.gif,
-    progress,
-  };
+  return { ...current, progress };
 }
 
 // =============================
@@ -79,56 +78,87 @@ client.once("clientReady", async () => {
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
   sanitizeTracking();
-  await createMessage();
 
   startLoop();
   startBackupLoop();
 });
 
 // =============================
-// 🎴 PROFILE
+// 🎴 PROFILE PRO
 // =============================
 client.on("messageCreate", async (msg) => {
   if (!msg.content.startsWith("!profile")) return;
 
-  let targetId = msg.author.id;
-
+  let id = msg.author.id;
   if (msg.mentions.users.first()) {
-    targetId = msg.mentions.users.first().id;
+    id = msg.mentions.users.first().id;
   }
 
-  const s = liveTracker[targetId];
-  const t = trackingData[targetId] || {};
+  const s = liveTracker[id];
+  const t = trackingData[id] || {};
 
-  if (!s) return msg.reply("❌ Usuario sin datos.");
+  if (!s) return msg.reply("❌ Sin datos.");
 
+  await sendCard(msg.channel, s, t);
+});
+
+// =============================
+// 🃏 CREAR CARTA
+// =============================
+async function sendCard(channel, s, t) {
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
   const totalTime =
     (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
   const level = Math.floor(totalXP / 100);
 
-  const { stage, gif, progress } = getPokemonData(totalXP);
+  const evo = getPokemonData(totalXP);
 
   const bar =
-    "🟩".repeat(Math.floor(progress * 10)) +
-    "⬛".repeat(10 - Math.floor(progress * 10));
+    "▰".repeat(Math.floor(evo.progress * 10)) +
+    "▱".repeat(10 - Math.floor(evo.progress * 10));
 
   const embed = new EmbedBuilder()
-    .setColor(0x00ff99)
+    .setColor(evo.color)
     .setTitle(`🧠 ${s.name}`)
-    .setDescription(`🧬 **${stage}**\n${bar}`)
-    .addFields(
-      { name: "🎖 Nivel", value: `${level}`, inline: true },
-      { name: "📈 XP", value: `${totalXP.toFixed(0)}`, inline: true },
-      { name: "⏱ Tiempo", value: `${totalTime}m`, inline: true },
-      { name: "🧩 Instancias", value: `${s.instances}`, inline: true },
-      { name: "📦 Packs", value: `${s.packs}`, inline: true },
-      { name: "💎 GP", value: `${t.gp || 0}`, inline: true }
+    .setDescription(
+      `✨ **${evo.name}**\n\n` +
+      `📊 **Progreso**\n${bar}\n\n` +
+      `🏆 **Nivel ${level}**`
     )
-    .setImage(gif);
+    .addFields(
+      {
+        name: "⚡ XP",
+        value: `${totalXP.toFixed(0)}`,
+        inline: true,
+      },
+      {
+        name: "⏱ Tiempo",
+        value: `${totalTime}m`,
+        inline: true,
+      },
+      {
+        name: "💎 GP",
+        value: `${t.gp || 0}`,
+        inline: true,
+      },
+      {
+        name: "🧩 Instancias",
+        value: `${s.instances}`,
+        inline: true,
+      },
+      {
+        name: "📦 Packs",
+        value: `${s.packs}`,
+        inline: true,
+      }
+    )
+    .setImage(evo.gif)
+    .setFooter({
+      text: "KyuremBot • Sistema competitivo",
+    });
 
-  return msg.channel.send({ embeds: [embed] });
-});
+  await channel.send({ embeds: [embed] });
+}
 
 // =============================
 function startLoop() {
@@ -137,15 +167,15 @@ function startLoop() {
       await getGist(process.env.GIST_ONLINE)
     );
 
-    for (const [discordId, user] of Object.entries(eliteUsers)) {
+    for (const [id, user] of Object.entries(eliteUsers)) {
       const isOnline =
         onlineIds.includes(user.main_id) ||
         onlineIds.includes(user.sec_id);
 
       if (!isOnline) continue;
 
-      if (!liveTracker[discordId]) {
-        liveTracker[discordId] = {
+      if (!liveTracker[id]) {
+        liveTracker[id] = {
           sessionXP: 0,
           sessionTime: 0,
           instances: 1,
@@ -155,78 +185,20 @@ function startLoop() {
         };
       }
 
-      const t = liveTracker[discordId];
+      const t = liveTracker[id];
 
       t.sessionTime += 1;
 
-      let xpPerSecond =
+      let xp =
         (2 + t.instances * 0.5) / 60;
 
       if (Date.now() < t.boostUntil) {
-        xpPerSecond *= 2;
+        xp *= 2;
       }
 
-      t.sessionXP += xpPerSecond;
+      t.sessionXP += xp;
     }
-
-    updateMessage();
-  }, 3000);
-}
-
-// =============================
-async function updateMessage() {
-  if (!liveMessageId) return;
-
-  const channel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
-
-  const msg = await channel.messages.fetch(liveMessageId);
-
-  const embeds = [];
-
-  for (const [id, s] of Object.entries(liveTracker)) {
-    const t = trackingData[id] || {};
-
-    const totalXP = (t.xp || 0) + s.sessionXP;
-    const totalTime =
-      (t.time || 0) +
-      Math.floor((s.sessionTime || 0) / 60);
-
-    const level = Math.floor(totalXP / 100);
-
-    const { gif } = getPokemonData(totalXP);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x00ff99)
-      .setTitle(`🧠 ${s.name}`)
-      .setDescription(`🎖 Nivel ${level}`)
-      .addFields(
-        { name: "XP", value: `${totalXP.toFixed(0)}`, inline: true },
-        { name: "Tiempo", value: `${totalTime}m`, inline: true },
-        { name: "GP", value: `${t.gp || 0}`, inline: true }
-      )
-      .setImage(gif);
-
-    embeds.push(embed);
-
-    if (embeds.length >= 10) break;
-  }
-
-  await msg.edit({
-    content: "🏆 TRACKING EN VIVO",
-    embeds,
-  });
-}
-
-// =============================
-async function createMessage() {
-  const channel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
-
-  const msg = await channel.send("🔥 Iniciando tracking...");
-  liveMessageId = msg.id;
+  }, 1000);
 }
 
 // =============================
