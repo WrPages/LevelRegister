@@ -13,7 +13,7 @@ import { getGist, updateGist } from "./gist.js";
 dotenv.config();
 
 // =============================
-// 🔤 REGISTRAR FUENTE (FIX)
+// 🔤 FUENTE
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 
@@ -22,7 +22,7 @@ console.log("Font exists:", fs.existsSync(fontPath));
 
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "Righteous" });
-  console.log("✅ Fuente Righteous cargada");
+  console.log("✅ Fuente cargada");
 } else {
   console.log("❌ Fuente NO encontrada");
 }
@@ -44,34 +44,12 @@ let liveTracker = {};
 let userPanels = {};
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF
-// =============================
 function getPokemonData(totalXP) {
   const stages = [
-    {
-      name: "Huevo",
-      min: 0,
-      max: 400,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif",
-    },
-    {
-      name: "Fase 1",
-      min: 400,
-      max: 800,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif",
-    },
-    {
-      name: "Fase 2",
-      min: 800,
-      max: 1200,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif",
-    },
-    {
-      name: "Final",
-      min: 1200,
-      max: Infinity,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif",
-    },
+    { name: "Huevo", min: 0, max: 400, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
+    { name: "Fase 1", min: 400, max: 800, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
+    { name: "Fase 2", min: 800, max: 1200, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif" },
+    { name: "Final", min: 1200, max: Infinity, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif" },
   ];
 
   const current = stages.find(
@@ -166,7 +144,7 @@ async function updatePanels() {
 
     const level = Math.floor(totalXP / 100);
 
-    const { gif, progress, stage } = getPokemonData(totalXP);
+    const { gif, stage } = getPokemonData(totalXP);
 
     const canvas = createCanvas(800, 450);
     const ctx = canvas.getContext("2d");
@@ -179,40 +157,44 @@ async function updatePanels() {
       ctx.fillRect(0, 0, 800, 450);
     }
 
-    // ===== TEXTO (Righteous) =====
+    // ===== NUEVO DISEÑO =====
+    const role = t.role || "Reroller";
+
+    // Nombre
     ctx.fillStyle = "#ffffff";
-    ctx.font = "80px Righteous";
-    ctx.fillText(s.name, 40, 70);
+    ctx.font = "50px Righteous";
+    ctx.fillText(s.name, 40, 80);
 
+    // Rol
+    ctx.fillStyle = "#aaaaaa";
+    ctx.font = "22px Righteous";
+    ctx.fillText(role, 42, 110);
+
+    // Nivel
     ctx.fillStyle = "#00ffcc";
-    ctx.font = "28px Righteous";
-    ctx.fillText(`Nivel ${level}`, 600, 70);
+    ctx.font = "38px Righteous";
+    ctx.fillText(`Lv ${level}`, 620, 80);
 
+    // Fase
+    ctx.fillStyle = "#00ffcc";
+    ctx.font = "22px Righteous";
+    ctx.fillText(stage, 620, 110);
+
+    // Stats
     ctx.fillStyle = "#ffffff";
     ctx.font = "24px Righteous";
 
-    ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 150);
-    ctx.fillText(`Tiempo: ${totalTime}m`, 40, 190);
-    ctx.fillText(`Instancias: ${s.instances}`, 40, 230);
-    ctx.fillText(`Packs: ${s.packs}`, 40, 270);
-    ctx.fillText(`GP: ${t.gp || 0}`, 40, 310);
-
-    ctx.fillStyle = "#00ffcc";
-    ctx.fillText(stage, 600, 120);
-
-    // barra
-    ctx.fillStyle = "#222";
-    ctx.fillRect(200, 360, 500, 20);
-
-    ctx.fillStyle = "#00ff99";
-    ctx.fillRect(200, 360, 500 * progress, 20);
+    ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
+    ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
+    ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
+    ctx.fillText(`Packs: ${s.packs}`, 40, 290);
+    ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
     const file = new AttachmentBuilder(
       canvas.toBuffer(),
       { name: "card.png" }
     );
 
-    // editar si existe
     if (userPanels[id]) {
       try {
         const msg = await channel.messages.fetch(
@@ -226,10 +208,7 @@ async function updatePanels() {
       }
     }
 
-    // crear
-    const sent = await channel.send({
-      files: [file],
-    });
+    const sent = await channel.send({ files: [file] });
 
     const thread = await sent.startThread({
       name: `GIF - ${s.name}`,
