@@ -35,7 +35,7 @@ client.on("messageCreate", async (msg) => {
 // =============================
 async function sendCard(channel) {
   try {
-    // ===== DATOS (puedes conectar luego)
+    // ===== DATOS (luego los conectas a tu sistema real)
     const name = "KyuremBot";
     const level = 55;
     const xp = 5576;
@@ -47,41 +47,46 @@ async function sendCard(channel) {
     const canvas = createCanvas(600, 800);
     const ctx = canvas.getContext("2d");
 
-    // ===== FONDO (tu carta base)
+    // ===== FONDO
     const bg = await loadImage("./assets/card.png");
     ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
 
-    // ===== OVERLAY OSCURO SUAVE
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // =============================
+    // 🔥 ESPACIO ARRIBA PARA EL GIF
+    // =============================
+    const offsetY = 200; // 🔥 clave para alineación
+
+    // ===== OVERLAY SUAVE
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(0, offsetY, canvas.width, canvas.height - offsetY);
 
     // ===== NOMBRE
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 36px Arial";
-    ctx.fillText(name, 40, 80);
+    ctx.font = "bold 34px Arial";
+    ctx.fillText(name, 40, offsetY + 60);
 
-    // ===== NIVEL GRANDE
-    ctx.font = "bold 28px Arial";
-    ctx.fillText(`Lv ${level}`, 450, 80);
+    // ===== NIVEL
+    ctx.font = "bold 26px Arial";
+    ctx.fillText(`Lv ${level}`, 450, offsetY + 60);
 
     // ===== CAJA STATS
     ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(40, 450, 520, 250);
+    ctx.fillRect(40, offsetY + 120, 520, 250);
 
     // ===== TEXTO STATS
     ctx.fillStyle = "#00ffcc";
     ctx.font = "22px Arial";
 
-    ctx.fillText(`XP: ${xp}`, 60, 500);
-    ctx.fillText(`Tiempo: ${time}m`, 60, 540);
-    ctx.fillText(`GP: ${gp}`, 60, 580);
+    ctx.fillText(`XP: ${xp}`, 60, offsetY + 170);
+    ctx.fillText(`Tiempo: ${time}m`, 60, offsetY + 210);
+    ctx.fillText(`GP: ${gp}`, 60, offsetY + 250);
 
     // ===== BARRA XP
     ctx.fillStyle = "#222";
-    ctx.fillRect(60, 620, 480, 25);
+    ctx.fillRect(60, offsetY + 300, 480, 25);
 
     ctx.fillStyle = "#00ff99";
-    ctx.fillRect(60, 620, 480 * progress, 25);
+    ctx.fillRect(60, offsetY + 300, 480 * progress, 25);
 
     // ===== BORDE PRO
     ctx.strokeStyle = "#00ffcc";
@@ -94,16 +99,19 @@ async function sendCard(channel) {
       { name: "card.png" }
     );
 
-    // ===== GIF (ENCIMA VISUALMENTE)
+    // =============================
+    // 🔥 GIF LIMPIO (SIN TEXTO)
+    // =============================
     const embed = new EmbedBuilder()
-      .setColor(0x000000)
       .setImage("https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif");
 
-    // ===== ENVÍO PRO
-    await channel.send({ files: [attachment] });
-    await channel.send({ embeds: [embed] });
+    // =============================
+    // 🚀 ORDEN PRO (ILUSIÓN)
+    // =============================
+    await channel.send({ embeds: [embed] }); // GIF primero
+    await channel.send({ files: [attachment] }); // carta después
 
-    console.log("✅ CARTA ENVIADA");
+    console.log("✅ CARTA PRO ENVIADA");
 
   } catch (err) {
     console.error("❌ ERROR:", err);
