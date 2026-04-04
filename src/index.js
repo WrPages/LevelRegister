@@ -23,10 +23,10 @@ let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
-let userPanels = {}; // 🔥 guarda paneles
+let userPanels = {};
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF
+// 🧬 EVOLUCIÓN + GIF (TUS LINKS)
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -34,25 +34,25 @@ function getPokemonData(totalXP) {
       name: "Huevo",
       min: 0,
       max: 400,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&",
+      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif",
     },
     {
       name: "Fase 1",
       min: 400,
       max: 800,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&",
+      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif",
     },
     {
       name: "Fase 2",
       min: 800,
       max: 1200,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif?ex=69d1da4e&is=69d088ce&hm=aef23997bea2456dbf87d2fbe47f4aefd41717290135d88fe8ca9e34f6a23b14&",
+      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif",
     },
     {
       name: "Final",
       min: 1200,
       max: Infinity,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif?ex=69d1da52&is=69d088d2&hm=b9bdc9d57b7303ba9b46afaf43b64528a27cff0b0297b47347bc76aec4290063&",
+      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif",
     },
   ];
 
@@ -87,12 +87,8 @@ client.once("clientReady", async () => {
 });
 
 // =============================
-// 🔄 LOOP PRINCIPAL
-// =============================
 function startLoop() {
   setInterval(async () => {
-    console.log("🔄 Loop ejecutándose...");
-
     onlineIds = cleanOnlineIds(
       await getGist(process.env.GIST_ONLINE)
     );
@@ -122,6 +118,10 @@ function startLoop() {
       let xpPerSecond =
         (2 + t.instances * 0.5) / 60;
 
+      if (Date.now() < t.boostUntil) {
+        xpPerSecond *= 2;
+      }
+
       t.sessionXP += xpPerSecond;
     }
 
@@ -131,109 +131,104 @@ function startLoop() {
 }
 
 // =============================
-// 🎴 ACTUALIZAR / CREAR PANELES
+// 🎴 PANEL VISUAL
 // =============================
 async function updatePanels() {
-  try {
-    const channel = await client.channels.fetch(
-      process.env.STATS_CHANNEL_ID
-    );
+  const channel = await client.channels.fetch(
+    process.env.STATS_CHANNEL_ID
+  );
 
-    for (const [id, s] of Object.entries(liveTracker)) {
-      const t = trackingData[id] || {};
+  for (const [id, s] of Object.entries(liveTracker)) {
+    const t = trackingData[id] || {};
 
-      const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-      const totalTime =
-        (t.time || 0) +
-        Math.floor((s.sessionTime || 0) / 60);
+    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+    const totalTime =
+      (t.time || 0) +
+      Math.floor((s.sessionTime || 0) / 60);
 
-      const level = Math.floor(totalXP / 100);
+    const level = Math.floor(totalXP / 100);
 
-      const { gif, progress } = getPokemonData(totalXP);
+    const { gif, progress, stage } = getPokemonData(totalXP);
 
-      console.log("👤 Procesando:", s.name);
+    // 🎴 CANVAS 16:9
+    const canvas = createCanvas(800, 450);
+    const ctx = canvas.getContext("2d");
 
-      // 🎴 CANVAS
-      const canvas = createCanvas(900, 300);
-      const ctx = canvas.getContext("2d");
-
-      try {
-        const bg = await loadImage("./assets/card.png");
-        ctx.drawImage(bg, 0, 0, 900, 300);
-      } catch {
-        ctx.fillStyle = "#111";
-        ctx.fillRect(0, 0, 900, 300);
-      }
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 36px Arial";
-      ctx.fillText(s.name, 40, 60);
-
-      ctx.fillStyle = "#00ffcc";
-      ctx.fillText(`Lv ${level}`, 750, 60);
-
-      ctx.font = "24px Arial";
-
-      ctx.fillStyle = "#00ffcc";
-      ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 150);
-
-      ctx.fillStyle = "#ffaa00";
-      ctx.fillText(`Tiempo: ${totalTime}m`, 40, 190);
-
-      ctx.fillStyle = "#ff66ff";
-      ctx.fillText(`GP: ${t.gp || 0}`, 40, 230);
-
-      ctx.fillStyle = "#222";
-      ctx.fillRect(300, 200, 500, 20);
-
-      ctx.fillStyle = "#00ff99";
-      ctx.fillRect(300, 200, 500 * progress, 20);
-
-      const file = new AttachmentBuilder(
-        canvas.toBuffer(),
-        { name: "card.png" }
-      );
-
-      // 🔁 EDITAR SI EXISTE
-      if (userPanels[id]) {
-        try {
-          const msg = await channel.messages.fetch(
-            userPanels[id].messageId
-          );
-
-          await msg.edit({ files: [file] });
-          continue;
-        } catch {
-          delete userPanels[id];
-        }
-      }
-
-      // 🆕 CREAR NUEVO
-      const sent = await channel.send({
-        files: [file],
-      });
-
-      const thread = await sent.startThread({
-        name: `GIF - ${s.name}`,
-        autoArchiveDuration: 1440,
-      });
-
-      const embed = new EmbedBuilder()
-        .setColor(0x000000)
-        .setImage(gif);
-
-      await thread.send({ embeds: [embed] });
-
-      userPanels[id] = {
-        messageId: sent.id,
-        threadId: thread.id,
-      };
-
-      console.log("✅ Panel creado:", s.name);
+    try {
+      const bg = await loadImage("./assets/card.png");
+      ctx.drawImage(bg, 0, 0, 800, 450);
+    } catch {
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, 0, 800, 450);
     }
 
-  } catch (err) {
-    console.error("❌ ERROR updatePanels:", err);
+    // ===== TEXTO ENCIMA =====
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 40px Arial";
+    ctx.fillText(s.name, 40, 70);
+
+    ctx.fillStyle = "#00ffcc";
+    ctx.font = "28px Arial";
+    ctx.fillText(`Nivel ${level}`, 600, 70);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "24px Arial";
+
+    ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 150);
+    ctx.fillText(`Tiempo: ${totalTime}m`, 40, 190);
+    ctx.fillText(`Instancias: ${s.instances}`, 40, 230);
+    ctx.fillText(`Packs: ${s.packs}`, 40, 270);
+    ctx.fillText(`GP: ${t.gp || 0}`, 40, 310);
+
+    ctx.fillStyle = "#00ffcc";
+    ctx.fillText(stage, 600, 120);
+
+    // Barra progreso
+    ctx.fillStyle = "#222";
+    ctx.fillRect(200, 360, 500, 20);
+
+    ctx.fillStyle = "#00ff99";
+    ctx.fillRect(200, 360, 500 * progress, 20);
+
+    const file = new AttachmentBuilder(
+      canvas.toBuffer(),
+      { name: "card.png" }
+    );
+
+    // EDITAR SI EXISTE
+    if (userPanels[id]) {
+      try {
+        const msg = await channel.messages.fetch(
+          userPanels[id].messageId
+        );
+
+        await msg.edit({ files: [file] });
+        continue;
+      } catch {
+        delete userPanels[id];
+      }
+    }
+
+    // CREAR NUEVO
+    const sent = await channel.send({
+      files: [file],
+    });
+
+    const thread = await sent.startThread({
+      name: `GIF - ${s.name}`,
+      autoArchiveDuration: 1440,
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(0x000000)
+      .setImage(gif);
+
+    await thread.send({ embeds: [embed] });
+
+    userPanels[id] = {
+      messageId: sent.id,
+      threadId: thread.id,
+    };
   }
 }
 
@@ -246,6 +241,7 @@ function startBackupLoop() {
           xp: 0,
           time: 0,
           name: liveTracker[id].name,
+          packs: 0,
           gp: 0,
         };
       }
@@ -254,6 +250,7 @@ function startBackupLoop() {
 
       trackingData[id].xp += s.sessionXP;
       trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].packs = s.packs;
 
       s.sessionXP = 0;
       s.sessionTime = 0;
