@@ -21,9 +21,10 @@ let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
+let statsChannel = null;
 
 // =============================
-// 🧬 EVOLUCIÓN PRO
+// 🧬 EVOLUCIÓN PRO (USA TUS LINKS DE DISCORD CDN)
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -32,28 +33,28 @@ function getPokemonData(totalXP) {
       min: 0,
       max: 400,
       color: 0xaaaaaa,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
+      gif: "https://cdn.discordapp.com/attachments/XXXX/egg.gif",
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
       color: 0x00ff99,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
+      gif: "https://cdn.discordapp.com/attachments/XXXX/bulbasaur.gif",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
       color: 0x0099ff,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832678525243554/ivysaur.gif?ex=69d1da4e&is=69d088ce&hm=aef23997bea2456dbf87d2fbe47f4aefd41717290135d88fe8ca9e34f6a23b14&=&width=105&height=83",
+      gif: "https://cdn.discordapp.com/attachments/XXXX/ivysaur.gif",
     },
     {
       name: "🦅 Final",
       min: 1200,
       max: Infinity,
       color: 0xffcc00,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif?ex=69d1da52&is=69d088d2&hm=b9bdc9d57b7303ba9b46afaf43b64528a27cff0b0297b47347bc76aec4290063&=&width=133&height=96",
+      gif: "https://cdn.discordapp.com/attachments/XXXX/venusaur.gif",
     },
   ];
 
@@ -73,6 +74,10 @@ function getPokemonData(totalXP) {
 client.once("clientReady", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
+  statsChannel = await client.channels.fetch(
+    process.env.STATS_CHANNEL_ID
+  );
+
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
@@ -84,7 +89,7 @@ client.once("clientReady", async () => {
 });
 
 // =============================
-// 🎴 PROFILE PRO
+// 🎴 PROFILE
 // =============================
 client.on("messageCreate", async (msg) => {
   if (!msg.content.startsWith("!profile")) return;
@@ -126,31 +131,11 @@ async function sendCard(channel, s, t) {
       `🏆 **Nivel ${level}**`
     )
     .addFields(
-      {
-        name: "⚡ XP",
-        value: `${totalXP.toFixed(0)}`,
-        inline: true,
-      },
-      {
-        name: "⏱ Time",
-        value: `${totalTime}m`,
-        inline: true,
-      },
-      {
-        name: "💎 GP",
-        value: `${t.gp || 0}`,
-        inline: true,
-      },
-      {
-        name: "🧩 Instancias",
-        value: `${s.instances}`,
-        inline: true,
-      },
-      {
-        name: "📦 Packs",
-        value: `${s.packs}`,
-        inline: true,
-      }
+      { name: "⚡ XP", value: `${totalXP.toFixed(0)}`, inline: true },
+      { name: "⏱ Tiempo", value: `${totalTime}m`, inline: true },
+      { name: "💎 GP", value: `${t.gp || 0}`, inline: true },
+      { name: "🧩 Instancias", value: `${s.instances}`, inline: true },
+      { name: "📦 Packs", value: `${s.packs}`, inline: true }
     )
     .setImage(evo.gif)
     .setFooter({
@@ -161,7 +146,10 @@ async function sendCard(channel, s, t) {
 }
 
 // =============================
+// 🔁 LOOP PRINCIPAL + ENVÍO AUTO
+// =============================
 function startLoop() {
+  // cálculo XP
   setInterval(async () => {
     onlineIds = cleanOnlineIds(
       await getGist(process.env.GIST_ONLINE)
@@ -189,8 +177,7 @@ function startLoop() {
 
       t.sessionTime += 1;
 
-      let xp =
-        (2 + t.instances * 0.5) / 60;
+      let xp = (2 + t.instances * 0.5) / 60;
 
       if (Date.now() < t.boostUntil) {
         xp *= 2;
@@ -199,6 +186,23 @@ function startLoop() {
       t.sessionXP += xp;
     }
   }, 1000);
+
+  // envío visual automático
+  setInterval(async () => {
+    if (!statsChannel) return;
+
+    console.log("📤 Enviando cartas...");
+
+    try {
+      const messages = await statsChannel.messages.fetch({ limit: 50 });
+      await statsChannel.bulkDelete(messages, true);
+    } catch {}
+
+    for (const [id, s] of Object.entries(liveTracker)) {
+      const t = trackingData[id] || {};
+      await sendCard(statsChannel, s, t);
+    }
+  }, 15000);
 }
 
 // =============================
