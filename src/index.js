@@ -1,9 +1,11 @@
 import {
   Client,
   GatewayIntentBits,
-  EmbedBuilder
+  EmbedBuilder,
+  AttachmentBuilder
 } from "discord.js";
 import dotenv from "dotenv";
+import { createCanvas, loadImage } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
@@ -21,10 +23,9 @@ let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
-let statsChannel = null;
 
 // =============================
-// 🧬 EVOLUCIÓN PRO (USA TUS LINKS DE DISCORD CDN)
+// 🧬 EVOLUCIÓN
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -32,29 +33,25 @@ function getPokemonData(totalXP) {
       name: "🥚 Huevo",
       min: 0,
       max: 400,
-      color: 0xaaaaaa,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
+      gif: "TU_GIF_1",
     },
     {
       name: "🐣 Fase 1",
       min: 400,
       max: 800,
-      color: 0x00ff99,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif?ex=69d1da48&is=69d088c8&hm=648a6d824401e5249d9230ac57ce4a2a7a4d4caa319827251ac36799d674aae7&=&width=56&height=61",
+      gif: "TU_GIF_2",
     },
     {
       name: "🐤 Fase 2",
       min: 800,
       max: 1200,
-      color: 0x0099ff,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832678525243554/ivysaur.gif?ex=69d1da4e&is=69d088ce&hm=aef23997bea2456dbf87d2fbe47f4aefd41717290135d88fe8ca9e34f6a23b14&=&width=105&height=83",
+      gif: "TU_GIF_3",
     },
     {
       name: "🦅 Final",
       min: 1200,
       max: Infinity,
-      color: 0xffcc00,
-      gif: "https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif?ex=69d1da52&is=69d088d2&hm=b9bdc9d57b7303ba9b46afaf43b64528a27cff0b0297b47347bc76aec4290063&=&width=133&height=96",
+      gif: "TU_GIF_4",
     },
   ];
 
@@ -74,10 +71,6 @@ function getPokemonData(totalXP) {
 client.once("clientReady", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
-  statsChannel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
-
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
@@ -85,7 +78,6 @@ client.once("clientReady", async () => {
   sanitizeTracking();
 
   startLoop();
-  startBackupLoop();
 });
 
 // =============================
@@ -94,10 +86,7 @@ client.once("clientReady", async () => {
 client.on("messageCreate", async (msg) => {
   if (!msg.content.startsWith("!profile")) return;
 
-  let id = msg.author.id;
-  if (msg.mentions.users.first()) {
-    id = msg.mentions.users.first().id;
-  }
+  const id = msg.author.id;
 
   const s = liveTracker[id];
   const t = trackingData[id] || {};
@@ -108,7 +97,7 @@ client.on("messageCreate", async (msg) => {
 });
 
 // =============================
-// 🃏 CREAR CARTA
+// 🃏 CANVAS CARD
 // =============================
 async function sendCard(channel, s, t) {
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
@@ -118,38 +107,56 @@ async function sendCard(channel, s, t) {
 
   const evo = getPokemonData(totalXP);
 
-  const bar =
-    "▰".repeat(Math.floor(evo.progress * 10)) +
-    "▱".repeat(10 - Math.floor(evo.progress * 10));
+  const canvas = createCanvas(500, 700);
+  const ctx = canvas.getContext("2d");
+
+  // fondo
+  const background = await loadImage("./assets/card.png");
+  ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+
+  // nombre
+  ctx.font = "30px Arial";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(s.name, 40, 60);
+
+  // nivel
+  ctx.font = "20px Arial";
+  ctx.fillText(`Nivel: ${level}`, 40, 100);
+
+  // stats
+  ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 140);
+  ctx.fillText(`Tiempo: ${totalTime}m`, 40, 180);
+  ctx.fillText(`GP: ${t.gp || 0}`, 40, 220);
+
+  // barra progreso
+  ctx.fillStyle = "#444";
+  ctx.fillRect(40, 260, 400, 20);
+
+  ctx.fillStyle = "#00ff99";
+  ctx.fillRect(40, 260, 400 * evo.progress, 20);
+
+  // texto evolución
+  ctx.fillStyle = "#fff";
+  ctx.fillText(evo.name, 40, 320);
+
+  const attachment = new AttachmentBuilder(
+    canvas.toBuffer(),
+    { name: "card.png" }
+  );
 
   const embed = new EmbedBuilder()
-    .setColor(evo.color)
     .setTitle(`🧠 ${s.name}`)
-    .setDescription(
-      `✨ **${evo.name}**\n\n` +
-      `📊 **Progreso**\n${bar}\n\n` +
-      `🏆 **Nivel ${level}**`
-    )
-    .addFields(
-      { name: "⚡ XP", value: `${totalXP.toFixed(0)}`, inline: true },
-      { name: "⏱ Tiempo", value: `${totalTime}m`, inline: true },
-      { name: "💎 GP", value: `${t.gp || 0}`, inline: true },
-      { name: "🧩 Instancias", value: `${s.instances}`, inline: true },
-      { name: "📦 Packs", value: `${s.packs}`, inline: true }
-    )
-    .setImage(evo.gif)
-    .setFooter({
-      text: "KyuremBot • Sistema competitivo",
-    });
+    .setImage(evo.gif) // GIF animado
+    .setColor(0x00ff99);
 
-  await channel.send({ embeds: [embed] });
+  await channel.send({
+    embeds: [embed],
+    files: [attachment],
+  });
 }
 
 // =============================
-// 🔁 LOOP PRINCIPAL + ENVÍO AUTO
-// =============================
 function startLoop() {
-  // cálculo XP
   setInterval(async () => {
     onlineIds = cleanOnlineIds(
       await getGist(process.env.GIST_ONLINE)
@@ -186,50 +193,6 @@ function startLoop() {
       t.sessionXP += xp;
     }
   }, 1000);
-
-  // envío visual automático
-  setInterval(async () => {
-    if (!statsChannel) return;
-
-    console.log("📤 Enviando cartas...");
-
-    try {
-      const messages = await statsChannel.messages.fetch({ limit: 50 });
-      await statsChannel.bulkDelete(messages, true);
-    } catch {}
-
-    for (const [id, s] of Object.entries(liveTracker)) {
-      const t = trackingData[id] || {};
-      await sendCard(statsChannel, s, t);
-    }
-  }, 15000);
-}
-
-// =============================
-function startBackupLoop() {
-  setInterval(async () => {
-    for (const id in liveTracker) {
-      if (!trackingData[id]) {
-        trackingData[id] = {
-          xp: 0,
-          time: 0,
-          name: liveTracker[id].name,
-          packs: 0,
-          gp: 0,
-        };
-      }
-
-      const s = liveTracker[id];
-
-      trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
-
-      s.sessionXP = 0;
-      s.sessionTime = 0;
-    }
-
-    await updateGist(process.env.GIST_TRACKING, trackingData);
-  }, 600000);
 }
 
 // =============================
