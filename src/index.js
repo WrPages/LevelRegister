@@ -26,7 +26,7 @@ let liveTracker = {};
 let userPanels = {};
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF (TUS LINKS)
+// 🧬 EVOLUCIÓN + GIF
 // =============================
 function getPokemonData(totalXP) {
   const stages = [
@@ -74,7 +74,7 @@ function getPokemonData(totalXP) {
 
 // =============================
 client.once("clientReady", async () => {
-  console.log(`✅ Bot listo como ${client.user.tag}`);
+  console.log(`Bot listo como ${client.user.tag}`);
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
@@ -131,7 +131,7 @@ function startLoop() {
 }
 
 // =============================
-// 🎴 PANEL VISUAL
+// 🎴 PANEL
 // =============================
 async function updatePanels() {
   const channel = await client.channels.fetch(
@@ -162,17 +162,17 @@ async function updatePanels() {
       ctx.fillRect(0, 0, 800, 450);
     }
 
-    // ===== TEXTO ENCIMA =====
+    // ===== TEXTO =====
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 40px Arial";
+    ctx.font = "bold 40px sans-serif";
     ctx.fillText(s.name, 40, 70);
 
     ctx.fillStyle = "#00ffcc";
-    ctx.font = "28px Arial";
+    ctx.font = "28px sans-serif";
     ctx.fillText(`Nivel ${level}`, 600, 70);
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "24px Arial";
+    ctx.font = "24px sans-serif";
 
     ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 150);
     ctx.fillText(`Tiempo: ${totalTime}m`, 40, 190);
@@ -183,7 +183,7 @@ async function updatePanels() {
     ctx.fillStyle = "#00ffcc";
     ctx.fillText(stage, 600, 120);
 
-    // Barra progreso
+    // barra
     ctx.fillStyle = "#222";
     ctx.fillRect(200, 360, 500, 20);
 
@@ -195,7 +195,7 @@ async function updatePanels() {
       { name: "card.png" }
     );
 
-    // EDITAR SI EXISTE
+    // editar si existe
     if (userPanels[id]) {
       try {
         const msg = await channel.messages.fetch(
@@ -209,7 +209,7 @@ async function updatePanels() {
       }
     }
 
-    // CREAR NUEVO
+    // crear
     const sent = await channel.send({
       files: [file],
     });
