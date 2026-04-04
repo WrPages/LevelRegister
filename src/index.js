@@ -1,11 +1,11 @@
 import {
   Client,
   GatewayIntentBits,
-  EmbedBuilder,
   AttachmentBuilder
 } from "discord.js";
 import dotenv from "dotenv";
 import { createCanvas } from "canvas";
+import fetch from "node-fetch";
 
 dotenv.config();
 
@@ -41,12 +41,12 @@ async function sendCard(channel) {
     const progress = 0.75;
 
     // =============================
-    // 🎴 CANVAS HORIZONTAL (HEADER)
+    // 🎴 CANVAS HEADER
     // =============================
     const canvas = createCanvas(800, 250);
     const ctx = canvas.getContext("2d");
 
-    // Fondo oscuro pro
+    // Fondo
     ctx.fillStyle = "#0d1117";
     ctx.fillRect(0, 0, 800, 250);
 
@@ -55,9 +55,13 @@ async function sendCard(channel) {
     ctx.lineWidth = 3;
     ctx.strokeRect(0, 0, 800, 250);
 
-    // Nombre
-    ctx.fillStyle = "#ffffff";
+    // Nombre (con borde PRO)
     ctx.font = "bold 36px Arial";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
+    ctx.strokeText(name, 30, 60);
+
+    ctx.fillStyle = "#ffffff";
     ctx.fillText(name, 30, 60);
 
     // Nivel
@@ -65,12 +69,16 @@ async function sendCard(channel) {
     ctx.font = "28px Arial";
     ctx.fillText(`Lv ${level}`, 650, 60);
 
-    // Stats
-    ctx.fillStyle = "#aaaaaa";
+    // Stats colores separados
     ctx.font = "22px Arial";
 
+    ctx.fillStyle = "#00ffcc";
     ctx.fillText(`XP: ${xp}`, 30, 120);
+
+    ctx.fillStyle = "#ffaa00";
     ctx.fillText(`Tiempo: ${time}m`, 30, 160);
+
+    ctx.fillStyle = "#ff66ff";
     ctx.fillText(`GP: ${gp}`, 30, 200);
 
     // Barra XP
@@ -80,26 +88,33 @@ async function sendCard(channel) {
     ctx.fillStyle = "#00ff99";
     ctx.fillRect(250, 150, 500 * progress, 20);
 
-    // Exportar
-    const attachment = new AttachmentBuilder(
+    // Exportar canvas
+    const canvasFile = new AttachmentBuilder(
       canvas.toBuffer(),
-      { name: "header.png" }
+      { name: "card.png" }
     );
 
     // =============================
-    // 🎥 GIF (ABAJO)
+    // 🎥 GIF COMO ARCHIVO (NO EMBED)
     // =============================
-    const embed = new EmbedBuilder()
-      .setColor(0x000000)
-      .setImage("https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif");
+    const gifUrl = "https://media.discordapp.net/attachments/1489832190530425014/1489832694924836944/venusaur.gif";
+
+    const res = await fetch(gifUrl);
+    const buffer = await res.arrayBuffer();
+
+    const gifFile = new AttachmentBuilder(
+      Buffer.from(buffer),
+      { name: "pokemon.gif" }
+    );
 
     // =============================
-    // 🚀 ENVÍO (ALINEADO)
+    // 🚀 ENVÍO LIMPIO
     // =============================
-    await channel.send({ files: [attachment] });
-    await channel.send({ embeds: [embed] });
+    await channel.send({
+      files: [canvasFile, gifFile]
+    });
 
-    console.log("✅ CARD PANEL ENVIADO");
+    console.log("✅ CARD + GIF SIN EMBED ENVIADO");
 
   } catch (err) {
     console.error("❌ ERROR:", err);
