@@ -181,7 +181,7 @@ async function updatePanels() {
 
     // ===== TEXTO (Righteous) =====
     ctx.fillStyle = "#ffffff";
-    ctx.font = "40px Righteous";
+    ctx.font = "80px Righteous";
     ctx.fillText(s.name, 40, 70);
 
     ctx.fillStyle = "#00ffcc";
