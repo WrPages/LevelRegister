@@ -36,14 +36,11 @@ const client = new Client({
 
 // =============================
 let eliteUsers = {};
-let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
 let userPanels = {};
 let userSettings = {};
 
-// =============================
-// 🧠 ROLES
 // =============================
 function getUserRole(member) {
   const roles = member.roles.cache;
@@ -64,308 +61,201 @@ function getUserRole(member) {
 }
 
 // =============================
-// 🧬 EVOLUCIÓN
-// =============================
-function getPokemonData(totalXP) {
-  const stages = [
-    {
-      name: "Huevo",
-      min: 0,
-      max: 400,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif",
-    },
-    {
-      name: "Fase 1",
-      min: 400,
-      max: 800,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif",
-    },
-    {
-      name: "Fase 2",
-      min: 800,
-      max: 1200,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif",
-    },
-    {
-      name: "Final",
-      min: 1200,
-      max: Infinity,
-      gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif",
-    },
-  ];
-
-  return stages.find(s => totalXP >= s.min && totalXP < s.max);
+function getPokemonData(xp) {
+  return {
+    name: "Fase",
+    gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif"
+  };
 }
 
 // =============================
 client.once("clientReady", async () => {
-  console.log(`Bot listo como ${client.user.tag}`);
-
-  eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
-  onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
-  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-
-  sanitizeTracking();
+  eliteUsers = JSON.parse(await getGist(process.env.GIST_USERS));
+  trackingData = JSON.parse(await getGist(process.env.GIST_TRACKING));
 
   startLoop();
-  startBackupLoop(); // ✅ YA NO FALLA
 });
 
 // =============================
 function startLoop() {
-  setInterval(async () => {
-    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
-
-    for (const [id, user] of Object.entries(eliteUsers)) {
-      const isOnline =
-        onlineIds.includes(user.main_id) ||
-        onlineIds.includes(user.sec_id);
-
-      if (!isOnline) continue;
-
-      if (!liveTracker[id]) {
-        liveTracker[id] = {
-          sessionXP: 0,
-          sessionTime: 0,
-          instances: 1,
-          boostUntil: 0,
-          name: user.name,
-          packs: 0,
-        };
-      }
-
-      const t = liveTracker[id];
-
-      t.sessionTime += 1;
-
-      let xpPerSecond = (2 + t.instances * 0.5) / 60;
-
-      if (Date.now() < t.boostUntil) {
-        xpPerSecond *= 2;
-      }
-
-      t.sessionXP += xpPerSecond;
-    }
-
-    await updatePanels();
-  }, 5000);
+  setInterval(updatePanels, 5000);
 }
 
 // =============================
-// 🎴 PANEL
+// 🎴 RENDER PANEL
+// =============================
+async function renderPanel(id, channel) {
+  const s = liveTracker[id];
+  const t = trackingData[id] || {};
+
+  if (!userSettings[id]) {
+    userSettings[id] = {
+      bg: null,
+      nameColor: "#ffffff",
+      textColor: "#ffffff",
+    };
+  }
+
+  const settings = userSettings[id];
+
+  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+  const level = Math.floor(totalXP / 100);
+
+  const member = await channel.guild.members.fetch(id).catch(() => null);
+  const role = member ? getUserRole(member) : { name: "Reroller", color: "#aaa" };
+
+  const canvas = createCanvas(800, 450);
+  const ctx = canvas.getContext("2d");
+
+  const bg = await loadImage(settings.bg || "./assets/card.png");
+  ctx.drawImage(bg, 0, 0, 800, 450);
+
+  ctx.fillStyle = settings.nameColor;
+  ctx.font = "50px Righteous";
+  ctx.fillText(s.name, 40, 80);
+
+  ctx.fillStyle = role.color;
+  ctx.font = "22px Righteous";
+  ctx.fillText(role.name, 42, 110);
+
+  ctx.fillStyle = "#00ffcc";
+  ctx.font = "38px Righteous";
+  ctx.fillText(`Lv ${level}`, 620, 80);
+
+  ctx.fillStyle = settings.textColor;
+  ctx.font = "24px Righteous";
+
+  ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
+
+  return new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" });
+}
+
 // =============================
 async function updatePanels() {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
-  for (const [id, s] of Object.entries(liveTracker)) {
-    const t = trackingData[id] || {};
+  for (const [id, user] of Object.entries(eliteUsers)) {
 
-    if (!userSettings[id]) {
-      userSettings[id] = {
-        bg: null,
-        nameColor: "#ffffff",
-        textColor: "#ffffff",
+    if (!liveTracker[id]) {
+      liveTracker[id] = {
+        name: user.name,
+        sessionXP: 0,
       };
     }
 
-    const settings = userSettings[id];
-
-    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-    const totalTime =
-      (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-
-    const level = Math.floor(totalXP / 100);
-
-    const poke = getPokemonData(totalXP);
-
-    const guild = channel.guild;
-    const member = await guild.members.fetch(id).catch(() => null);
-    const role = member ? getUserRole(member) : { name: "Reroller", color: "#aaa" };
-
-    const canvas = createCanvas(800, 450);
-    const ctx = canvas.getContext("2d");
-
-    try {
-      const bg = await loadImage(settings.bg || "./assets/card.png");
-      ctx.drawImage(bg, 0, 0, 800, 450);
-    } catch {
-      ctx.fillStyle = "#111";
-      ctx.fillRect(0, 0, 800, 450);
-    }
-
-    ctx.fillStyle = settings.nameColor;
-    ctx.font = "50px Righteous";
-    ctx.fillText(s.name, 40, 80);
-
-    ctx.fillStyle = role.color;
-    ctx.font = "22px Righteous";
-    ctx.fillText(role.name, 42, 110);
-
-    ctx.fillStyle = "#00ffcc";
-    ctx.font = "38px Righteous";
-    ctx.fillText(`Lv ${level}`, 620, 80);
-
-    ctx.fillStyle = "#00ffcc";
-    ctx.font = "22px Righteous";
-    ctx.fillText(poke.name, 620, 110);
-
-    ctx.fillStyle = settings.textColor;
-    ctx.font = "24px Righteous";
-
-    ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
-    ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
-    ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
-    ctx.fillText(`Packs: ${s.packs}`, 40, 290);
-    ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
-
-    const file = new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" });
+    const file = await renderPanel(id, channel);
 
     if (userPanels[id]) {
-      try {
-        const msg = await channel.messages.fetch(userPanels[id].messageId);
-        await msg.edit({ files: [file] });
-        continue;
-      } catch {
-        delete userPanels[id];
-      }
+      const msg = await channel.messages.fetch(userPanels[id].messageId);
+      await msg.edit({ files: [file] });
+      continue;
     }
 
     const sent = await channel.send({ files: [file] });
 
     const thread = await sent.startThread({
-      name: `Perfil - ${s.name}`,
-      autoArchiveDuration: 1440,
+      name: `Perfil - ${user.name}`,
     });
 
+    // 🎨 BOTONES
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`edit_${id}`)
-        .setLabel("Editar perfil")
-        .setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`edit_${id}`).setLabel("Editar").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`color_name_${id}`).setLabel("Nombre 🎨").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`color_text_${id}`).setLabel("Texto 🎨").setStyle(ButtonStyle.Secondary)
     );
 
-    await thread.send({
-      content: "Configura tu perfil:",
-      components: [row],
-    });
+    await thread.send({ content: "Editar perfil", components: [row] });
 
-    const embed = new EmbedBuilder().setImage(poke.gif);
+    const embed = new EmbedBuilder().setImage(getPokemonData().gif);
     await thread.send({ embeds: [embed] });
 
-    userPanels[id] = {
-      messageId: sent.id,
-      threadId: thread.id,
-    };
+    userPanels[id] = { messageId: sent.id, threadId: thread.id };
   }
 }
 
 // =============================
-// 🔘 BOTÓN
+// 🎨 INTERACCIONES
 // =============================
 client.on("interactionCreate", async (i) => {
   if (!i.isButton()) return;
 
-  const [, targetId] = i.customId.split("_");
+  const parts = i.customId.split("_");
+  const action = parts[0];
+  const type = parts[1];
+  const id = parts[2];
 
   const member = await i.guild.members.fetch(i.user.id);
   const role = getUserRole(member);
 
-  if (i.user.id !== targetId && !role.isChampion) {
-    return i.reply({ content: "No tienes permiso.", ephemeral: true });
+  if (i.user.id !== id && !role.isChampion) {
+    return i.reply({ content: "No tienes permiso", ephemeral: true });
   }
 
-  await i.reply({
-    content: `Editando <@${targetId}>`,
-    ephemeral: true,
-  });
+  if (action === "edit") {
+    return i.reply({ content: "Sube una imagen aquí para cambiar fondo", ephemeral: true });
+  }
+
+  // 🎨 PALETA SIMPLE
+  const colors = ["#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff","#00ffff"];
+
+  const row = new ActionRowBuilder().addComponents(
+    colors.map(c =>
+      new ButtonBuilder()
+        .setCustomId(`apply_${type}_${id}_${c}`)
+        .setStyle(ButtonStyle.Secondary)
+        .setLabel(" ")
+    )
+  );
+
+  await i.reply({ content: "Elige color:", components: [row], ephemeral: true });
 });
 
 // =============================
-// 🎨 MENSAJES
+client.on("interactionCreate", async (i) => {
+  if (!i.isButton()) return;
+
+  const parts = i.customId.split("_");
+
+  if (parts[0] !== "apply") return;
+
+  const type = parts[1];
+  const id = parts[2];
+  const color = parts[3];
+
+  if (!userSettings[id]) userSettings[id] = {};
+
+  if (type === "name") userSettings[id].nameColor = color;
+  if (type === "text") userSettings[id].textColor = color;
+
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+  const file = await renderPanel(id, channel);
+
+  const msg = await channel.messages.fetch(userPanels[id].messageId);
+  await msg.edit({ files: [file] });
+
+  await i.update({ content: "Color aplicado ✅", components: [] });
+});
+
+// =============================
+// 🖼️ FONDO
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
+  if (!msg.attachments.size) return;
 
-  let targetId = msg.author.id;
+  const url = msg.attachments.first().url;
+  const id = msg.author.id;
 
-  const mention = msg.mentions.users.first();
-  if (mention) {
-    const member = await msg.guild.members.fetch(msg.author.id);
-    const role = getUserRole(member);
+  if (!userSettings[id]) userSettings[id] = {};
+  userSettings[id].bg = url;
 
-    if (role.isChampion) targetId = mention.id;
-  }
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+  const file = await renderPanel(id, channel);
 
-  if (!userSettings[targetId]) userSettings[targetId] = {};
-  const settings = userSettings[targetId];
+  const panel = await channel.messages.fetch(userPanels[id].messageId);
+  await panel.edit({ files: [file] });
 
-  if (msg.attachments.size > 0) {
-    settings.bg = msg.attachments.first().url;
-    return msg.reply(`Fondo actualizado para <@${targetId}>`);
-  }
-
-  if (msg.content.startsWith("!namecolor")) {
-    settings.nameColor = msg.content.split(" ")[1];
-    return msg.reply("Color nombre actualizado");
-  }
-
-  if (msg.content.startsWith("!textcolor")) {
-    settings.textColor = msg.content.split(" ")[1];
-    return msg.reply("Color texto actualizado");
-  }
+  msg.reply("Fondo actualizado ✅");
 });
-
-// =============================
-// 💾 BACKUP LOOP (FIX)
-// =============================
-function startBackupLoop() {
-  setInterval(async () => {
-    for (const id in liveTracker) {
-      if (!trackingData[id]) {
-        trackingData[id] = {
-          xp: 0,
-          time: 0,
-          name: liveTracker[id].name,
-          packs: 0,
-          gp: 0,
-        };
-      }
-
-      const s = liveTracker[id];
-
-      trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
-      trackingData[id].packs = s.packs;
-
-      s.sessionXP = 0;
-      s.sessionTime = 0;
-    }
-
-    await updateGist(process.env.GIST_TRACKING, trackingData);
-
-  }, 600000);
-}
-
-// =============================
-function safeParse(data) {
-  try {
-    return typeof data === "object" ? data : JSON.parse(data);
-  } catch {
-    return {};
-  }
-}
-
-function sanitizeTracking() {
-  for (const k in trackingData) {
-    trackingData[k].xp = Number(trackingData[k].xp) || 0;
-    trackingData[k].time = Number(trackingData[k].time) || 0;
-    trackingData[k].gp = Number(trackingData[k].gp) || 0;
-  }
-}
-
-function cleanOnlineIds(raw) {
-  if (!raw) return [];
-  return raw.split("\n").map(x => x.trim()).filter(Boolean);
-}
 
 client.login(process.env.DISCORD_TOKEN);
