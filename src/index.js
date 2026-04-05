@@ -4,8 +4,6 @@ import {
   AttachmentBuilder,
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   StringSelectMenuBuilder
 } from "discord.js";
 
@@ -41,7 +39,7 @@ let trackingData = {};
 let liveTracker = {};
 let userPanels = {};
 let userSettings = {};
-let editState = {}; // 👈 estado de edición
+let editState = {};
 
 // =============================
 // 🎨 COLORES
@@ -164,8 +162,13 @@ async function renderPanel(id, channel) {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  const bg = await loadImage(settings.bg || "./assets/card.png");
-  ctx.drawImage(bg, 0, 0, 800, 450);
+  try {
+    const bg = await loadImage(settings.bg || "./assets/card.png");
+    ctx.drawImage(bg, 0, 0, 800, 450);
+  } catch {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, 800, 450);
+  }
 
   ctx.fillStyle = settings.nameColor;
   ctx.font = "50px Righteous";
@@ -218,7 +221,6 @@ async function updatePanels() {
       autoArchiveDuration: 1440,
     });
 
-    // 🎮 SELECT MENU
     const menu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`menu_${id}`)
@@ -231,7 +233,7 @@ async function updatePanels() {
     );
 
     await thread.send({
-      content: "Panel de personalización:",
+      content: "🎮 Panel de personalización",
       components: [menu],
     });
 
@@ -243,7 +245,7 @@ async function updatePanels() {
 }
 
 // =============================
-// 🎮 INTERACCIONES PANEL
+// 🎮 INTERACCIONES
 // =============================
 client.on("interactionCreate", async (i) => {
   if (!i.isStringSelectMenu()) return;
@@ -261,32 +263,24 @@ client.on("interactionCreate", async (i) => {
   editState[id] = option;
 
   if (option === "bg") {
-    return i.reply({
-      content: "🖼️ Sube una imagen en este hilo",
-      ephemeral: true,
-    });
+    return i.reply({ content: "🖼️ Sube una imagen aquí", ephemeral: true });
   }
 
   if (option === "name") {
-    return i.reply({
-      content: "🎨 Escribe color (rojo, azul, verde...)",
-      ephemeral: true,
-    });
+    return i.reply({ content: "🎨 Escribe color (rojo, azul...)", ephemeral: true });
   }
 
   if (option === "text") {
-    return i.reply({
-      content: "🎨 Escribe color para texto",
-      ephemeral: true,
-    });
+    return i.reply({ content: "🎨 Escribe color", ephemeral: true });
   }
 });
 
 // =============================
-// 📝 MENSAJES (APLICAR CAMBIOS)
+// 📝 MENSAJES
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
+  if (!msg.guild) return;
 
   const entry = Object.entries(userPanels).find(
     ([id, d]) => d.threadId === msg.channel.id
@@ -294,45 +288,59 @@ client.on("messageCreate", async (msg) => {
 
   if (!entry) return;
 
-  const [id] = entry;
-  const state = editState[id];
+  const [targetId] = entry;
 
+  const state = editState[targetId];
   if (!state) return;
 
-  if (!userSettings[id]) userSettings[id] = {};
+  if (!userSettings[targetId]) {
+    userSettings[targetId] = {};
+  }
 
-  const settings = userSettings[id];
+  const settings = userSettings[targetId];
 
   // 🖼️ FONDO
   if (state === "bg" && msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
-    if (!file.contentType?.startsWith("image/")) {
-      return msg.reply("No es imagen válida");
+    if (
+      file.contentType?.startsWith("image/") ||
+      file.url.match(/\.(png|jpg|jpeg|webp)/i)
+    ) {
+      settings.bg = file.url;
+      await forceRender(targetId);
+      return msg.reply("Fondo actualizado ✅");
     }
-
-    settings.bg = file.url;
-    await refreshPanel(id);
-    return msg.reply("Fondo actualizado ✅");
   }
 
   // 🎨 COLOR
-  if ((state === "name" || state === "text")) {
+  if (state === "name" || state === "text") {
     const hex = colorMap[msg.content.toLowerCase()];
-
     if (!hex) return msg.reply("Color inválido");
 
     if (state === "name") settings.nameColor = hex;
     if (state === "text") settings.textColor = hex;
 
-    await refreshPanel(id);
+    await forceRender(targetId);
     return msg.reply("Color aplicado ✅");
   }
 });
 
 // =============================
-async function refreshPanel(id) {
+async function forceRender(id) {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: trackingData[id]?.name || "User",
+      packs: 0,
+    };
+  }
+
   const { file } = await renderPanel(id, channel);
 
   const msg = await channel.messages.fetch(userPanels[id].messageId);
