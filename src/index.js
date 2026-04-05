@@ -19,14 +19,10 @@ import { getGist, updateGist } from "./gist.js";
 dotenv.config();
 
 // =============================
-// VALIDACIÓN ENV
-// =============================
 if (!process.env.GIST_SETTINGS) {
   throw new Error("❌ FALTA GIST_SETTINGS");
 }
 
-// =============================
-// FONT
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 if (fs.existsSync(fontPath)) {
@@ -155,7 +151,6 @@ client.once("clientReady", async () => {
   startLoop();
   startBackupLoop();
 
-  // RE-RENDER GLOBAL
   setTimeout(async () => {
     const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
@@ -226,6 +221,44 @@ function startLoop() {
     await updatePanels();
 
   }, 5000);
+}
+
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+
+    if (!isReady) return;
+
+    for (const id in liveTracker) {
+
+      if (!trackingData[id]) {
+        trackingData[id] = {
+          xp: 0,
+          time: 0,
+          name: liveTracker[id].name,
+          packs: 0,
+          gp: 0
+        };
+      }
+
+      const s = liveTracker[id];
+
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].packs = s.packs;
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
+    try {
+      await updateGist(process.env.GIST_TRACKING, trackingData);
+      console.log("💾 Backup guardado");
+    } catch (err) {
+      console.log("Error guardando backup:", err.message);
+    }
+
+  }, 600000);
 }
 
 // =============================
