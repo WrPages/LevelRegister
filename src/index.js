@@ -115,7 +115,6 @@ function startLoop() {
       t.sessionTime += 1;
 
       let xpPerSecond = (2 + t.instances * 0.5) / 60;
-
       if (Date.now() < t.boostUntil) xpPerSecond *= 2;
 
       t.sessionXP += xpPerSecond;
@@ -152,8 +151,13 @@ async function renderPanel(id, channel) {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  const bg = await loadImage(settings.bg || "./assets/card.png");
-  ctx.drawImage(bg, 0, 0, 800, 450);
+  try {
+    const bg = await loadImage(settings.bg || "./assets/card.png");
+    ctx.drawImage(bg, 0, 0, 800, 450);
+  } catch {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, 800, 450);
+  }
 
   ctx.fillStyle = settings.nameColor;
   ctx.font = "50px Righteous";
@@ -207,12 +211,16 @@ async function updatePanels() {
     });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`edit_${id}`).setLabel("Editar").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`name_${id}`).setLabel("Nombre 🎨").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`text_${id}`).setLabel("Texto 🎨").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder()
+        .setCustomId(`edit_${id}`)
+        .setLabel("Editar perfil")
+        .setStyle(ButtonStyle.Primary)
     );
 
-    await thread.send({ content: "Configura tu perfil", components: [row] });
+    await thread.send({
+      content: "Sube una imagen aquí para fondo o usa:\n!namecolor #hex\n!textcolor #hex",
+      components: [row],
+    });
 
     const embed = new EmbedBuilder().setImage(gif);
     await thread.send({ embeds: [embed] });
@@ -222,14 +230,12 @@ async function updatePanels() {
 }
 
 // =============================
-// 🔘 INTERACCIONES (FIX REAL)
+// 🔘 BOTÓN (solo info)
 // =============================
 client.on("interactionCreate", async (i) => {
   if (!i.isButton()) return;
 
-  const parts = i.customId.split("_");
-  const action = parts[0];
-  const id = parts[1];
+  const [, id] = i.customId.split("_");
 
   const member = await i.guild.members.fetch(i.user.id);
   const role = getUserRole(member);
@@ -238,69 +244,84 @@ client.on("interactionCreate", async (i) => {
     return i.reply({ content: "No tienes permiso", ephemeral: true });
   }
 
-  // EDIT
-  if (action === "edit") {
-    return i.reply({ content: "Sube imagen aquí para fondo", ephemeral: true });
-  }
-
-  // PALETA
-  if (action === "name" || action === "text") {
-    const colors = ["#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff","#00ffff"];
-
-    const row = new ActionRowBuilder().addComponents(
-      colors.map(c =>
-        new ButtonBuilder()
-          .setCustomId(`apply_${action}_${id}_${c}`)
-          .setStyle(ButtonStyle.Secondary)
-          .setLabel("⬤")
-      )
-    );
-
-    return i.reply({ content: "Elige color", components: [row], ephemeral: true });
-  }
-
-  // APPLY COLOR
-  if (action === "apply") {
-    const type = parts[1];
-    const targetId = parts[2];
-    const color = parts[3];
-
-    if (!userSettings[targetId]) userSettings[targetId] = {};
-
-    if (type === "name") userSettings[targetId].nameColor = color;
-    if (type === "text") userSettings[targetId].textColor = color;
-
-    const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
-    const { file } = await renderPanel(targetId, channel);
-
-    const msg = await channel.messages.fetch(userPanels[targetId].messageId);
-    await msg.edit({ files: [file] });
-
-    return i.update({ content: "Aplicado ✅", components: [] });
-  }
+  await i.reply({
+    content: "Usa comandos:\n!namecolor #hex\n!textcolor #hex\nSube imagen para fondo",
+    ephemeral: true,
+  });
 });
 
 // =============================
-// 🖼️ FONDO
+// 🎨 COMANDOS + FONDO (FIX REAL)
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
-  if (!msg.attachments.size) return;
 
-  const url = msg.attachments.first().url;
-  const id = msg.author.id;
+  let targetId = msg.author.id;
 
-  if (!userSettings[id]) userSettings[id] = {};
-  userSettings[id].bg = url;
+  const mention = msg.mentions.users.first();
+  if (mention) {
+    const member = await msg.guild.members.fetch(msg.author.id);
+    const role = getUserRole(member);
+    if (role.isChampion) targetId = mention.id;
+  }
 
+  if (!userSettings[targetId]) {
+    userSettings[targetId] = {
+      bg: null,
+      nameColor: "#ffffff",
+      textColor: "#ffffff",
+    };
+  }
+
+  const settings = userSettings[targetId];
+
+  // 🎨 COLOR NOMBRE
+  if (msg.content.startsWith("!namecolor")) {
+    const color = msg.content.split(" ")[1];
+    if (!color) return;
+
+    settings.nameColor = color;
+    await refreshPanel(targetId);
+    return msg.reply("Color nombre actualizado ✅");
+  }
+
+  // 🎨 COLOR TEXTO
+  if (msg.content.startsWith("!textcolor")) {
+    const color = msg.content.split(" ")[1];
+    if (!color) return;
+
+    settings.textColor = color;
+    await refreshPanel(targetId);
+    return msg.reply("Color texto actualizado ✅");
+  }
+
+  // 🖼️ FONDO
+  if (msg.attachments.size > 0) {
+    const url = msg.attachments.first().url;
+
+    if (!url.match(/\.(png|jpg|jpeg)$/i)) {
+      return msg.reply("Solo imágenes PNG/JPG");
+    }
+
+    settings.bg = url;
+    await refreshPanel(targetId);
+    return msg.reply("Fondo actualizado ✅");
+  }
+});
+
+// =============================
+// 🔄 REFRESH PANEL
+// =============================
+async function refreshPanel(id) {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  if (!userPanels[id]) return;
+
   const { file } = await renderPanel(id, channel);
 
-  const panel = await channel.messages.fetch(userPanels[id].messageId);
-  await panel.edit({ files: [file] });
-
-  msg.reply("Fondo actualizado ✅");
-});
+  const msg = await channel.messages.fetch(userPanels[id].messageId);
+  await msg.edit({ files: [file] });
+}
 
 // =============================
 function startBackupLoop() {
