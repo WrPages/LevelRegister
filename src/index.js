@@ -5,7 +5,8 @@ import {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  StringSelectMenuBuilder
 } from "discord.js";
 
 import dotenv from "dotenv";
@@ -20,7 +21,6 @@ dotenv.config();
 // 🔤 FUENTE
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
-
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "Righteous" });
 }
@@ -41,9 +41,10 @@ let trackingData = {};
 let liveTracker = {};
 let userPanels = {};
 let userSettings = {};
+let editState = {}; // 👈 estado de edición
 
 // =============================
-// 🎨 COLORES HUMANOS
+// 🎨 COLORES
 // =============================
 const colorMap = {
   rojo: "#ff0000",
@@ -83,10 +84,7 @@ function getPokemonData(totalXP) {
     { name: "Fase 2", min: 800, max: 1200, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif" },
     { name: "Final", min: 1200, max: Infinity, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif" },
   ];
-
-  const current = stages.find(s => totalXP >= s.min && totalXP < s.max);
-
-  return current;
+  return stages.find(s => totalXP >= s.min && totalXP < s.max);
 }
 
 // =============================
@@ -129,7 +127,6 @@ function startLoop() {
       const t = liveTracker[id];
 
       t.sessionTime += 1;
-
       let xpPerSecond = (2 + t.instances * 0.5) / 60;
       if (Date.now() < t.boostUntil) xpPerSecond *= 2;
 
@@ -167,13 +164,8 @@ async function renderPanel(id, channel) {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  try {
-    const bg = await loadImage(settings.bg || "./assets/card.png");
-    ctx.drawImage(bg, 0, 0, 800, 450);
-  } catch {
-    ctx.fillStyle = "#111";
-    ctx.fillRect(0, 0, 800, 450);
-  }
+  const bg = await loadImage(settings.bg || "./assets/card.png");
+  ctx.drawImage(bg, 0, 0, 800, 450);
 
   ctx.fillStyle = settings.nameColor;
   ctx.font = "50px Righteous";
@@ -226,8 +218,21 @@ async function updatePanels() {
       autoArchiveDuration: 1440,
     });
 
+    // 🎮 SELECT MENU
+    const menu = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`menu_${id}`)
+        .setPlaceholder("🎨 Editar perfil")
+        .addOptions([
+          { label: "Cambiar fondo", value: "bg" },
+          { label: "Color nombre", value: "name" },
+          { label: "Color texto", value: "text" },
+        ])
+    );
+
     await thread.send({
-      content: "🎨 Comandos:\n!color nombre rojo\n!color texto azul\nSube imagen para fondo"
+      content: "Panel de personalización:",
+      components: [menu],
     });
 
     const embed = new EmbedBuilder().setImage(gif);
@@ -238,61 +243,99 @@ async function updatePanels() {
 }
 
 // =============================
-// 🎨 COMANDOS + FONDO
+// 🎮 INTERACCIONES PANEL
+// =============================
+client.on("interactionCreate", async (i) => {
+  if (!i.isStringSelectMenu()) return;
+
+  const [, id] = i.customId.split("_");
+
+  const member = await i.guild.members.fetch(i.user.id);
+  const role = getUserRole(member);
+
+  if (i.user.id !== id && !role.isChampion) {
+    return i.reply({ content: "No puedes editar esto", ephemeral: true });
+  }
+
+  const option = i.values[0];
+  editState[id] = option;
+
+  if (option === "bg") {
+    return i.reply({
+      content: "🖼️ Sube una imagen en este hilo",
+      ephemeral: true,
+    });
+  }
+
+  if (option === "name") {
+    return i.reply({
+      content: "🎨 Escribe color (rojo, azul, verde...)",
+      ephemeral: true,
+    });
+  }
+
+  if (option === "text") {
+    return i.reply({
+      content: "🎨 Escribe color para texto",
+      ephemeral: true,
+    });
+  }
+});
+
+// =============================
+// 📝 MENSAJES (APLICAR CAMBIOS)
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
 
-  let targetId = msg.author.id;
+  const entry = Object.entries(userPanels).find(
+    ([id, d]) => d.threadId === msg.channel.id
+  );
 
-  const mention = msg.mentions.users.first();
-  if (mention) {
-    const member = await msg.guild.members.fetch(msg.author.id);
-    const role = getUserRole(member);
-    if (role.isChampion) targetId = mention.id;
-  }
+  if (!entry) return;
 
-  if (!userSettings[targetId]) userSettings[targetId] = {};
+  const [id] = entry;
+  const state = editState[id];
 
-  const settings = userSettings[targetId];
+  if (!state) return;
 
-  // 🎨 COLOR
-  if (msg.content.startsWith("!color")) {
-    const [, type, colorName] = msg.content.split(" ");
-    const hex = colorMap[colorName?.toLowerCase()];
+  if (!userSettings[id]) userSettings[id] = {};
 
-    if (!hex) return msg.reply("Color no válido");
+  const settings = userSettings[id];
 
-    if (type === "nombre") settings.nameColor = hex;
-    if (type === "texto") settings.textColor = hex;
-
-    await refreshPanel(targetId);
-    return msg.reply("Color aplicado ✅");
-  }
-
-  // 🖼️ FONDO (FIX REAL)
-  if (msg.attachments.size > 0) {
+  // 🖼️ FONDO
+  if (state === "bg" && msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
     if (!file.contentType?.startsWith("image/")) {
-      return msg.reply("Solo imágenes válidas");
+      return msg.reply("No es imagen válida");
     }
 
     settings.bg = file.url;
-
-    await refreshPanel(targetId);
+    await refreshPanel(id);
     return msg.reply("Fondo actualizado ✅");
+  }
+
+  // 🎨 COLOR
+  if ((state === "name" || state === "text")) {
+    const hex = colorMap[msg.content.toLowerCase()];
+
+    if (!hex) return msg.reply("Color inválido");
+
+    if (state === "name") settings.nameColor = hex;
+    if (state === "text") settings.textColor = hex;
+
+    await refreshPanel(id);
+    return msg.reply("Color aplicado ✅");
   }
 });
 
 // =============================
 async function refreshPanel(id) {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
-  if (!userPanels[id]) return;
-
   const { file } = await renderPanel(id, channel);
-  const msg = await channel.messages.fetch(userPanels[id].messageId);
 
+  const msg = await channel.messages.fetch(userPanels[id].messageId);
   await msg.edit({ files: [file] });
 }
 
