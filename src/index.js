@@ -4,7 +4,6 @@ import {
   AttachmentBuilder,
   EmbedBuilder,
   ActionRowBuilder,
-  StringSelectMenuBuilder
   StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle
