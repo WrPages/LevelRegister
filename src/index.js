@@ -58,19 +58,28 @@ async function loadImageCached(src) {
     let img;
 
     if (src.startsWith("http")) {
-      const res = await fetch(src);
-      const buffer = await res.arrayBuffer();
-      img = await loadImage(Buffer.from(buffer));
+      const res = await fetch(src, {
+        headers: {
+          "User-Agent": "Mozilla/5.0"
+        }
+      });
+
+      if (!res.ok) throw new Error("Error descargando imagen");
+
+      const buffer = Buffer.from(await res.arrayBuffer());
+
+      img = await loadImage(buffer);
     } else {
       img = await loadImage(src);
     }
 
     imageCache.set(src, img);
 
-    if (imageCache.size > 50) imageCache.clear();
-
     return img;
-  } catch {
+
+  } catch (err) {
+    console.log("⚠️ Error imagen:", src);
+
     return await loadImage("./assets/card.png");
   }
 }
