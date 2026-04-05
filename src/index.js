@@ -1,3 +1,6 @@
+// =============================
+// IMPORTS
+// =============================
 import {
   Client,
   GatewayIntentBits,
@@ -12,13 +15,14 @@ import {
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
+import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
 // =============================
-// 🔤 FUENTE
+// FUENTE
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 if (fs.existsSync(fontPath)) {
@@ -37,6 +41,8 @@ const client = new Client({
   ],
 });
 
+// =============================
+// DATA
 // =============================
 let eliteUsers = {};
 let onlineIds = [];
@@ -90,13 +96,34 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
+// DESCARGAR Y SUBIR IMAGEN BIEN
+// =============================
+async function saveImageToStorage(userId, file) {
+  const res = await fetch(file.url);
+  const buffer = await res.arrayBuffer();
+
+  const attachment = new AttachmentBuilder(Buffer.from(buffer), {
+    name: "bg.png",
+  });
+
+  const channel = await client.channels.fetch(STORAGE_CHANNEL_ID);
+
+  const msg = await channel.send({
+    content: `UserID: ${userId}`,
+    files: [attachment],
+  });
+
+  return msg.attachments.first().url;
+}
+
+// =============================
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS)); // 🔥 cargar settings
+  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
   sanitizeTracking();
 
@@ -138,18 +165,6 @@ function startLoop() {
 
     await updatePanels();
   }, 5000);
-}
-
-// =============================
-async function saveImageToStorage(userId, file) {
-  const channel = await client.channels.fetch(STORAGE_CHANNEL_ID);
-
-  const msg = await channel.send({
-    content: `UserID: ${userId}`,
-    files: [file.url],
-  });
-
-  return msg.attachments.first().url;
 }
 
 // =============================
@@ -264,15 +279,10 @@ client.on("interactionCreate", async (i) => {
   if (!i.isStringSelectMenu()) return;
 
   const [, id] = i.customId.split("_");
-  const option = i.values[0];
-  editState[id] = option;
+  editState[id] = i.values[0];
 
-  if (option === "bg") {
-    return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
-  }
-
-  if (option === "name" || option === "text") {
-    return i.reply({ content: "🎨 Usa botones de color", ephemeral: true });
+  if (i.values[0] === "bg") {
+    return i.reply({ content: "Sube imagen aquí", ephemeral: true });
   }
 });
 
@@ -301,7 +311,7 @@ client.on("messageCreate", async (msg) => {
 
     await forceRender(id);
 
-    return msg.reply("Fondo guardado y aplicado ✅");
+    return msg.reply("Fondo aplicado ✅");
   }
 });
 
@@ -311,23 +321,12 @@ async function forceRender(id) {
 
   lastManualEdit[id] = Date.now();
 
-  if (!liveTracker[id]) {
-    liveTracker[id] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: 1,
-      boostUntil: 0,
-      name: trackingData[id]?.name || "User",
-      packs: 0,
-    };
-  }
-
   const { file } = await renderPanel(id, channel);
 
   const msg = await channel.messages.fetch(userPanels[id].messageId);
 
   await msg.edit({
-    content: `updated_${Date.now()}`,
+    content: `update_${Date.now()}`,
     files: [file]
   });
 }
