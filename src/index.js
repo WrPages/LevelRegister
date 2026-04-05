@@ -1,6 +1,3 @@
-// =============================
-// IMPORTS
-// =============================
 import {
   Client,
   GatewayIntentBits,
@@ -50,6 +47,25 @@ let editState = {};
 let lastManualEdit = {};
 
 // =============================
+function getUserRole(member) {
+  const roles = member.roles.cache;
+
+  if (roles.some(r => r.name === "Champion"))
+    return { name: "Champion", color: "#FFD700", isChampion: true };
+
+  if (roles.some(r => r.name === "Elite_Four"))
+    return { name: "Elite Four", color: "#800080" };
+
+  if (roles.some(r => r.name === "Gym_Leader"))
+    return { name: "Gym Leader", color: "#0099ff" };
+
+  if (roles.some(r => r.name === "Trainer"))
+    return { name: "Trainer", color: "#00ff00" };
+
+  return { name: "Reroller", color: "#aaaaaa" };
+}
+
+// =============================
 function getPokemonData(totalXP) {
   const stages = [
     { name: "Huevo", min: 0, max: 400, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
@@ -61,29 +77,22 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
-// 🔥 FIX REAL DE IMAGEN
+// FIX REAL IMAGEN
 // =============================
 async function saveImageToStorage(userId, file) {
-  try {
-    const res = await fetch(file.url);
-    const buffer = await res.buffer();
+  const res = await fetch(file.url);
+  const buffer = await res.buffer();
 
-    const attachment = new AttachmentBuilder(buffer, {
-      name: "bg.png",
-    });
+  const attachment = new AttachmentBuilder(buffer, { name: "bg.png" });
 
-    const channel = await client.channels.fetch(STORAGE_CHANNEL_ID);
+  const channel = await client.channels.fetch(STORAGE_CHANNEL_ID);
 
-    const msg = await channel.send({
-      content: `UserID: ${userId}`,
-      files: [attachment],
-    });
+  const msg = await channel.send({
+    content: `UserID: ${userId}`,
+    files: [attachment],
+  });
 
-    return msg.attachments.first().url;
-  } catch (err) {
-    console.error("Error guardando imagen:", err);
-    return null;
-  }
+  return msg.attachments.first().url;
 }
 
 // =============================
@@ -93,6 +102,7 @@ client.once("clientReady", async () => {
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
+  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
   sanitizeTracking();
 
@@ -125,7 +135,11 @@ function startLoop() {
 
       const t = liveTracker[id];
       t.sessionTime += 1;
-      t.sessionXP += (2 + t.instances * 0.5) / 60;
+
+      let xpPerSecond = (2 + t.instances * 0.5) / 60;
+      if (Date.now() < t.boostUntil) xpPerSecond *= 2;
+
+      t.sessionXP += xpPerSecond;
     }
 
     await updatePanels();
@@ -136,11 +150,16 @@ function startLoop() {
 async function renderPanel(id, channel) {
   const s = liveTracker[id];
   const t = trackingData[id] || {};
-
   const settings = userSettings[id] || {};
 
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
   const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+  const level = Math.floor(totalXP / 100);
+
+  const poke = getPokemonData(totalXP);
+
+  const member = await channel.guild.members.fetch(id).catch(() => null);
+  const role = member ? getUserRole(member) : { name: "Reroller", color: "#aaa" };
 
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
@@ -153,15 +172,30 @@ async function renderPanel(id, channel) {
     ctx.fillRect(0, 0, 800, 450);
   }
 
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "40px Righteous";
+  ctx.fillStyle = settings.nameColor || "#ffffff";
+  ctx.font = "50px Righteous";
   ctx.fillText(s.name, 40, 80);
 
-  ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 150);
-  ctx.fillText(`Tiempo: ${totalTime}m`, 40, 200);
+  ctx.fillStyle = role.color;
+  ctx.font = "22px Righteous";
+  ctx.fillText(role.name, 42, 110);
+
+  ctx.fillStyle = "#00ffcc";
+  ctx.font = "38px Righteous";
+  ctx.fillText(`Lv ${level}`, 620, 80);
+
+  ctx.fillStyle = settings.textColor || "#ffffff";
+  ctx.font = "24px Righteous";
+
+  ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
+  ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
+  ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
+  ctx.fillText(`Packs: ${s.packs}`, 40, 290);
+  ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
   return {
     file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
+    gif: poke.gif
   };
 }
 
@@ -173,7 +207,7 @@ async function updatePanels() {
 
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
-    const { file } = await renderPanel(id, channel);
+    const { file, gif } = await renderPanel(id, channel);
 
     if (userPanels[id]) {
       const msg = await channel.messages.fetch(userPanels[id].messageId);
@@ -192,14 +226,17 @@ async function updatePanels() {
       new StringSelectMenuBuilder()
         .setCustomId(`menu_${id}`)
         .addOptions([
-          { label: "Cambiar fondo", value: "bg" }
+          { label: "Cambiar fondo", value: "bg" },
         ])
     );
 
     await thread.send({
-      content: "Editar perfil",
+      content: "🎮 Panel de personalización",
       components: [menu],
     });
+
+    const embed = new EmbedBuilder().setImage(gif);
+    await thread.send({ embeds: [embed] });
 
     userPanels[id] = { messageId: sent.id, threadId: thread.id };
   }
@@ -210,9 +247,9 @@ client.on("interactionCreate", async (i) => {
   if (!i.isStringSelectMenu()) return;
 
   const [, id] = i.customId.split("_");
-  editState[id] = i.values[0];
+  editState[id] = "bg";
 
-  return i.reply({ content: "Sube imagen", ephemeral: true });
+  return i.reply({ content: "Sube una imagen", ephemeral: true });
 });
 
 // =============================
@@ -232,12 +269,10 @@ client.on("messageCreate", async (msg) => {
   if (msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
-    const url = await saveImageToStorage(id, file);
-
-    if (!url) return msg.reply("Error guardando imagen");
+    const savedUrl = await saveImageToStorage(id, file);
 
     userSettings[id] = userSettings[id] || {};
-    userSettings[id].bg = url;
+    userSettings[id].bg = savedUrl;
 
     await forceRender(id);
 
@@ -264,6 +299,21 @@ async function forceRender(id) {
 // =============================
 function startBackupLoop() {
   setInterval(async () => {
+    for (const id in liveTracker) {
+      if (!trackingData[id]) {
+        trackingData[id] = { xp: 0, time: 0, name: liveTracker[id].name, packs: 0, gp: 0 };
+      }
+
+      const s = liveTracker[id];
+
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].packs = s.packs;
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
     await updateGist(process.env.GIST_TRACKING, trackingData);
   }, 600000);
 }
@@ -278,6 +328,7 @@ function sanitizeTracking() {
   for (const k in trackingData) {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
+    trackingData[k].gp = Number(trackingData[k].gp) || 0;
   }
 }
 
