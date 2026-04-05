@@ -18,10 +18,15 @@ import { getGist, updateGist } from "./gist.js";
 dotenv.config();
 
 // =============================
+// 🔤 FUENTE
+// =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "Righteous" });
 }
+
+// =============================
+const STORAGE_CHANNEL_ID = "1490170595692773476";
 
 // =============================
 const client = new Client({
@@ -91,6 +96,7 @@ client.once("clientReady", async () => {
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
+  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS)); // 🔥 cargar settings
 
   sanitizeTracking();
 
@@ -135,6 +141,18 @@ function startLoop() {
 }
 
 // =============================
+async function saveImageToStorage(userId, file) {
+  const channel = await client.channels.fetch(STORAGE_CHANNEL_ID);
+
+  const msg = await channel.send({
+    content: `UserID: ${userId}`,
+    files: [file.url],
+  });
+
+  return msg.attachments.first().url;
+}
+
+// =============================
 async function renderPanel(id, channel) {
   const s = liveTracker[id];
   const t = trackingData[id] || {};
@@ -161,8 +179,13 @@ async function renderPanel(id, channel) {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  const bg = await loadImage(settings.bg || "./assets/card.png");
-  ctx.drawImage(bg, 0, 0, 800, 450);
+  try {
+    const bg = await loadImage(settings.bg || "./assets/card.png");
+    ctx.drawImage(bg, 0, 0, 800, 450);
+  } catch {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, 800, 450);
+  }
 
   ctx.fillStyle = settings.nameColor;
   ctx.font = "50px Righteous";
@@ -192,18 +215,6 @@ async function renderPanel(id, channel) {
 }
 
 // =============================
-function createColorButtons(type, userId) {
-  return new ActionRowBuilder().addComponents(
-    Object.entries(colorMap).map(([name, hex]) =>
-      new ButtonBuilder()
-        .setCustomId(`color_${type}_${userId}_${name}`)
-        .setLabel(name)
-        .setStyle(ButtonStyle.Secondary)
-    )
-  );
-}
-
-// =============================
 async function updatePanels() {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
@@ -229,7 +240,6 @@ async function updatePanels() {
     const menu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`menu_${id}`)
-        .setPlaceholder("🎨 Editar perfil")
         .addOptions([
           { label: "Cambiar fondo", value: "bg" },
           { label: "Color nombre", value: "name" },
@@ -250,45 +260,22 @@ async function updatePanels() {
 }
 
 // =============================
-// 🎮 INTERACCIONES
-// =============================
 client.on("interactionCreate", async (i) => {
-  if (i.isStringSelectMenu()) {
-    const [, id] = i.customId.split("_");
+  if (!i.isStringSelectMenu()) return;
 
-    const option = i.values[0];
-    editState[id] = option;
+  const [, id] = i.customId.split("_");
+  const option = i.values[0];
+  editState[id] = option;
 
-    if (option === "bg") {
-      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
-    }
-
-    if (option === "name" || option === "text") {
-      return i.reply({
-        content: "🎨 Selecciona un color:",
-        components: [createColorButtons(option, id)],
-        ephemeral: true
-      });
-    }
+  if (option === "bg") {
+    return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
   }
 
-  // 🎨 BOTONES DE COLOR
-  if (i.isButton()) {
-    const [, type, id, colorName] = i.customId.split("_");
-
-    if (!userSettings[id]) userSettings[id] = {};
-
-    userSettings[id][type === "name" ? "nameColor" : "textColor"] =
-      colorMap[colorName];
-
-    await forceRender(id);
-
-    return i.reply({ content: "Color aplicado ✅", ephemeral: true });
+  if (option === "name" || option === "text") {
+    return i.reply({ content: "🎨 Usa botones de color", ephemeral: true });
   }
 });
 
-// =============================
-// 📝 MENSAJES (FONDO)
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
@@ -306,16 +293,15 @@ client.on("messageCreate", async (msg) => {
   if (msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
-    if (
-      file.contentType?.startsWith("image/") ||
-      file.url.match(/\.(png|jpg|jpeg|webp)/i)
-    ) {
-      userSettings[id].bg = file.url;
+    const savedUrl = await saveImageToStorage(id, file);
 
-      await forceRender(id);
+    userSettings[id].bg = savedUrl;
 
-      return msg.reply("Fondo actualizado ✅");
-    }
+    await updateGist(process.env.GIST_SETTINGS, userSettings);
+
+    await forceRender(id);
+
+    return msg.reply("Fondo guardado y aplicado ✅");
   }
 });
 
