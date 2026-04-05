@@ -18,6 +18,8 @@ import { getGist, updateGist } from "./gist.js";
 dotenv.config();
 
 // =============================
+// 🧠 FONT
+// =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "Righteous" });
@@ -43,6 +45,35 @@ let editState = {};
 let lastManualEdit = {};
 
 // =============================
+// ⚡ CACHE DE IMÁGENES
+// =============================
+const imageCache = new Map();
+
+async function loadImageCached(src) {
+  try {
+    if (imageCache.has(src)) return imageCache.get(src);
+
+    const img = await loadImage(src);
+    imageCache.set(src, img);
+    return img;
+  } catch {
+    return loadImage("./assets/card.png");
+  }
+}
+
+// =============================
+// 💾 SAVE SETTINGS (DEBOUNCE)
+// =============================
+let saveTimeout;
+
+function saveSettings() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    updateGist(process.env.GIST_SETTINGS, userSettings);
+  }, 2000);
+}
+
+// =============================
 const colorMap = {
   rojo: "#ff0000",
   verde: "#00ff00",
@@ -59,7 +90,7 @@ function getUserRole(member) {
   const roles = member.roles.cache;
 
   if (roles.some(r => r.name === "Champion"))
-    return { name: "Champion", color: "#FFD700", isChampion: true };
+    return { name: "Champion", color: "#FFD700" };
 
   if (roles.some(r => r.name === "Elite_Four"))
     return { name: "Elite Four", color: "#800080" };
@@ -91,6 +122,9 @@ client.once("clientReady", async () => {
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
+
+  // 🆕 SETTINGS PERSISTENTES
+  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
   sanitizeTracking();
 
@@ -161,7 +195,8 @@ async function renderPanel(id, channel) {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  const bg = await loadImage(settings.bg || "./assets/card.png");
+  // 🛡️ SAFE IMAGE LOAD
+  const bg = await loadImageCached(settings.bg || "./assets/card.png");
   ctx.drawImage(bg, 0, 0, 800, 450);
 
   ctx.fillStyle = settings.nameColor;
@@ -194,7 +229,7 @@ async function renderPanel(id, channel) {
 // =============================
 function createColorButtons(type, userId) {
   return new ActionRowBuilder().addComponents(
-    Object.entries(colorMap).map(([name, hex]) =>
+    Object.entries(colorMap).map(([name]) =>
       new ButtonBuilder()
         .setCustomId(`color_${type}_${userId}_${name}`)
         .setLabel(name)
@@ -222,14 +257,13 @@ async function updatePanels() {
     const sent = await channel.send({ files: [file] });
 
     const thread = await sent.startThread({
-      name: `Perfil`,
+      name: "Perfil",
       autoArchiveDuration: 1440,
     });
 
     const menu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`menu_${id}`)
-        .setPlaceholder("🎨 Editar perfil")
         .addOptions([
           { label: "Cambiar fondo", value: "bg" },
           { label: "Color nombre", value: "name" },
@@ -242,8 +276,7 @@ async function updatePanels() {
       components: [menu],
     });
 
-    const embed = new EmbedBuilder().setImage(gif);
-    await thread.send({ embeds: [embed] });
+    await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
 
     userPanels[id] = { messageId: sent.id, threadId: thread.id };
   }
@@ -253,10 +286,11 @@ async function updatePanels() {
 // 🎮 INTERACCIONES
 // =============================
 client.on("interactionCreate", async (i) => {
+
   if (i.isStringSelectMenu()) {
     const [, id] = i.customId.split("_");
-
     const option = i.values[0];
+
     editState[id] = option;
 
     if (option === "bg") {
@@ -272,7 +306,6 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // 🎨 BOTONES DE COLOR
   if (i.isButton()) {
     const [, type, id, colorName] = i.customId.split("_");
 
@@ -281,6 +314,8 @@ client.on("interactionCreate", async (i) => {
     userSettings[id][type === "name" ? "nameColor" : "textColor"] =
       colorMap[colorName];
 
+    saveSettings(); // 💾
+
     await forceRender(id);
 
     return i.reply({ content: "Color aplicado ✅", ephemeral: true });
@@ -288,7 +323,7 @@ client.on("interactionCreate", async (i) => {
 });
 
 // =============================
-// 📝 MENSAJES (FONDO)
+// 🖼️ FONDO
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
@@ -306,11 +341,10 @@ client.on("messageCreate", async (msg) => {
   if (msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
-    if (
-      file.contentType?.startsWith("image/") ||
-      file.url.match(/\.(png|jpg|jpeg|webp)/i)
-    ) {
+    if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
       userSettings[id].bg = file.url;
+
+      saveSettings(); // 💾
 
       await forceRender(id);
 
@@ -337,7 +371,6 @@ async function forceRender(id) {
   }
 
   const { file } = await renderPanel(id, channel);
-
   const msg = await channel.messages.fetch(userPanels[id].messageId);
 
   await msg.edit({
