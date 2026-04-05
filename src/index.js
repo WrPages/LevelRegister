@@ -1,12 +1,10 @@
-// =============================
-// IMPORTS
-// =============================
 import {
   Client,
   GatewayIntentBits,
   AttachmentBuilder,
   EmbedBuilder,
   ActionRowBuilder,
+  StringSelectMenuBuilder
   StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle
@@ -15,22 +13,18 @@ import {
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
 // =============================
-// FUENTE
+// 🔤 FUENTE
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "Righteous" });
 }
-
-// =============================
-const STORAGE_CHANNEL_ID = "1490170595692773476";
 
 // =============================
 const client = new Client({
@@ -42,8 +36,6 @@ const client = new Client({
 });
 
 // =============================
-// DATA
-// =============================
 let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
@@ -53,6 +45,8 @@ let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
 
+// =============================
+// 🎨 COLORES
 // =============================
 const colorMap = {
   rojo: "#ff0000",
@@ -96,34 +90,12 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
-// DESCARGAR Y SUBIR IMAGEN BIEN
-// =============================
-async function saveImageToStorage(userId, file) {
-  const res = await fetch(file.url);
-  const buffer = await res.arrayBuffer();
-
-  const attachment = new AttachmentBuilder(Buffer.from(buffer), {
-    name: "bg.png",
-  });
-
-  const channel = await client.channels.fetch(STORAGE_CHANNEL_ID);
-
-  const msg = await channel.send({
-    content: `UserID: ${userId}`,
-    files: [attachment],
-  });
-
-  return msg.attachments.first().url;
-}
-
-// =============================
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
   sanitizeTracking();
 
@@ -155,6 +127,7 @@ function startLoop() {
       }
 
       const t = liveTracker[id];
+
       t.sessionTime += 1;
 
       let xpPerSecond = (2 + t.instances * 0.5) / 60;
@@ -201,6 +174,8 @@ async function renderPanel(id, channel) {
     ctx.fillStyle = "#111";
     ctx.fillRect(0, 0, 800, 450);
   }
+  const bg = await loadImage(settings.bg || "./assets/card.png");
+  ctx.drawImage(bg, 0, 0, 800, 450);
 
   ctx.fillStyle = settings.nameColor;
   ctx.font = "50px Righteous";
@@ -213,6 +188,10 @@ async function renderPanel(id, channel) {
   ctx.fillStyle = "#00ffcc";
   ctx.font = "38px Righteous";
   ctx.fillText(`Lv ${level}`, 620, 80);
+
+  ctx.fillStyle = "#00ffcc";
+  ctx.font = "22px Righteous";
+  ctx.fillText(poke.name, 620, 110);
 
   ctx.fillStyle = settings.textColor;
   ctx.font = "24px Righteous";
@@ -227,6 +206,18 @@ async function renderPanel(id, channel) {
     file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
     gif: poke.gif
   };
+}
+
+// =============================
+function createColorButtons(type, userId) {
+  return new ActionRowBuilder().addComponents(
+    Object.entries(colorMap).map(([name, hex]) =>
+      new ButtonBuilder()
+        .setCustomId(`color_${type}_${userId}_${name}`)
+        .setLabel(name)
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
 }
 
 // =============================
@@ -255,6 +246,7 @@ async function updatePanels() {
     const menu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`menu_${id}`)
+        .setPlaceholder("🎨 Editar perfil")
         .addOptions([
           { label: "Cambiar fondo", value: "bg" },
           { label: "Color nombre", value: "name" },
@@ -275,20 +267,66 @@ async function updatePanels() {
 }
 
 // =============================
+// 🎮 INTERACCIONES
+// =============================
 client.on("interactionCreate", async (i) => {
   if (!i.isStringSelectMenu()) return;
+  if (i.isStringSelectMenu()) {
+    const [, id] = i.customId.split("_");
 
   const [, id] = i.customId.split("_");
-  editState[id] = i.values[0];
+    const option = i.values[0];
+    editState[id] = option;
 
-  if (i.values[0] === "bg") {
-    return i.reply({ content: "Sube imagen aquí", ephemeral: true });
+  const member = await i.guild.members.fetch(i.user.id);
+  const role = getUserRole(member);
+    if (option === "bg") {
+      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
+    }
+
+  if (i.user.id !== id && !role.isChampion) {
+    return i.reply({ content: "No puedes editar esto", ephemeral: true });
+    if (option === "name" || option === "text") {
+      return i.reply({
+        content: "🎨 Selecciona un color:",
+        components: [createColorButtons(option, id)],
+        ephemeral: true
+      });
+    }
+  }
+
+  const option = i.values[0];
+  editState[id] = option;
+  // 🎨 BOTONES DE COLOR
+  if (i.isButton()) {
+    const [, type, id, colorName] = i.customId.split("_");
+
+  if (option === "bg") {
+    return i.reply({ content: "🖼️ Sube una imagen aquí", ephemeral: true });
+  }
+    if (!userSettings[id]) userSettings[id] = {};
+
+  if (option === "name") {
+    return i.reply({ content: "🎨 Escribe color (rojo, azul...)", ephemeral: true });
+  }
+    userSettings[id][type === "name" ? "nameColor" : "textColor"] =
+      colorMap[colorName];
+
+    await forceRender(id);
+
+  if (option === "text") {
+    return i.reply({ content: "🎨 Escribe color", ephemeral: true });
+    return i.reply({ content: "Color aplicado ✅", ephemeral: true });
   }
 });
 
 // =============================
+// 📝 MENSAJES
+// 📝 MENSAJES (FONDO)
+// =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
+  if (!msg.guild) return;
 
   const entry = Object.entries(userPanels).find(
     ([id, d]) => d.threadId === msg.channel.id
@@ -296,22 +334,48 @@ client.on("messageCreate", async (msg) => {
 
   if (!entry) return;
 
+  const [targetId] = entry;
   const [id] = entry;
 
+  const state = editState[targetId];
+  if (!state) return;
   if (editState[id] !== "bg") return;
 
+  if (!userSettings[targetId]) {
+    userSettings[targetId] = {};
+  }
+
+  const settings = userSettings[targetId];
+
+  // 🖼️ FONDO
+  if (state === "bg" && msg.attachments.size > 0) {
   if (msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
-    const savedUrl = await saveImageToStorage(id, file);
+    if (
+      file.contentType?.startsWith("image/") ||
+      file.url.match(/\.(png|jpg|jpeg|webp)/i)
+    ) {
+      settings.bg = file.url;
+      await forceRender(targetId);
+      return msg.reply("Fondo actualizado ✅");
+    }
+  }
+      userSettings[id].bg = file.url;
 
-    userSettings[id].bg = savedUrl;
+  // 🎨 COLOR
+  if (state === "name" || state === "text") {
+    const hex = colorMap[msg.content.toLowerCase()];
+    if (!hex) return msg.reply("Color inválido");
+      await forceRender(id);
 
-    await updateGist(process.env.GIST_SETTINGS, userSettings);
+    if (state === "name") settings.nameColor = hex;
+    if (state === "text") settings.textColor = hex;
 
-    await forceRender(id);
-
-    return msg.reply("Fondo aplicado ✅");
+    await forceRender(targetId);
+    return msg.reply("Color aplicado ✅");
+      return msg.reply("Fondo actualizado ✅");
+    }
   }
 });
 
@@ -321,12 +385,24 @@ async function forceRender(id) {
 
   lastManualEdit[id] = Date.now();
 
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: trackingData[id]?.name || "User",
+      packs: 0,
+    };
+  }
+
   const { file } = await renderPanel(id, channel);
 
   const msg = await channel.messages.fetch(userPanels[id].messageId);
+  await msg.edit({ files: [file] });
 
   await msg.edit({
-    content: `update_${Date.now()}`,
+    content: `updated_${Date.now()}`,
     files: [file]
   });
 }
