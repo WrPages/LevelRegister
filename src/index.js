@@ -108,7 +108,7 @@ client.once("clientReady", async () => {
   sanitizeTracking();
 
   startLoop();
-  startBackupLoop();
+  startBackupLoop(); // ✅ YA NO FALLA
 });
 
 // =============================
@@ -185,7 +185,6 @@ async function updatePanels() {
     const canvas = createCanvas(800, 450);
     const ctx = canvas.getContext("2d");
 
-    // Fondo
     try {
       const bg = await loadImage(settings.bg || "./assets/card.png");
       ctx.drawImage(bg, 0, 0, 800, 450);
@@ -194,27 +193,22 @@ async function updatePanels() {
       ctx.fillRect(0, 0, 800, 450);
     }
 
-    // Nombre
     ctx.fillStyle = settings.nameColor;
     ctx.font = "50px Righteous";
     ctx.fillText(s.name, 40, 80);
 
-    // Rol
     ctx.fillStyle = role.color;
     ctx.font = "22px Righteous";
     ctx.fillText(role.name, 42, 110);
 
-    // Nivel
     ctx.fillStyle = "#00ffcc";
     ctx.font = "38px Righteous";
     ctx.fillText(`Lv ${level}`, 620, 80);
 
-    // Fase
     ctx.fillStyle = "#00ffcc";
     ctx.font = "22px Righteous";
     ctx.fillText(poke.name, 620, 110);
 
-    // Stats
     ctx.fillStyle = settings.textColor;
     ctx.font = "24px Righteous";
 
@@ -243,7 +237,6 @@ async function updatePanels() {
       autoArchiveDuration: 1440,
     });
 
-    // 🔘 BOTÓN
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`edit_${id}`)
@@ -256,7 +249,6 @@ async function updatePanels() {
       components: [row],
     });
 
-    // 🎞️ GIF RESTAURADO
     const embed = new EmbedBuilder().setImage(poke.gif);
     await thread.send({ embeds: [embed] });
 
@@ -268,7 +260,7 @@ async function updatePanels() {
 }
 
 // =============================
-// 🔘 BOTÓN PERMISOS
+// 🔘 BOTÓN
 // =============================
 client.on("interactionCreate", async (i) => {
   if (!i.isButton()) return;
@@ -278,15 +270,12 @@ client.on("interactionCreate", async (i) => {
   const member = await i.guild.members.fetch(i.user.id);
   const role = getUserRole(member);
 
-  const isOwner = i.user.id === targetId;
-  const isChampion = role.isChampion;
-
-  if (!isOwner && !isChampion) {
+  if (i.user.id !== targetId && !role.isChampion) {
     return i.reply({ content: "No tienes permiso.", ephemeral: true });
   }
 
   await i.reply({
-    content: `Editando <@${targetId}>\nSube imagen o usa:\n!namecolor #hex\n!textcolor #hex`,
+    content: `Editando <@${targetId}>`,
     ephemeral: true,
   });
 });
@@ -304,18 +293,14 @@ client.on("messageCreate", async (msg) => {
     const member = await msg.guild.members.fetch(msg.author.id);
     const role = getUserRole(member);
 
-    if (role.isChampion) {
-      targetId = mention.id;
-    }
+    if (role.isChampion) targetId = mention.id;
   }
 
   if (!userSettings[targetId]) userSettings[targetId] = {};
   const settings = userSettings[targetId];
 
-  // Fondo
   if (msg.attachments.size > 0) {
-    const url = msg.attachments.first().url;
-    settings.bg = url;
+    settings.bg = msg.attachments.first().url;
     return msg.reply(`Fondo actualizado para <@${targetId}>`);
   }
 
@@ -329,6 +314,37 @@ client.on("messageCreate", async (msg) => {
     return msg.reply("Color texto actualizado");
   }
 });
+
+// =============================
+// 💾 BACKUP LOOP (FIX)
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+    for (const id in liveTracker) {
+      if (!trackingData[id]) {
+        trackingData[id] = {
+          xp: 0,
+          time: 0,
+          name: liveTracker[id].name,
+          packs: 0,
+          gp: 0,
+        };
+      }
+
+      const s = liveTracker[id];
+
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].packs = s.packs;
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+
+  }, 600000);
+}
 
 // =============================
 function safeParse(data) {
