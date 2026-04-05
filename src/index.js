@@ -43,6 +43,20 @@ let userPanels = {};
 let userSettings = {};
 
 // =============================
+// 🎨 COLORES HUMANOS
+// =============================
+const colorMap = {
+  rojo: "#ff0000",
+  verde: "#00ff00",
+  azul: "#0099ff",
+  amarillo: "#ffff00",
+  morado: "#800080",
+  rosa: "#ff00ff",
+  cian: "#00ffff",
+  blanco: "#ffffff",
+};
+
+// =============================
 function getUserRole(member) {
   const roles = member.roles.cache;
 
@@ -70,7 +84,9 @@ function getPokemonData(totalXP) {
     { name: "Final", min: 1200, max: Infinity, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif" },
   ];
 
-  return stages.find(s => totalXP >= s.min && totalXP < s.max);
+  const current = stages.find(s => totalXP >= s.min && totalXP < s.max);
+
+  return current;
 }
 
 // =============================
@@ -210,16 +226,8 @@ async function updatePanels() {
       autoArchiveDuration: 1440,
     });
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`edit_${id}`)
-        .setLabel("Editar perfil")
-        .setStyle(ButtonStyle.Primary)
-    );
-
     await thread.send({
-      content: "Sube una imagen aquí para fondo o usa:\n!namecolor #hex\n!textcolor #hex",
-      components: [row],
+      content: "🎨 Comandos:\n!color nombre rojo\n!color texto azul\nSube imagen para fondo"
     });
 
     const embed = new EmbedBuilder().setImage(gif);
@@ -230,28 +238,7 @@ async function updatePanels() {
 }
 
 // =============================
-// 🔘 BOTÓN (solo info)
-// =============================
-client.on("interactionCreate", async (i) => {
-  if (!i.isButton()) return;
-
-  const [, id] = i.customId.split("_");
-
-  const member = await i.guild.members.fetch(i.user.id);
-  const role = getUserRole(member);
-
-  if (i.user.id !== id && !role.isChampion) {
-    return i.reply({ content: "No tienes permiso", ephemeral: true });
-  }
-
-  await i.reply({
-    content: "Usa comandos:\n!namecolor #hex\n!textcolor #hex\nSube imagen para fondo",
-    ephemeral: true,
-  });
-});
-
-// =============================
-// 🎨 COMANDOS + FONDO (FIX REAL)
+// 🎨 COMANDOS + FONDO
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
@@ -265,61 +252,47 @@ client.on("messageCreate", async (msg) => {
     if (role.isChampion) targetId = mention.id;
   }
 
-  if (!userSettings[targetId]) {
-    userSettings[targetId] = {
-      bg: null,
-      nameColor: "#ffffff",
-      textColor: "#ffffff",
-    };
-  }
+  if (!userSettings[targetId]) userSettings[targetId] = {};
 
   const settings = userSettings[targetId];
 
-  // 🎨 COLOR NOMBRE
-  if (msg.content.startsWith("!namecolor")) {
-    const color = msg.content.split(" ")[1];
-    if (!color) return;
+  // 🎨 COLOR
+  if (msg.content.startsWith("!color")) {
+    const [, type, colorName] = msg.content.split(" ");
+    const hex = colorMap[colorName?.toLowerCase()];
 
-    settings.nameColor = color;
+    if (!hex) return msg.reply("Color no válido");
+
+    if (type === "nombre") settings.nameColor = hex;
+    if (type === "texto") settings.textColor = hex;
+
     await refreshPanel(targetId);
-    return msg.reply("Color nombre actualizado ✅");
+    return msg.reply("Color aplicado ✅");
   }
 
-  // 🎨 COLOR TEXTO
-  if (msg.content.startsWith("!textcolor")) {
-    const color = msg.content.split(" ")[1];
-    if (!color) return;
-
-    settings.textColor = color;
-    await refreshPanel(targetId);
-    return msg.reply("Color texto actualizado ✅");
-  }
-
-  // 🖼️ FONDO
+  // 🖼️ FONDO (FIX REAL)
   if (msg.attachments.size > 0) {
-    const url = msg.attachments.first().url;
+    const file = msg.attachments.first();
 
-    if (!url.match(/\.(png|jpg|jpeg)$/i)) {
-      return msg.reply("Solo imágenes PNG/JPG");
+    if (!file.contentType?.startsWith("image/")) {
+      return msg.reply("Solo imágenes válidas");
     }
 
-    settings.bg = url;
+    settings.bg = file.url;
+
     await refreshPanel(targetId);
     return msg.reply("Fondo actualizado ✅");
   }
 });
 
 // =============================
-// 🔄 REFRESH PANEL
-// =============================
 async function refreshPanel(id) {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
-
   if (!userPanels[id]) return;
 
   const { file } = await renderPanel(id, channel);
-
   const msg = await channel.messages.fetch(userPanels[id].messageId);
+
   await msg.edit({ files: [file] });
 }
 
