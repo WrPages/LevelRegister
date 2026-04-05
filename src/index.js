@@ -12,15 +12,10 @@ import {
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
-
-// =============================
-// 🆕 STORAGE CHANNEL
-const STORAGE_CHANNEL_ID = "1490170595692773476";
 
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
@@ -46,31 +41,6 @@ let userPanels = {};
 let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
-
-// =============================
-// 🆕 FUNCIÓN STORAGE (NO TOCA NADA MÁS)
-async function saveImageToStorage(userId, file) {
-  try {
-    const res = await fetch(file.url);
-    const buffer = await res.buffer();
-
-    const attachment = new AttachmentBuilder(buffer, {
-      name: `bg_${userId}.png`,
-    });
-
-    const channel = await client.channels.fetch(STORAGE_CHANNEL_ID);
-
-    const msg = await channel.send({
-      content: `UserID: ${userId}`,
-      files: [attachment],
-    });
-
-    return msg.attachments.first().url;
-  } catch (err) {
-    console.error("Error guardando imagen:", err);
-    return null;
-  }
-}
 
 // =============================
 const colorMap = {
@@ -222,7 +192,104 @@ async function renderPanel(id, channel) {
 }
 
 // =============================
-// 🟢 SOLO CAMBIO AQUÍ
+function createColorButtons(type, userId) {
+  return new ActionRowBuilder().addComponents(
+    Object.entries(colorMap).map(([name, hex]) =>
+      new ButtonBuilder()
+        .setCustomId(`color_${type}_${userId}_${name}`)
+        .setLabel(name)
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+}
+
+// =============================
+async function updatePanels() {
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  for (const [id] of Object.entries(liveTracker)) {
+
+    if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
+
+    const { file, gif } = await renderPanel(id, channel);
+
+    if (userPanels[id]) {
+      const msg = await channel.messages.fetch(userPanels[id].messageId);
+      await msg.edit({ files: [file] });
+      continue;
+    }
+
+    const sent = await channel.send({ files: [file] });
+
+    const thread = await sent.startThread({
+      name: `Perfil`,
+      autoArchiveDuration: 1440,
+    });
+
+    const menu = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`menu_${id}`)
+        .setPlaceholder("🎨 Editar perfil")
+        .addOptions([
+          { label: "Cambiar fondo", value: "bg" },
+          { label: "Color nombre", value: "name" },
+          { label: "Color texto", value: "text" },
+        ])
+    );
+
+    await thread.send({
+      content: "🎮 Panel de personalización",
+      components: [menu],
+    });
+
+    const embed = new EmbedBuilder().setImage(gif);
+    await thread.send({ embeds: [embed] });
+
+    userPanels[id] = { messageId: sent.id, threadId: thread.id };
+  }
+}
+
+// =============================
+// 🎮 INTERACCIONES
+// =============================
+client.on("interactionCreate", async (i) => {
+  if (i.isStringSelectMenu()) {
+    const [, id] = i.customId.split("_");
+
+    const option = i.values[0];
+    editState[id] = option;
+
+    if (option === "bg") {
+      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
+    }
+
+    if (option === "name" || option === "text") {
+      return i.reply({
+        content: "🎨 Selecciona un color:",
+        components: [createColorButtons(option, id)],
+        ephemeral: true
+      });
+    }
+  }
+
+  // 🎨 BOTONES DE COLOR
+  if (i.isButton()) {
+    const [, type, id, colorName] = i.customId.split("_");
+
+    if (!userSettings[id]) userSettings[id] = {};
+
+    userSettings[id][type === "name" ? "nameColor" : "textColor"] =
+      colorMap[colorName];
+
+    await forceRender(id);
+
+    return i.reply({ content: "Color aplicado ✅", ephemeral: true });
+  }
+});
+
+// =============================
+// 📝 MENSAJES (FONDO)
+// =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
 
@@ -243,16 +310,81 @@ client.on("messageCreate", async (msg) => {
       file.contentType?.startsWith("image/") ||
       file.url.match(/\.(png|jpg|jpeg|webp)/i)
     ) {
-      // 🔥 AQUÍ EL CAMBIO REAL
-      const savedUrl = await saveImageToStorage(id, file);
-
-      if (!savedUrl) return msg.reply("Error guardando imagen");
-
-      userSettings[id].bg = savedUrl;
+      userSettings[id].bg = file.url;
 
       await forceRender(id);
 
-      return msg.reply("Fondo guardado permanentemente ✅");
+      return msg.reply("Fondo actualizado ✅");
     }
   }
 });
+
+// =============================
+async function forceRender(id) {
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  lastManualEdit[id] = Date.now();
+
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: trackingData[id]?.name || "User",
+      packs: 0,
+    };
+  }
+
+  const { file } = await renderPanel(id, channel);
+
+  const msg = await channel.messages.fetch(userPanels[id].messageId);
+
+  await msg.edit({
+    content: `updated_${Date.now()}`,
+    files: [file]
+  });
+}
+
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+    for (const id in liveTracker) {
+      if (!trackingData[id]) {
+        trackingData[id] = { xp: 0, time: 0, name: liveTracker[id].name, packs: 0, gp: 0 };
+      }
+
+      const s = liveTracker[id];
+
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].packs = s.packs;
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+  }, 600000);
+}
+
+// =============================
+function safeParse(data) {
+  try { return typeof data === "object" ? data : JSON.parse(data); }
+  catch { return {}; }
+}
+
+function sanitizeTracking() {
+  for (const k in trackingData) {
+    trackingData[k].xp = Number(trackingData[k].xp) || 0;
+    trackingData[k].time = Number(trackingData[k].time) || 0;
+    trackingData[k].gp = Number(trackingData[k].gp) || 0;
+  }
+}
+
+function cleanOnlineIds(raw) {
+  if (!raw) return [];
+  return raw.split("\n").map(x => x.trim()).filter(Boolean);
+}
+
+client.login(process.env.DISCORD_TOKEN);
