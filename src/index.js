@@ -12,10 +12,18 @@ import {
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
+import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
+
+// =============================
+// 🛑 VALIDACIÓN ENV
+// =============================
+if (!process.env.GIST_SETTINGS) {
+  throw new Error("❌ FALTA GIST_SETTINGS en Railway");
+}
 
 // =============================
 // 🧠 FONT
@@ -51,13 +59,28 @@ const imageCache = new Map();
 
 async function loadImageCached(src) {
   try {
+    if (!src) return await loadImage("./assets/card.png");
+
     if (imageCache.has(src)) return imageCache.get(src);
 
-    const img = await loadImage(src);
+    let img;
+
+    if (src.startsWith("http")) {
+      const res = await fetch(src);
+      const buffer = await res.arrayBuffer();
+      img = await loadImage(Buffer.from(buffer));
+    } else {
+      img = await loadImage(src);
+    }
+
     imageCache.set(src, img);
+
+    if (imageCache.size > 50) imageCache.clear();
+
     return img;
-  } catch {
-    return loadImage("./assets/card.png");
+  } catch (err) {
+    console.error("Error cargando imagen:", err.message);
+    return await loadImage("./assets/card.png");
   }
 }
 
@@ -123,7 +146,6 @@ client.once("clientReady", async () => {
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
-  // 🆕 SETTINGS PERSISTENTES
   userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
   sanitizeTracking();
@@ -195,7 +217,6 @@ async function renderPanel(id, channel) {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  // 🛡️ SAFE IMAGE LOAD
   const bg = await loadImageCached(settings.bg || "./assets/card.png");
   ctx.drawImage(bg, 0, 0, 800, 450);
 
@@ -314,7 +335,7 @@ client.on("interactionCreate", async (i) => {
     userSettings[id][type === "name" ? "nameColor" : "textColor"] =
       colorMap[colorName];
 
-    saveSettings(); // 💾
+    saveSettings();
 
     await forceRender(id);
 
@@ -344,7 +365,7 @@ client.on("messageCreate", async (msg) => {
     if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
       userSettings[id].bg = file.url;
 
-      saveSettings(); // 💾
+      saveSettings();
 
       await forceRender(id);
 
