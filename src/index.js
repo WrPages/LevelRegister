@@ -1,148 +1,91 @@
-const {
-  Client,
-  GatewayIntentBits,
+import {
   REST,
   Routes,
   SlashCommandBuilder
-} = require("discord.js");
+} from "discord.js";
 
-const fetch = require("node-fetch");
+import { getGist, updateGist } from "./gist.js";
 
-// ===== CONFIG =====
-const TOKEN = process.env.TOKEN;
+// =============================
+// ⚙️ VARIABLES
+// =============================
+const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-// 👉 GIST DE USUARIOS (donde tienes main_id)
-const USERS_GIST_ID = "bb18eda2ea748723d8fe0131dd740b70";
-const USERS_FILE = "elite_users.json";
-
-// 👉 GIST DE ONLINE IDS (lista simple txt)
-const ONLINE_GIST_ID = "d9db3a72fed74c496fd6cc830f9ca6e9";
-const ONLINE_FILE = "elite_ids.txt";
-
-// ===== CLIENT =====
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
-
-// ===== LEER USUARIOS =====
-async function getUsers() {
-  try {
-    const res = await fetch(`https://api.github.com/gists/${USERS_GIST_ID}`, {
-      headers: { Authorization: `Bearer ${GITHUB_TOKEN}` }
-    });
-
-    const data = await res.json();
-    return JSON.parse(data.files[USERS_FILE].content || "{}");
-
-  } catch (err) {
-    console.error("❌ ERROR USERS:", err);
-    return {};
-  }
-}
-
-// ===== LEER ONLINE =====
-async function getOnlineList() {
-  try {
-    const res = await fetch(`https://api.github.com/gists/${ONLINE_GIST_ID}`);
-    const data = await res.json();
-
-    const content = data.files[ONLINE_FILE].content || "";
-    return content.split("\n").filter(x => x.trim() !== "");
-
-  } catch (err) {
-    console.error("❌ ERROR ONLINE:", err);
-    return [];
-  }
-}
-
-// ===== GUARDAR ONLINE =====
-async function saveOnlineList(list) {
-  try {
-    await fetch(`https://api.github.com/gists/${ONLINE_GIST_ID}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${GITHUB_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        files: {
-          [ONLINE_FILE]: {
-            content: list.join("\n")
-          }
-        }
-      })
-    });
-  } catch (err) {
-    console.error("❌ ERROR SAVE ONLINE:", err);
-  }
-}
-
-// ===== READY =====
-client.once("clientReady", async () => {
-  console.log(`✅ Bot listo como ${client.user.tag}`);
+// =============================
+// 📦 REGISTRAR COMANDOS
+// =============================
+export async function registerCommands() {
 
   const commands = [
     new SlashCommandBuilder()
       .setName("online")
-      .setDescription("Pon tu ID en online"),
+      .setDescription("Pon tu ID como online"),
 
     new SlashCommandBuilder()
       .setName("offline")
-      .setDescription("Quita tu ID de online")
+      .setDescription("Quita tu ID del online")
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
 
-    console.log("🚀 Comandos registrados");
-  } catch (err) {
-    console.error("❌ ERROR REGISTRANDO:", err);
-  }
-});
+  console.log("✅ Comandos registrados");
+}
 
-// ===== COMANDOS =====
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+// =============================
+// ⚡ HANDLER
+// =============================
+export async function handleCommands(client) {
 
-  const users = await getUsers();
-  const userData = users[interaction.user.id];
+  client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
 
-  if (!userData) {
-    return interaction.reply("❌ No estás registrado.");
-  }
+    let users = await getGist(process.env.GIST_USERS);
+    let online = await getGist(process.env.GIST_ONLINE);
 
-  const mainId = userData.main_id;
+    users = typeof users === "object" ? users : JSON.parse(users || "{}");
+    online = online ? online.split("\n").filter(Boolean) : [];
 
-  let onlineList = await getOnlineList();
+    const user = users[interaction.user.id];
 
-  // ===== ONLINE =====
-  if (interaction.commandName === "online") {
-
-    if (!onlineList.includes(mainId)) {
-      onlineList.push(mainId);
-      await saveOnlineList(onlineList);
+    if (!user) {
+      return interaction.reply({ content: "❌ No estás registrado", ephemeral: true });
     }
 
-    return interaction.reply("🟢  ONLINE");
-  }
+    // =============================
+    // 🟢 ONLINE
+    // =============================
+    if (interaction.commandName === "online") {
 
-  // ===== OFFLINE =====
-  if (interaction.commandName === "offline") {
+      if (!online.includes(user.main_id))
+        online.push(user.main_id);
 
-    onlineList = onlineList.filter(id => id !== mainId);
-    await saveOnlineList(onlineList);
+      if (user.sec_id && !online.includes(user.sec_id))
+        online.push(user.sec_id);
 
-    return interaction.reply("🔴  OFFLINE");
-  }
-});
+      await updateGist(process.env.GIST_ONLINE, online.join("\n"));
 
-// ===== LOGIN =====
-client.login(TOKEN);
+      return interaction.reply("🟢 Estás online");
+    }
+
+    // =============================
+    // 🔴 OFFLINE
+    // =============================
+    if (interaction.commandName === "offline") {
+
+      online = online.filter(id =>
+        id !== user.main_id && id !== user.sec_id
+      );
+
+      await updateGist(process.env.GIST_ONLINE, online.join("\n"));
+
+      return interaction.reply("🔴 Estás offline");
+    }
+  });
+}
