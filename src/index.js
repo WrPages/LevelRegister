@@ -19,14 +19,14 @@ import { getGist, updateGist } from "./gist.js";
 dotenv.config();
 
 // =============================
-// 🛑 VALIDACIÓN ENV
+// VALIDACIÓN ENV
 // =============================
 if (!process.env.GIST_SETTINGS) {
-  throw new Error("❌ FALTA GIST_SETTINGS en Railway");
+  throw new Error("❌ FALTA GIST_SETTINGS");
 }
 
 // =============================
-// 🧠 FONT
+// FONT
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
 if (fs.existsSync(fontPath)) {
@@ -51,9 +51,10 @@ let userPanels = {};
 let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
+let isReady = false;
 
 // =============================
-// ⚡ CACHE DE IMÁGENES
+// CACHE IMÁGENES
 // =============================
 const imageCache = new Map();
 
@@ -85,7 +86,7 @@ async function loadImageCached(src) {
 }
 
 // =============================
-// 💾 SAVE SETTINGS (DEBOUNCE)
+// SAVE SETTINGS
 // =============================
 let saveTimeout;
 
@@ -145,18 +146,17 @@ client.once("clientReady", async () => {
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-
   userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
   sanitizeTracking();
 
+  isReady = true;
+
   startLoop();
   startBackupLoop();
 
-  // 🔥 FIX: RE-RENDER GLOBAL DESPUÉS DE DEPLOY
+  // RE-RENDER GLOBAL
   setTimeout(async () => {
-    console.log("🔄 Re-render global después de cargar settings");
-
     const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
     for (const id of Object.keys(userSettings)) {
@@ -172,28 +172,29 @@ client.once("clientReady", async () => {
         };
       }
 
-      try {
-        const { file } = await renderPanel(id, channel);
-
-        if (userPanels[id]) {
+      if (userPanels[id]) {
+        try {
+          const { file } = await renderPanel(id, channel);
           const msg = await channel.messages.fetch(userPanels[id].messageId);
           await msg.edit({ files: [file] });
+        } catch (err) {
+          console.log("Error re-render:", err.message);
         }
-
-      } catch (err) {
-        console.log("Error re-render:", err.message);
       }
     }
-
   }, 5000);
 });
 
 // =============================
 function startLoop() {
   setInterval(async () => {
+
+    if (!isReady) return;
+
     onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
 
     for (const [id, user] of Object.entries(eliteUsers)) {
+
       const isOnline =
         onlineIds.includes(user.main_id) ||
         onlineIds.includes(user.sec_id);
@@ -212,20 +213,24 @@ function startLoop() {
       }
 
       const t = liveTracker[id];
+
       t.sessionTime += 1;
 
       let xpPerSecond = (2 + t.instances * 0.5) / 60;
+
       if (Date.now() < t.boostUntil) xpPerSecond *= 2;
 
       t.sessionXP += xpPerSecond;
     }
 
     await updatePanels();
+
   }, 5000);
 }
 
 // =============================
 async function renderPanel(id, channel) {
+
   const s = liveTracker[id];
   const t = trackingData[id] || {};
 
@@ -282,30 +287,13 @@ async function renderPanel(id, channel) {
 }
 
 // =============================
-function createColorButtons(type, userId) {
-  return new ActionRowBuilder().addComponents(
-    Object.entries(colorMap).map(([name]) =>
-      new ButtonBuilder()
-        .setCustomId(`color_${type}_${userId}_${name}`)
-        .setLabel(name)
-        .setStyle(ButtonStyle.Secondary)
-    )
-  );
-}
-
-// =============================
 async function updatePanels() {
+
+  if (!isReady) return;
+
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
   for (const [id] of Object.entries(liveTracker)) {
-
-    if (!userSettings[id]) {
-      userSettings[id] = {
-        bg: null,
-        nameColor: "#ffffff",
-        textColor: "#ffffff"
-      };
-    }
 
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
@@ -343,121 +331,6 @@ async function updatePanels() {
 
     userPanels[id] = { messageId: sent.id, threadId: thread.id };
   }
-}
-
-// =============================
-client.on("interactionCreate", async (i) => {
-
-  if (i.isStringSelectMenu()) {
-    const [, id] = i.customId.split("_");
-    const option = i.values[0];
-
-    editState[id] = option;
-
-    if (option === "bg") {
-      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
-    }
-
-    if (option === "name" || option === "text") {
-      return i.reply({
-        content: "🎨 Selecciona un color:",
-        components: [createColorButtons(option, id)],
-        ephemeral: true
-      });
-    }
-  }
-
-  if (i.isButton()) {
-    const [, type, id, colorName] = i.customId.split("_");
-
-    if (!userSettings[id]) userSettings[id] = {};
-
-    userSettings[id][type === "name" ? "nameColor" : "textColor"] =
-      colorMap[colorName];
-
-    saveSettings();
-
-    await forceRender(id);
-
-    return i.reply({ content: "Color aplicado ✅", ephemeral: true });
-  }
-});
-
-// =============================
-client.on("messageCreate", async (msg) => {
-  if (msg.author.bot) return;
-
-  const entry = Object.entries(userPanels).find(
-    ([id, d]) => d.threadId === msg.channel.id
-  );
-
-  if (!entry) return;
-
-  const [id] = entry;
-
-  if (editState[id] !== "bg") return;
-
-  if (msg.attachments.size > 0) {
-    const file = msg.attachments.first();
-
-    if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
-      userSettings[id].bg = file.url;
-
-      saveSettings();
-
-      await forceRender(id);
-
-      return msg.reply("Fondo actualizado ✅");
-    }
-  }
-});
-
-// =============================
-async function forceRender(id) {
-  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
-
-  lastManualEdit[id] = Date.now();
-
-  if (!liveTracker[id]) {
-    liveTracker[id] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: 1,
-      boostUntil: 0,
-      name: trackingData[id]?.name || "User",
-      packs: 0,
-    };
-  }
-
-  const { file } = await renderPanel(id, channel);
-  const msg = await channel.messages.fetch(userPanels[id].messageId);
-
-  await msg.edit({
-    content: `updated_${Date.now()}`,
-    files: [file]
-  });
-}
-
-// =============================
-function startBackupLoop() {
-  setInterval(async () => {
-    for (const id in liveTracker) {
-      if (!trackingData[id]) {
-        trackingData[id] = { xp: 0, time: 0, name: liveTracker[id].name, packs: 0, gp: 0 };
-      }
-
-      const s = liveTracker[id];
-
-      trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
-      trackingData[id].packs = s.packs;
-
-      s.sessionXP = 0;
-      s.sessionTime = 0;
-    }
-
-    await updateGist(process.env.GIST_TRACKING, trackingData);
-  }, 600000);
 }
 
 // =============================
