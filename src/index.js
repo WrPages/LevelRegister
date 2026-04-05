@@ -152,6 +152,40 @@ client.once("clientReady", async () => {
 
   startLoop();
   startBackupLoop();
+
+  // 🔥 FIX: RE-RENDER GLOBAL DESPUÉS DE DEPLOY
+  setTimeout(async () => {
+    console.log("🔄 Re-render global después de cargar settings");
+
+    const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+    for (const id of Object.keys(userSettings)) {
+
+      if (!liveTracker[id]) {
+        liveTracker[id] = {
+          sessionXP: 0,
+          sessionTime: 0,
+          instances: 1,
+          boostUntil: 0,
+          name: trackingData[id]?.name || "User",
+          packs: 0,
+        };
+      }
+
+      try {
+        const { file } = await renderPanel(id, channel);
+
+        if (userPanels[id]) {
+          const msg = await channel.messages.fetch(userPanels[id].messageId);
+          await msg.edit({ files: [file] });
+        }
+
+      } catch (err) {
+        console.log("Error re-render:", err.message);
+      }
+    }
+
+  }, 5000);
 });
 
 // =============================
@@ -265,6 +299,14 @@ async function updatePanels() {
 
   for (const [id] of Object.entries(liveTracker)) {
 
+    if (!userSettings[id]) {
+      userSettings[id] = {
+        bg: null,
+        nameColor: "#ffffff",
+        textColor: "#ffffff"
+      };
+    }
+
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
     const { file, gif } = await renderPanel(id, channel);
@@ -304,8 +346,6 @@ async function updatePanels() {
 }
 
 // =============================
-// 🎮 INTERACCIONES
-// =============================
 client.on("interactionCreate", async (i) => {
 
   if (i.isStringSelectMenu()) {
@@ -343,8 +383,6 @@ client.on("interactionCreate", async (i) => {
   }
 });
 
-// =============================
-// 🖼️ FONDO
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
