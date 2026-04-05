@@ -153,6 +153,33 @@ client.once("clientReady", async () => {
 
   startLoop();
   startBackupLoop();
+  // 🔥 FORZAR RE-RENDER CON SETTINGS DEL GIST
+setTimeout(async () => {
+
+  console.log("🔄 Re-render post deploy");
+
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  for (const id of Object.keys(userSettings)) {
+
+    if (!userPanels[id]) continue;
+
+    try {
+      const { file } = await renderPanel(id, channel);
+
+      const msg = await channel.messages.fetch(userPanels[id].messageId);
+
+      await msg.edit({
+        content: `reload_${Date.now()}`,
+        files: [file]
+      });
+
+    } catch (err) {
+      console.log("Error re-render:", err.message);
+    }
+  }
+
+}, 5000);
 });
 
 // =============================
