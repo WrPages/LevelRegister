@@ -217,7 +217,14 @@ async function renderPanel(id, channel) {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  const bg = await loadImageCached(settings.bg || "./assets/card.png");
+  let bg;
+
+if (settings.bg?.type === "base64") {
+  const buffer = Buffer.from(settings.bg.data, "base64");
+  bg = await loadImage(buffer);
+} else {
+  bg = await loadImageCached("./assets/card.png");
+}
   ctx.drawImage(bg, 0, 0, 800, 450);
 
   ctx.fillStyle = settings.nameColor;
@@ -328,20 +335,22 @@ client.on("interactionCreate", async (i) => {
   }
 
   if (i.isButton()) {
-    const [, type, id, colorName] = i.customId.split("_");
 
-    if (!userSettings[id]) userSettings[id] = {};
+  await i.deferReply({ ephemeral: true });
 
-    userSettings[id][type === "name" ? "nameColor" : "textColor"] =
-      colorMap[colorName];
+  const [, type, id, colorName] = i.customId.split("_");
 
-    saveSettings();
+  if (!userSettings[id]) userSettings[id] = {};
 
-    await forceRender(id);
+  userSettings[id][type === "name" ? "nameColor" : "textColor"] =
+    colorMap[colorName];
 
-    return i.reply({ content: "Color aplicado ✅", ephemeral: true });
-  }
-});
+  saveSettings();
+
+  await forceRender(id);
+
+  return i.editReply({ content: "Color aplicado ✅" });
+}
 
 // =============================
 // 🖼️ FONDO
@@ -363,7 +372,25 @@ client.on("messageCreate", async (msg) => {
     const file = msg.attachments.first();
 
     if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
-      userSettings[id].bg = file.url;
+      if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
+
+  // 🔥 Descargar imagen desde Discord
+  const res = await fetch(file.url);
+  const buffer = await res.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+
+  // 💾 Guardar en formato persistente
+  userSettings[id].bg = {
+    type: "base64",
+    data: base64
+  };
+
+  saveSettings();
+
+  await forceRender(id);
+
+  return msg.reply("Fondo actualizado y guardado permanentemente ✅");
+}
 
       saveSettings();
 
