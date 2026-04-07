@@ -152,53 +152,67 @@ client.once("clientReady", async () => {
 
   startLoop();
   startBackupLoop();
+  
 });
 
 // =============================
-function startLoop() {
-  setInterval(async () => {
 
-    console.log("⏱ Actualizando tracking...");
+async function runTrackingCycle() {
 
-    onlineIds = cleanOnlineIds(
-      await getGist(process.env.GIST_ONLINE)
-    );
+  console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
-    for (const [id, user] of Object.entries(eliteUsers)) {
+  onlineIds = cleanOnlineIds(
+    await getGist(process.env.GIST_ONLINE)
+  );
 
-      const isOnline =
-        onlineIds.includes(user.main_id) ||
-        onlineIds.includes(user.sec_id);
+  for (const [id, user] of Object.entries(eliteUsers)) {
 
-      if (!isOnline) continue;
+    const isOnline =
+      onlineIds.includes(user.main_id) ||
+      onlineIds.includes(user.sec_id);
 
-      if (!liveTracker[id]) {
-        liveTracker[id] = {
-          sessionXP: 0,
-          sessionTime: 0,
-          instances: 1,
-          boostUntil: 0,
-          name: user.name,
-          packs: 0,
-        };
-      }
+    if (!isOnline) continue;
 
-      const t = liveTracker[id];
-
-      // 🔥 Simulamos 5 minutos de golpe
-      const seconds = 300; // 5 min
-      t.sessionTime += seconds;
-
-      let xpPerSecond = (2 + t.instances * 0.5) / 60;
-      if (Date.now() < t.boostUntil) xpPerSecond *= 2;
-
-      t.sessionXP += xpPerSecond * seconds;
+    if (!liveTracker[id]) {
+      liveTracker[id] = {
+        sessionXP: 0,
+        sessionTime: 0,
+        instances: 1,
+        boostUntil: 0,
+        name: user.name,
+        packs: 0,
+      };
     }
 
-    await updatePanels(); // Render solo cada 5 min
+    const t = liveTracker[id];
 
-  }, 300000); // 5 minutos
+    const seconds = 300; // 5 minutos
+    t.sessionTime += seconds;
+
+    let xpPerSecond = (2 + t.instances * 0.5) / 60;
+    if (Date.now() < t.boostUntil) xpPerSecond *= 2;
+
+    t.sessionXP += xpPerSecond * seconds;
+  }
+
+  await updatePanels();
 }
+
+function startLoop() {
+
+  // 🔥 Ejecuta inmediatamente al iniciar
+  runTrackingCycle();
+
+  // 🔁 Luego cada 5 minutos
+  setInterval(runTrackingCycle, 300000);
+}
+
+
+
+
+
+
+
 // =============================
 async function renderPanel(id, channel) {
   const s = liveTracker[id];
