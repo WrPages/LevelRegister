@@ -92,7 +92,7 @@ let saveTimeout;
 function saveSettings() {
   clearTimeout(saveTimeout);
   saveTimeout = setTimeout(() => {
-    updateGist(process.env.GIST_SETTINGS,"Profiledata.json", userSettings);
+    updateGist(process.env.GIST_SETTINGS, userSettings);
   }, 2000);
 }
 
@@ -491,7 +491,7 @@ function startBackupLoop() {
       s.sessionTime = 0;
     }
 
-    await updateGist(process.env.GIST_TRACKING, "tracking.json",trackingData);
+    await updateGist(process.env.GIST_TRACKING, trackingData);
   }, 600000);
 }
 
