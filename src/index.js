@@ -283,16 +283,17 @@ function createColorButtons(type) {
   const buttons = Object.keys(colorMap).map(name =>
     new ButtonBuilder()
       .setCustomId(`c_${type}_${name}`)
-      .setLabel(" ")
       .setEmoji(colorEmojis[name])
       .setStyle(ButtonStyle.Secondary)
   );
 
   const rows = [];
 
-  while (buttons.length) {
+  for (let i = 0; i < buttons.length; i += 5) {
     rows.push(
-      new ActionRowBuilder().addComponents(buttons.splice(0, 5))
+      new ActionRowBuilder().addComponents(
+        buttons.slice(i, i + 5)
+      )
     );
   }
 
@@ -376,12 +377,11 @@ if (i.isButton()) {
 
   const [, type, colorName] = i.customId.split("_");
 
-  // 🔥 Buscar el usuario dueño del panel por thread
   const entry = Object.entries(userPanels)
     .find(([_, data]) => data.threadId === i.channel.id);
 
   if (!entry) {
-    return i.editReply({ content: "Error: panel no encontrado." });
+    return i.editReply({ content: "Panel no encontrado." });
   }
 
   const [id] = entry;
