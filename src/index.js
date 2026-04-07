@@ -2,12 +2,38 @@ import {
   Client,
   GatewayIntentBits,
   AttachmentBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } from "discord.js";
+
 import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
+import fetch from "node-fetch";
+import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
+// =============================
+// 🛑 VALIDACIÓN ENV
+// =============================
+if (!process.env.GIST_SETTINGS) {
+  throw new Error("❌ FALTA GIST_SETTINGS en Railway");
+}
+
+// =============================
+// 🧠 FONT
+// =============================
+const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
+if (fs.existsSync(fontPath)) {
+  registerFont(fontPath, { family: "Righteous" });
+}
+
+// =============================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -21,210 +47,127 @@ let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
 let liveTracker = {};
-let liveMessageId = null;
+let userPanels = {};
+let userSettings = {};
+let editState = {};
+let lastManualEdit = {};
 
 // =============================
-// 🧬 EVOLUCIÓN + GIF (GIF REAL FUNCIONANDO)
+// ⚡ CACHE DE IMÁGENES
 // =============================
-function getPokemonData(totalXP) {
-  const stages = [
-    {
-      name: "🥚 Huevo",
-      min: 0,
-      max: 400,
-      gif: "https://i.imgur.com/J5q8GQG.gif",
-    },
-    {
-      name: "🐣 Fase 1",
-      min: 400,
-      max: 800,
-      gif: "https://i.imgur.com/1X4Jg3N.gif",
-    },
-    {
-      name: "🐤 Fase 2",
-      min: 800,
-      max: 1200,
-      gif: "https://i.imgur.com/0XKzn6P.gif",
-    },
-    {
-      name: "🦅 Fase Final",
-      min: 1200,
-      max: Infinity,
-      gif: "https://i.imgur.com/8k6M2YB.gif",
-    },
-  ];
+const imageCache = new Map();
 
-  const current = stages.find(
-    (s) => totalXP >= s.min && totalXP < s.max
-  );
+async function loadImageCached(src) {
+  try {
+    if (!src) return await loadImage("./assets/card.png");
 
-  const progress =
-    current.max === Infinity
-      ? 1
-      : (totalXP - current.min) / (current.max - current.min);
+    if (imageCache.has(src)) return imageCache.get(src);
 
-  return {
-    stage: current.name,
-    gif: current.gif,
-    progress,
-  };
+    let img;
+
+    if (src.startsWith("http")) {
+      const res = await fetch(src);
+      const buffer = await res.arrayBuffer();
+      img = await loadImage(Buffer.from(buffer));
+    } else {
+      img = await loadImage(src);
+    }
+
+    imageCache.set(src, img);
+
+    if (imageCache.size > 50) imageCache.clear();
+
+    return img;
+  } catch (err) {
+    console.error("Error cargando imagen:", err.message);
+    return await loadImage("./assets/card.png");
+  }
 }
 
 // =============================
-client.once("ready", async () => {
-  console.log(`✅ Bot listo como ${client.user.tag}`);
+// 💾 SAVE SETTINGS (DEBOUNCE)
+// =============================
+let saveTimeout;
+
+function saveSettings() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    updateGist(process.env.GIST_SETTINGS, userSettings);
+  }, 2000);
+}
+
+// =============================
+const colorMap = {
+  rojo: "#ff0000",
+  verde: "#00ff00",
+  azul: "#0099ff",
+  amarillo: "#ffff00",
+  morado: "#800080",
+  rosa: "#ff00ff",
+  cian: "#00ffff",
+  blanco: "#ffffff",
+};
+
+// =============================
+function getUserRole(member) {
+  const roles = member.roles.cache;
+
+  if (roles.some(r => r.name === "Champion"))
+    return { name: "Champion", color: "#FFD700" };
+
+  if (roles.some(r => r.name === "Elite_Four"))
+    return { name: "Elite Four", color: "#800080" };
+
+  if (roles.some(r => r.name === "Gym_Leader"))
+    return { name: "Gym Leader", color: "#0099ff" };
+
+  if (roles.some(r => r.name === "Trainer"))
+    return { name: "Trainer", color: "#00ff00" };
+
+  return { name: "Reroller", color: "#aaaaaa" };
+}
+
+// =============================
+function getPokemonData(totalXP) {
+  const stages = [
+    { name: "Huevo", min: 0, max: 400, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
+    { name: "Fase 1", min: 400, max: 800, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
+    { name: "Fase 2", min: 800, max: 1200, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif" },
+    { name: "Final", min: 1200, max: Infinity, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif" },
+  ];
+  return stages.find(s => totalXP >= s.min && totalXP < s.max);
+}
+
+// =============================
+client.once("clientReady", async () => {
+  console.log(`Bot listo como ${client.user.tag}`);
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
+  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
+
   sanitizeTracking();
-  await bootstrapFromHistory();
-  await createMessage();
 
   startLoop();
   startBackupLoop();
 });
 
 // =============================
-// 🧠 PERFIL BONITO (TARJETA)
-// =============================
-client.on("messageCreate", async (msg) => {
-  if (msg.content.startsWith("!profile")) {
-    let targetId = msg.author.id;
-
-    if (msg.mentions.users.first()) {
-      targetId = msg.mentions.users.first().id;
-    }
-
-    const s = liveTracker[targetId];
-    const t = trackingData[targetId] || {};
-
-    if (!s) return msg.reply("❌ Usuario sin datos.");
-
-    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-    const totalTime =
-      (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-    const level = Math.floor(totalXP / 100);
-
-    const { stage, gif, progress } = getPokemonData(totalXP);
-
-    const progressBar =
-      "🟩".repeat(Math.floor(progress * 10)) +
-      "⬛".repeat(10 - Math.floor(progress * 10));
-
-    // 🔥 TARJETA TIPO PERFIL (SIN EMBED)
-    const content = `
-╔════════════════════════════╗
-   🧠 ${s.name.toUpperCase()}
-╠════════════════════════════╣
-🎖 Nivel: ${level}
-📈 XP: ${totalXP.toFixed(2)}
-⏱ Tiempo: ${totalTime}m
-🧩 Instancias: ${s.instances}
-📦 Packs: ${s.packs}
-💎 GP: ${t.gp || 0}
-╠════════════════════════════╣
-🧬 Evolución: ${stage}
-${progressBar}
-╚════════════════════════════╝
-`;
-
-    // 🔥 GIF COMO ARCHIVO (100% FUNCIONA)
-    const file = new AttachmentBuilder(gif, {
-      name: "pokemon.gif",
-    });
-
-    return msg.channel.send({
-      content,
-      files: [file],
-    });
-  }
-
-  // =============================
-  // 🔥 DETECTOR GP
-  // =============================
-  if (msg.channel.id !== process.env.GP_CHANNEL_ID) return;
-
-  let content = msg.content;
-
-  if (!content && msg.embeds.length > 0) {
-    const e = msg.embeds[0];
-    content = `${e.title || ""}\n${e.description || ""}`;
-  }
-
-  if (!content || !content.includes("God Pack found")) return;
-
-  const firstLine = content.split("\n")[0];
-  const normalize = (s) => s?.toLowerCase().trim();
-
-  let discordId = null;
-
-  const mentionMatch = firstLine.match(/<@!?(\d+)>/);
-
-  if (mentionMatch && eliteUsers[mentionMatch[1]]) {
-    discordId = mentionMatch[1];
-  }
-
-  if (!discordId) {
-    const rawName = firstLine.replace("@", "").split(" ")[0];
-
-    const matched = Object.entries(eliteUsers).find(
-      ([_, user]) =>
-        normalize(user.name) === normalize(rawName)
-    );
-
-    if (matched) discordId = matched[0];
-  }
-
-  if (!discordId) return;
-
-  if (!trackingData[discordId]) {
-    trackingData[discordId] = {
-      xp: 0,
-      time: 0,
-      name: "Unknown",
-      packs: 0,
-      gp: 0,
-    };
-  }
-
-  if (!liveTracker[discordId]) {
-    liveTracker[discordId] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: 1,
-      boostUntil: 0,
-      name: trackingData[discordId].name,
-      packs: 0,
-    };
-  }
-
-  trackingData[discordId].xp += 1000;
-  trackingData[discordId].gp += 1;
-
-  liveTracker[discordId].boostUntil =
-    Date.now() + 3600000;
-
-  await updateGist(process.env.GIST_TRACKING, trackingData);
-});
-
-// =============================
 function startLoop() {
   setInterval(async () => {
-    onlineIds = cleanOnlineIds(
-      await getGist(process.env.GIST_ONLINE)
-    );
+    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
 
-    for (const [discordId, user] of Object.entries(eliteUsers)) {
+    for (const [id, user] of Object.entries(eliteUsers)) {
       const isOnline =
         onlineIds.includes(user.main_id) ||
         onlineIds.includes(user.sec_id);
 
       if (!isOnline) continue;
 
-      if (!liveTracker[discordId]) {
-        liveTracker[discordId] = {
+      if (!liveTracker[id]) {
+        liveTracker[id] = {
           sessionXP: 0,
           sessionTime: 0,
           instances: 1,
@@ -234,22 +177,227 @@ function startLoop() {
         };
       }
 
-      const t = liveTracker[discordId];
-
+      const t = liveTracker[id];
       t.sessionTime += 1;
 
-      let xpPerSecond =
-        (2 + t.instances * 0.5) / 60;
-
-      if (Date.now() < t.boostUntil) {
-        xpPerSecond *= 2;
-      }
+      let xpPerSecond = (2 + t.instances * 0.5) / 60;
+      if (Date.now() < t.boostUntil) xpPerSecond *= 2;
 
       t.sessionXP += xpPerSecond;
     }
 
-    updateMessage();
-  }, 1000);
+    await updatePanels();
+  }, 5000);
+}
+
+// =============================
+async function renderPanel(id, channel) {
+  const s = liveTracker[id];
+  const t = trackingData[id] || {};
+
+  if (!userSettings[id]) {
+    userSettings[id] = {
+      bg: null,
+      nameColor: "#ffffff",
+      textColor: "#ffffff",
+    };
+  }
+
+  const settings = userSettings[id];
+
+  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+  const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+  const level = Math.floor(totalXP / 100);
+
+  const poke = getPokemonData(totalXP);
+
+  const member = await channel.guild.members.fetch(id).catch(() => null);
+  const role = member ? getUserRole(member) : { name: "Reroller", color: "#aaa" };
+
+  const canvas = createCanvas(800, 450);
+  const ctx = canvas.getContext("2d");
+
+  const bg = await loadImageCached(settings.bg || "./assets/card.png");
+  ctx.drawImage(bg, 0, 0, 800, 450);
+
+  ctx.fillStyle = settings.nameColor;
+  ctx.font = "50px Righteous";
+  ctx.fillText(s.name, 40, 80);
+
+  ctx.fillStyle = role.color;
+  ctx.font = "22px Righteous";
+  ctx.fillText(role.name, 42, 110);
+
+  ctx.fillStyle = "#00ffcc";
+  ctx.font = "38px Righteous";
+  ctx.fillText(`Lv ${level}`, 620, 80);
+
+  ctx.fillStyle = settings.textColor;
+  ctx.font = "24px Righteous";
+
+  ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
+  ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
+  ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
+  ctx.fillText(`Packs: ${s.packs}`, 40, 290);
+  ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
+
+  return {
+    file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
+    gif: poke.gif
+  };
+}
+
+// =============================
+function createColorButtons(type, userId) {
+  return new ActionRowBuilder().addComponents(
+    Object.entries(colorMap).map(([name]) =>
+      new ButtonBuilder()
+        .setCustomId(`color_${type}_${userId}_${name}`)
+        .setLabel(name)
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+}
+
+// =============================
+async function updatePanels() {
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  for (const [id] of Object.entries(liveTracker)) {
+
+    if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
+
+    const { file, gif } = await renderPanel(id, channel);
+
+    if (userPanels[id]) {
+      const msg = await channel.messages.fetch(userPanels[id].messageId);
+      await msg.edit({ files: [file] });
+      continue;
+    }
+
+    const sent = await channel.send({ files: [file] });
+
+    const thread = await sent.startThread({
+      name: "Perfil",
+      autoArchiveDuration: 1440,
+    });
+
+    const menu = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`menu_${id}`)
+        .addOptions([
+          { label: "Cambiar fondo", value: "bg" },
+          { label: "Color nombre", value: "name" },
+          { label: "Color texto", value: "text" },
+        ])
+    );
+
+    await thread.send({
+      content: "🎮 Panel de personalización",
+      components: [menu],
+    });
+
+    await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
+
+    userPanels[id] = { messageId: sent.id, threadId: thread.id };
+  }
+}
+
+// =============================
+// 🎮 INTERACCIONES
+// =============================
+client.on("interactionCreate", async (i) => {
+
+  if (i.isStringSelectMenu()) {
+    const [, id] = i.customId.split("_");
+    const option = i.values[0];
+
+    editState[id] = option;
+
+    if (option === "bg") {
+      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
+    }
+
+    if (option === "name" || option === "text") {
+      return i.reply({
+        content: "🎨 Selecciona un color:",
+        components: [createColorButtons(option, id)],
+        ephemeral: true
+      });
+    }
+  }
+
+  if (i.isButton()) {
+    const [, type, id, colorName] = i.customId.split("_");
+
+    if (!userSettings[id]) userSettings[id] = {};
+
+    userSettings[id][type === "name" ? "nameColor" : "textColor"] =
+      colorMap[colorName];
+
+    saveSettings();
+
+    await forceRender(id);
+
+    return i.reply({ content: "Color aplicado ✅", ephemeral: true });
+  }
+});
+
+// =============================
+// 🖼️ FONDO
+// =============================
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
+
+  const entry = Object.entries(userPanels).find(
+    ([id, d]) => d.threadId === msg.channel.id
+  );
+
+  if (!entry) return;
+
+  const [id] = entry;
+
+  if (editState[id] !== "bg") return;
+
+  if (msg.attachments.size > 0) {
+    const file = msg.attachments.first();
+
+    if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
+      userSettings[id].bg = file.url;
+
+      saveSettings();
+
+      await forceRender(id);
+
+      return msg.reply("Fondo actualizado ✅");
+    }
+  }
+});
+
+// =============================
+async function forceRender(id) {
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  lastManualEdit[id] = Date.now();
+
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: trackingData[id]?.name || "User",
+      packs: 0,
+    };
+  }
+
+  const { file } = await renderPanel(id, channel);
+  const msg = await channel.messages.fetch(userPanels[id].messageId);
+
+  await msg.edit({
+    content: `updated_${Date.now()}`,
+    files: [file]
+  });
 }
 
 // =============================
@@ -257,20 +405,13 @@ function startBackupLoop() {
   setInterval(async () => {
     for (const id in liveTracker) {
       if (!trackingData[id]) {
-        trackingData[id] = {
-          xp: 0,
-          time: 0,
-          name: liveTracker[id].name,
-          packs: 0,
-          gp: 0,
-        };
+        trackingData[id] = { xp: 0, time: 0, name: liveTracker[id].name, packs: 0, gp: 0 };
       }
 
       const s = liveTracker[id];
 
       trackingData[id].xp += s.sessionXP;
       trackingData[id].time += Math.floor(s.sessionTime / 60);
-      trackingData[id].name = s.name;
       trackingData[id].packs = s.packs;
 
       s.sessionXP = 0;
@@ -282,152 +423,22 @@ function startBackupLoop() {
 }
 
 // =============================
-async function bootstrapFromHistory() {
-  const channel = await client.channels.fetch(
-    process.env.HEARTBEAT_CHANNEL_ID
-  );
-
-  const messages = await channel.messages.fetch({ limit: 50 });
-
-  for (const msg of messages.values()) {
-    let content = msg.content;
-
-    if (!content && msg.embeds.length > 0) {
-      const e = msg.embeds[0];
-      content = `${e.title || ""}\n${e.description || ""}`;
-    }
-
-    if (!content) continue;
-
-    const data = parseHeartbeat(content);
-    if (!data.name) continue;
-
-    const normalize = (s) => s?.toLowerCase().trim();
-
-    const matched = Object.entries(eliteUsers).find(
-      ([_, user]) =>
-        normalize(user.name) === normalize(data.name)
-    );
-
-    if (!matched) continue;
-
-    const [discordId, user] = matched;
-
-    const isOnline =
-      onlineIds.includes(user.main_id) ||
-      onlineIds.includes(user.sec_id);
-
-    if (!isOnline) continue;
-
-    liveTracker[discordId] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: data.instances,
-      boostUntil: 0,
-      name: data.name,
-      packs: data.packs,
-    };
-  }
-}
-
-// =============================
-function parseHeartbeat(content) {
-  const lines = content.split("\n");
-
-  const name = lines[0]?.trim();
-  const onlineLine = lines.find((l) => l.startsWith("Online:"));
-  const packsLine = lines.find((l) => l.includes("Packs:"));
-
-  let instances = 0;
-  let packs = 0;
-
-  if (onlineLine) {
-    const value = onlineLine.split(":")[1]?.trim();
-
-    if (value && value.toLowerCase() !== "none") {
-      instances = value.split(",").length;
-    }
-  }
-
-  if (packsLine) {
-    const match = packsLine.match(/Packs:\s*(\d+)/);
-    if (match) packs = Number(match[1]);
-  }
-
-  return { name, instances, packs };
-}
-
-// =============================
-async function createMessage() {
-  const channel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
-
-  const msg = await channel.send("🔥 Iniciando tracking...");
-  liveMessageId = msg.id;
-}
-
-// =============================
-async function updateMessage() {
-  if (!liveMessageId) return;
-
-  const channel = await client.channels.fetch(
-    process.env.STATS_CHANNEL_ID
-  );
-
-  const msg = await channel.messages.fetch(liveMessageId);
-
-  let content = "🏆 TRACKING EN VIVO\n\n";
-
-  for (const [id, s] of Object.entries(liveTracker)) {
-    const t = trackingData[id] || {
-      xp: 0,
-      gp: 0,
-      time: 0,
-    };
-
-    const totalXP = t.xp + s.sessionXP;
-    const totalTime =
-      (t.time || 0) +
-      Math.floor((s.sessionTime || 0) / 60);
-
-    const level = Math.floor(totalXP / 100);
-
-    content += `👤 ${s.name} 🎖 Nivel ${level} ⏱ ${totalTime}m XP ${totalXP.toFixed(
-      2
-    )} 💎 GP: ${t.gp}\n`;
-  }
-
-  await msg.edit(content);
-}
-
-// =============================
 function safeParse(data) {
-  try {
-    return typeof data === "object"
-      ? data
-      : JSON.parse(data);
-  } catch {
-    return {};
-  }
+  try { return typeof data === "object" ? data : JSON.parse(data); }
+  catch { return {}; }
 }
 
 function sanitizeTracking() {
   for (const k in trackingData) {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
-    trackingData[k].packs = Number(trackingData[k].packs) || 0;
     trackingData[k].gp = Number(trackingData[k].gp) || 0;
   }
 }
 
 function cleanOnlineIds(raw) {
   if (!raw) return [];
-
-  return raw
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
+  return raw.split("\n").map(x => x.trim()).filter(Boolean);
 }
 
 client.login(process.env.DISCORD_TOKEN);
