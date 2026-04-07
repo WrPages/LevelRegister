@@ -2,6 +2,9 @@ import axios from "axios";
 
 const BASE = "https://api.github.com/gists";
 
+// =============================
+// 📥 LEER GIST
+// =============================
 export async function getGist(gistId) {
   try {
     const res = await axios.get(`${BASE}/${gistId}`, {
@@ -10,20 +13,35 @@ export async function getGist(gistId) {
       }
     });
 
-    const file = Object.values(res.data.files)[0];
+    // Obtener nombre real del archivo
+    const fileName = Object.keys(res.data.files)[0];
+    const file = res.data.files[fileName];
+
     return file.content;
 
   } catch (err) {
     console.error("❌ Error leyendo gist:", err.response?.data || err.message);
-    throw err;
+    return "{}";
   }
 }
 
+// =============================
+// 💾 ACTUALIZAR GIST
+// =============================
 export async function updateGist(gistId, content) {
   try {
+    // Primero obtenemos el nombre real del archivo
+    const res = await axios.get(`${BASE}/${gistId}`, {
+      headers: {
+        Authorization: `token ${process.env.GIST_TOKEN}`
+      }
+    });
+
+    const fileName = Object.keys(res.data.files)[0];
+
     await axios.patch(`${BASE}/${gistId}`, {
       files: {
-        "tracking.json": {
+        [fileName]: {
           content: JSON.stringify(content, null, 2)
         }
       }
