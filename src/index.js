@@ -1,91 +1,433 @@
 import {
-  REST,
-  Routes,
-  SlashCommandBuilder
+  Client,
+  GatewayIntentBits,
+  AttachmentBuilder,
 } from "discord.js";
-
+import dotenv from "dotenv";
 import { getGist, updateGist } from "./gist.js";
 
-// =============================
-// ⚙️ VARIABLES
-// =============================
-const TOKEN = process.env.DISCORD_TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+dotenv.config();
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
 
 // =============================
-// 📦 REGISTRAR COMANDOS
+let eliteUsers = {};
+let onlineIds = [];
+let trackingData = {};
+let liveTracker = {};
+let liveMessageId = null;
+
 // =============================
-export async function registerCommands() {
+// 🧬 EVOLUCIÓN + GIF (GIF REAL FUNCIONANDO)
+// =============================
+function getPokemonData(totalXP) {
+  const stages = [
+    {
+      name: "🥚 Huevo",
+      min: 0,
+      max: 400,
+      gif: "https://i.imgur.com/J5q8GQG.gif",
+    },
+    {
+      name: "🐣 Fase 1",
+      min: 400,
+      max: 800,
+      gif: "https://i.imgur.com/1X4Jg3N.gif",
+    },
+    {
+      name: "🐤 Fase 2",
+      min: 800,
+      max: 1200,
+      gif: "https://i.imgur.com/0XKzn6P.gif",
+    },
+    {
+      name: "🦅 Fase Final",
+      min: 1200,
+      max: Infinity,
+      gif: "https://i.imgur.com/8k6M2YB.gif",
+    },
+  ];
 
-  const commands = [
-    new SlashCommandBuilder()
-      .setName("online")
-      .setDescription("Pon tu ID como online"),
-
-    new SlashCommandBuilder()
-      .setName("offline")
-      .setDescription("Quita tu ID del online")
-  ].map(c => c.toJSON());
-
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
+  const current = stages.find(
+    (s) => totalXP >= s.min && totalXP < s.max
   );
 
-  console.log("✅ Comandos registrados");
+  const progress =
+    current.max === Infinity
+      ? 1
+      : (totalXP - current.min) / (current.max - current.min);
+
+  return {
+    stage: current.name,
+    gif: current.gif,
+    progress,
+  };
 }
 
 // =============================
-// ⚡ HANDLER
+client.once("ready", async () => {
+  console.log(`✅ Bot listo como ${client.user.tag}`);
+
+  eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
+  onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
+
+  sanitizeTracking();
+  await bootstrapFromHistory();
+  await createMessage();
+
+  startLoop();
+  startBackupLoop();
+});
+
 // =============================
-export async function handleCommands(client) {
+// 🧠 PERFIL BONITO (TARJETA)
+// =============================
+client.on("messageCreate", async (msg) => {
+  if (msg.content.startsWith("!profile")) {
+    let targetId = msg.author.id;
 
-  client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-
-    let users = await getGist(process.env.GIST_USERS);
-    let online = await getGist(process.env.GIST_ONLINE);
-
-    users = typeof users === "object" ? users : JSON.parse(users || "{}");
-    online = online ? online.split("\n").filter(Boolean) : [];
-
-    const user = users[interaction.user.id];
-
-    if (!user) {
-      return interaction.reply({ content: "❌ No estás registrado", ephemeral: true });
+    if (msg.mentions.users.first()) {
+      targetId = msg.mentions.users.first().id;
     }
 
-    // =============================
-    // 🟢 ONLINE
-    // =============================
-    if (interaction.commandName === "online") {
+    const s = liveTracker[targetId];
+    const t = trackingData[targetId] || {};
 
-      if (!online.includes(user.main_id))
-        online.push(user.main_id);
+    if (!s) return msg.reply("❌ Usuario sin datos.");
 
-      if (user.sec_id && !online.includes(user.sec_id))
-        online.push(user.sec_id);
+    const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+    const totalTime =
+      (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+    const level = Math.floor(totalXP / 100);
 
-      await updateGist(process.env.GIST_ONLINE, online.join("\n"));
+    const { stage, gif, progress } = getPokemonData(totalXP);
 
-      return interaction.reply("🟢 Estás online");
+    const progressBar =
+      "🟩".repeat(Math.floor(progress * 10)) +
+      "⬛".repeat(10 - Math.floor(progress * 10));
+
+    // 🔥 TARJETA TIPO PERFIL (SIN EMBED)
+    const content = `
+╔════════════════════════════╗
+   🧠 ${s.name.toUpperCase()}
+╠════════════════════════════╣
+🎖 Nivel: ${level}
+📈 XP: ${totalXP.toFixed(2)}
+⏱ Tiempo: ${totalTime}m
+🧩 Instancias: ${s.instances}
+📦 Packs: ${s.packs}
+💎 GP: ${t.gp || 0}
+╠════════════════════════════╣
+🧬 Evolución: ${stage}
+${progressBar}
+╚════════════════════════════╝
+`;
+
+    // 🔥 GIF COMO ARCHIVO (100% FUNCIONA)
+    const file = new AttachmentBuilder(gif, {
+      name: "pokemon.gif",
+    });
+
+    return msg.channel.send({
+      content,
+      files: [file],
+    });
+  }
+
+  // =============================
+  // 🔥 DETECTOR GP
+  // =============================
+  if (msg.channel.id !== process.env.GP_CHANNEL_ID) return;
+
+  let content = msg.content;
+
+  if (!content && msg.embeds.length > 0) {
+    const e = msg.embeds[0];
+    content = `${e.title || ""}\n${e.description || ""}`;
+  }
+
+  if (!content || !content.includes("God Pack found")) return;
+
+  const firstLine = content.split("\n")[0];
+  const normalize = (s) => s?.toLowerCase().trim();
+
+  let discordId = null;
+
+  const mentionMatch = firstLine.match(/<@!?(\d+)>/);
+
+  if (mentionMatch && eliteUsers[mentionMatch[1]]) {
+    discordId = mentionMatch[1];
+  }
+
+  if (!discordId) {
+    const rawName = firstLine.replace("@", "").split(" ")[0];
+
+    const matched = Object.entries(eliteUsers).find(
+      ([_, user]) =>
+        normalize(user.name) === normalize(rawName)
+    );
+
+    if (matched) discordId = matched[0];
+  }
+
+  if (!discordId) return;
+
+  if (!trackingData[discordId]) {
+    trackingData[discordId] = {
+      xp: 0,
+      time: 0,
+      name: "Unknown",
+      packs: 0,
+      gp: 0,
+    };
+  }
+
+  if (!liveTracker[discordId]) {
+    liveTracker[discordId] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: trackingData[discordId].name,
+      packs: 0,
+    };
+  }
+
+  trackingData[discordId].xp += 1000;
+  trackingData[discordId].gp += 1;
+
+  liveTracker[discordId].boostUntil =
+    Date.now() + 3600000;
+
+  await updateGist(process.env.GIST_TRACKING, trackingData);
+});
+
+// =============================
+function startLoop() {
+  setInterval(async () => {
+    onlineIds = cleanOnlineIds(
+      await getGist(process.env.GIST_ONLINE)
+    );
+
+    for (const [discordId, user] of Object.entries(eliteUsers)) {
+      const isOnline =
+        onlineIds.includes(user.main_id) ||
+        onlineIds.includes(user.sec_id);
+
+      if (!isOnline) continue;
+
+      if (!liveTracker[discordId]) {
+        liveTracker[discordId] = {
+          sessionXP: 0,
+          sessionTime: 0,
+          instances: 1,
+          boostUntil: 0,
+          name: user.name,
+          packs: 0,
+        };
+      }
+
+      const t = liveTracker[discordId];
+
+      t.sessionTime += 1;
+
+      let xpPerSecond =
+        (2 + t.instances * 0.5) / 60;
+
+      if (Date.now() < t.boostUntil) {
+        xpPerSecond *= 2;
+      }
+
+      t.sessionXP += xpPerSecond;
     }
 
-    // =============================
-    // 🔴 OFFLINE
-    // =============================
-    if (interaction.commandName === "offline") {
-
-      online = online.filter(id =>
-        id !== user.main_id && id !== user.sec_id
-      );
-
-      await updateGist(process.env.GIST_ONLINE, online.join("\n"));
-
-      return interaction.reply("🔴 Estás offline");
-    }
-  });
+    updateMessage();
+  }, 1000);
 }
+
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+    for (const id in liveTracker) {
+      if (!trackingData[id]) {
+        trackingData[id] = {
+          xp: 0,
+          time: 0,
+          name: liveTracker[id].name,
+          packs: 0,
+          gp: 0,
+        };
+      }
+
+      const s = liveTracker[id];
+
+      trackingData[id].xp += s.sessionXP;
+      trackingData[id].time += Math.floor(s.sessionTime / 60);
+      trackingData[id].name = s.name;
+      trackingData[id].packs = s.packs;
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+  }, 600000);
+}
+
+// =============================
+async function bootstrapFromHistory() {
+  const channel = await client.channels.fetch(
+    process.env.HEARTBEAT_CHANNEL_ID
+  );
+
+  const messages = await channel.messages.fetch({ limit: 50 });
+
+  for (const msg of messages.values()) {
+    let content = msg.content;
+
+    if (!content && msg.embeds.length > 0) {
+      const e = msg.embeds[0];
+      content = `${e.title || ""}\n${e.description || ""}`;
+    }
+
+    if (!content) continue;
+
+    const data = parseHeartbeat(content);
+    if (!data.name) continue;
+
+    const normalize = (s) => s?.toLowerCase().trim();
+
+    const matched = Object.entries(eliteUsers).find(
+      ([_, user]) =>
+        normalize(user.name) === normalize(data.name)
+    );
+
+    if (!matched) continue;
+
+    const [discordId, user] = matched;
+
+    const isOnline =
+      onlineIds.includes(user.main_id) ||
+      onlineIds.includes(user.sec_id);
+
+    if (!isOnline) continue;
+
+    liveTracker[discordId] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: data.instances,
+      boostUntil: 0,
+      name: data.name,
+      packs: data.packs,
+    };
+  }
+}
+
+// =============================
+function parseHeartbeat(content) {
+  const lines = content.split("\n");
+
+  const name = lines[0]?.trim();
+  const onlineLine = lines.find((l) => l.startsWith("Online:"));
+  const packsLine = lines.find((l) => l.includes("Packs:"));
+
+  let instances = 0;
+  let packs = 0;
+
+  if (onlineLine) {
+    const value = onlineLine.split(":")[1]?.trim();
+
+    if (value && value.toLowerCase() !== "none") {
+      instances = value.split(",").length;
+    }
+  }
+
+  if (packsLine) {
+    const match = packsLine.match(/Packs:\s*(\d+)/);
+    if (match) packs = Number(match[1]);
+  }
+
+  return { name, instances, packs };
+}
+
+// =============================
+async function createMessage() {
+  const channel = await client.channels.fetch(
+    process.env.STATS_CHANNEL_ID
+  );
+
+  const msg = await channel.send("🔥 Iniciando tracking...");
+  liveMessageId = msg.id;
+}
+
+// =============================
+async function updateMessage() {
+  if (!liveMessageId) return;
+
+  const channel = await client.channels.fetch(
+    process.env.STATS_CHANNEL_ID
+  );
+
+  const msg = await channel.messages.fetch(liveMessageId);
+
+  let content = "🏆 TRACKING EN VIVO\n\n";
+
+  for (const [id, s] of Object.entries(liveTracker)) {
+    const t = trackingData[id] || {
+      xp: 0,
+      gp: 0,
+      time: 0,
+    };
+
+    const totalXP = t.xp + s.sessionXP;
+    const totalTime =
+      (t.time || 0) +
+      Math.floor((s.sessionTime || 0) / 60);
+
+    const level = Math.floor(totalXP / 100);
+
+    content += `👤 ${s.name} 🎖 Nivel ${level} ⏱ ${totalTime}m XP ${totalXP.toFixed(
+      2
+    )} 💎 GP: ${t.gp}\n`;
+  }
+
+  await msg.edit(content);
+}
+
+// =============================
+function safeParse(data) {
+  try {
+    return typeof data === "object"
+      ? data
+      : JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+function sanitizeTracking() {
+  for (const k in trackingData) {
+    trackingData[k].xp = Number(trackingData[k].xp) || 0;
+    trackingData[k].time = Number(trackingData[k].time) || 0;
+    trackingData[k].packs = Number(trackingData[k].packs) || 0;
+    trackingData[k].gp = Number(trackingData[k].gp) || 0;
+  }
+}
+
+function cleanOnlineIds(raw) {
+  if (!raw) return [];
+
+  return raw
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+client.login(process.env.DISCORD_TOKEN);
