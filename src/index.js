@@ -105,18 +105,84 @@ function saveSettings() {
 }
 
 // =============================
-const colorOptions = [
-  { label: "🔴 Rojo / Red", value: "#ff4d4d" },
-  { label: "🔵 Azul / Blue", value: "#4da6ff" },
-  { label: "🟢 Verde / Green", value: "#4dff88" },
-  { label: "🟡 Amarillo / Yellow", value: "#ffff66" },
-  { label: "🟣 Morado / Purple", value: "#b84dff" },
-  { label: "🌸 Rosa / Pink", value: "#ff66cc" },
-  { label: "💎 Cian / Cyan", value: "#00ffff" },
-  { label: "⚪ Blanco / White", value: "#ffffff" },
-  { label: "🟠 Naranja / Orange", value: "#ff944d" },
-  { label: "🌑 Gris / Gray", value: "#999999" },
-];
+const colorCategories = {
+  red: [
+    { label: "🔴 Red", value: "#ff4d4d" },
+    { label: "🔥 Crimson", value: "#dc143c" },
+    { label: "🍅 Tomato", value: "#ff6347" },
+    { label: "🩸 Dark Red", value: "#8b0000" },
+    { label: "❤️ Firebrick", value: "#b22222" },
+    { label: "🌹 Indian Red", value: "#cd5c5c" },
+    { label: "🍓 Light Coral", value: "#f08080" },
+  ],
+
+  blue: [
+    { label: "🔵 Blue", value: "#4da6ff" },
+    { label: "🌊 Dodger Blue", value: "#1e90ff" },
+    { label: "💎 Royal Blue", value: "#4169e1" },
+    { label: "🌌 Midnight Blue", value: "#191970" },
+    { label: "🌀 Steel Blue", value: "#4682b4" },
+    { label: "❄️ Light Blue", value: "#add8e6" },
+    { label: "🌫️ Sky Blue", value: "#87ceeb" },
+  ],
+
+  green: [
+    { label: "🟢 Green", value: "#4dff88" },
+    { label: "🌿 Lime", value: "#32cd32" },
+    { label: "🌲 Forest", value: "#228b22" },
+    { label: "🍃 Spring", value: "#00ff7f" },
+    { label: "🥑 Olive", value: "#808000" },
+    { label: "🌱 Sea Green", value: "#2e8b57" },
+    { label: "🌴 Dark Green", value: "#006400" },
+  ],
+
+  yellow: [
+    { label: "🟡 Yellow", value: "#ffff66" },
+    { label: "🌟 Gold", value: "#ffd700" },
+    { label: "🍋 Lemon", value: "#fff44f" },
+    { label: "🌻 Khaki", value: "#f0e68c" },
+    { label: "🧈 Light Yellow", value: "#ffffe0" },
+  ],
+
+  purple: [
+    { label: "🟣 Purple", value: "#b84dff" },
+    { label: "💜 Violet", value: "#ee82ee" },
+    { label: "🔮 Indigo", value: "#4b0082" },
+    { label: "🌌 Dark Violet", value: "#9400d3" },
+    { label: "🍇 Plum", value: "#dda0dd" },
+  ],
+
+  pink: [
+    { label: "🌸 Pink", value: "#ff66cc" },
+    { label: "💖 Hot Pink", value: "#ff69b4" },
+    { label: "🎀 Deep Pink", value: "#ff1493" },
+    { label: "🌺 Pale Violet", value: "#db7093" },
+  ],
+
+  neutral: [
+    { label: "⚪ White", value: "#ffffff" },
+    { label: "⬜ Light Gray", value: "#d3d3d3" },
+    { label: "🌑 Gray", value: "#808080" },
+    { label: "⬛ Dark Gray", value: "#404040" },
+    { label: "🖤 Black", value: "#000000" },
+  ],
+
+  special: [
+    { label: "💎 Cyan", value: "#00ffff" },
+    { label: "🧊 Aqua", value: "#7fdbff" },
+    { label: "🍊 Orange", value: "#ff944d" },
+    { label: "🔥 Dark Orange", value: "#ff8c00" },
+    { label: "🌈 Rainbow", value: "#ff00ff" },
+  ],
+
+  neon: [
+    { label: "⚡ Neon Blue", value: "#00ffff" },
+    { label: "💚 Neon Green", value: "#39ff14" },
+    { label: "💖 Neon Pink", value: "#ff10f0" },
+    { label: "🟡 Neon Yellow", value: "#ffff33" },
+    { label: "🟣 Neon Purple", value: "#bc13fe" },
+  ]
+};
 function isValidColor(color) {
   const canvas = createCanvas(10, 10);
   const ctx = canvas.getContext("2d");
@@ -294,6 +360,25 @@ if (settings.bg?.type === "base64") {
     gif: poke.gif
   };
 }
+function createCategoryMenu(type, userId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`cat_${type}_${userId}`)
+      .setPlaceholder("Elige categoría")
+      .addOptions([
+        { label: "🔴 Rojos", value: "red" },
+        { label: "🔵 Azules", value: "blue" },
+        { label: "🟢 Verdes", value: "green" },
+        { label: "🟡 Amarillos", value: "yellow" },
+        { label: "🟣 Morados", value: "purple" },
+        { label: "🌸 Rosas", value: "pink" },
+        { label: "⚫ Neutros", value: "neutral" },
+        { label: "🌈 Especiales", value: "special" },
+        { label: "⚡ Neon", value: "neon" },
+      ])
+  );
+}
+
 function createColorMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -302,6 +387,8 @@ function createColorMenu(type, userId) {
       .addOptions(colorOptions)
   );
 }
+
+
 // =============================
 
 // =============================
@@ -387,29 +474,16 @@ client.on("interactionCreate", async (i) => {
   // =============================
   // 🎨 SELECCIÓN DE COLOR
   // =============================
-  if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
+ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 
-    const [, type, userId] = i.customId.split("_");
-    const color = i.values[0];
+  const [, type, userId] = i.customId.split("_");
+  const category = i.values[0];
 
-    if (!userSettings[userId]) userSettings[userId] = {};
-
-    if (type === "name") {
-      userSettings[userId].nameColor = color;
-    }
-
-    if (type === "text") {
-      userSettings[userId].textColor = color;
-    }
-
-    saveSettings();
-    await forceRender(userId);
-
-    return i.reply({
-      content: "✅ Color aplicado",
-      ephemeral: true
-    });
-  }
+  return i.update({
+    content: "🎨 Ahora elige un color:",
+    components: [createColorMenu(type, userId, category)]
+  });
+}
 
 });
 
