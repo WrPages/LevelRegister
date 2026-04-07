@@ -157,9 +157,15 @@ client.once("clientReady", async () => {
 // =============================
 function startLoop() {
   setInterval(async () => {
-    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+
+    console.log("⏱ Actualizando tracking...");
+
+    onlineIds = cleanOnlineIds(
+      await getGist(process.env.GIST_ONLINE)
+    );
 
     for (const [id, user] of Object.entries(eliteUsers)) {
+
       const isOnline =
         onlineIds.includes(user.main_id) ||
         onlineIds.includes(user.sec_id);
@@ -178,18 +184,21 @@ function startLoop() {
       }
 
       const t = liveTracker[id];
-      t.sessionTime += 1;
+
+      // 🔥 Simulamos 5 minutos de golpe
+      const seconds = 300; // 5 min
+      t.sessionTime += seconds;
 
       let xpPerSecond = (2 + t.instances * 0.5) / 60;
       if (Date.now() < t.boostUntil) xpPerSecond *= 2;
 
-      t.sessionXP += xpPerSecond;
+      t.sessionXP += xpPerSecond * seconds;
     }
 
-    await updatePanels();
-  }, 5000);
-}
+    await updatePanels(); // Render solo cada 5 min
 
+  }, 300000); // 5 minutos
+}
 // =============================
 async function renderPanel(id, channel) {
   const s = liveTracker[id];
