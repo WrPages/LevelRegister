@@ -25,6 +25,14 @@ if (!process.env.GIST_SETTINGS) {
   throw new Error("❌ FALTA GIST_SETTINGS en Railway");
 }
 
+
+
+const commandMap = {
+  nombre: "name",
+  name: "name",
+  texto: "text",
+  text: "text",
+};
 // =============================
 // 🧠 FONT
 // =============================
@@ -107,7 +115,15 @@ const colorMap = {
   cian: "#00ffff",
   blanco: "#ffffff",
 };
+function isValidColor(color) {
+  const canvas = createCanvas(10, 10);
+  const ctx = canvas.getContext("2d");
 
+  ctx.fillStyle = "#000";
+  ctx.fillStyle = color;
+
+  return ctx.fillStyle !== "#000" || color === "#000";
+}
 // =============================
 function getUserRole(member) {
   const roles = member.roles.cache;
@@ -278,26 +294,6 @@ if (settings.bg?.type === "base64") {
 }
 
 // =============================
-function createColorButtons(type) {
-
-  const buttons = Object.keys(colorMap).map(name =>
-    new ButtonBuilder()
-      .setCustomId(`c_${type}_${name}`)
-      .setLabel(" ")
-      .setEmoji(colorEmojis[name])
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  const rows = [];
-
-  while (buttons.length) {
-    rows.push(
-      new ActionRowBuilder().addComponents(buttons.splice(0, 5))
-    );
-  }
-
-  return rows;
-}
 
 // =============================
 async function updatePanels() {
@@ -343,7 +339,19 @@ const { file, gif } = await renderPanel(id, channel);
     );
 
     await thread.send({
-      content: "🎮 Panel de personalización",
+      content: `🎮 Personalización / Customization
+
+ES:
+nombre rojo
+texto azul
+nombre #ff00ff
+
+EN:
+name red
+text blue
+name #00ffcc
+
+🖼️ Sube una imagen para fondo`,
       components: [menu],
     });
 
@@ -359,8 +367,7 @@ const { file, gif } = await renderPanel(id, channel);
 client.on("interactionCreate", async (i) => {
 
   if (i.isStringSelectMenu()) {
-const [, type, colorName] = i.customId.split("_");
-const id = i.user.id;
+    const id = i.user.id;
     const option = i.values[0];
 
     editState[id] = option;
@@ -371,37 +378,15 @@ const id = i.user.id;
 
     if (option === "name" || option === "text") {
       return i.reply({
-        content: "🎨 Selecciona un color:",
-        components: [createColorButtons(option)],
+        content: "✏️ Escribe el color (ej: red, #ff0000)",
         ephemeral: true
       });
     }
   }
 
-if (i.isButton()) {
+});
 
-  const [, type, colorName] = i.customId.split("_");
-
-  const entry = Object.entries(userPanels)
-    .find(([_, data]) => data.threadId === i.channel.id);
-
-  if (!entry) {
-    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
-  }
-
-  const [id] = entry;
-
-  if (!userSettings[id]) userSettings[id] = {};
-
-  userSettings[id][type === "name" ? "nameColor" : "textColor"] =
-    colorMap[colorName];
-
-  saveSettings();
-
-  await i.reply({ content: "Aplicando color...", ephemeral: true });
-
-  await forceRender(id);
-}
+  
 
   });
 // =============================
@@ -418,34 +403,68 @@ client.on("messageCreate", async (msg) => {
 
   const [id] = entry;
 
-  if (editState[id] !== "bg") return;
+  if (!userSettings[id]) userSettings[id] = {};
 
+  const content = msg.content.toLowerCase().trim();
+
+  // =============================
+  // 🎨 COLOR (ES + EN)
+  // =============================
+  const parts = content.split(" ");
+
+  if (parts.length >= 2) {
+
+    let type = parts[0];
+    const value = parts[1];
+
+    type = commandMap[type];
+
+    if (type) {
+
+      let color = value;
+
+      if (!isValidColor(color)) {
+        return msg.reply(`❌ Color inválido / Invalid color
+
+Ejemplos:
+red, blue, gold
+#ff0000
+rgb(255,0,0)`);
+      }
+
+      if (type === "name") {
+        userSettings[id].nameColor = color;
+      }
+
+      if (type === "text") {
+        userSettings[id].textColor = color;
+      }
+
+      saveSettings();
+      await forceRender(id);
+
+      return msg.reply(`✅ Color aplicado: ${color}`);
+    }
+  }
+
+  // =============================
+  // 🖼️ FONDO
+  // =============================
   if (msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
     if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
-      if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
 
-  // 🔥 Descargar imagen desde Discord
-  const res = await fetch(file.url);
-  const buffer = await res.arrayBuffer();
-  const base64 = Buffer.from(buffer).toString("base64");
+      const res = await fetch(file.url);
+      const buffer = await res.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
 
-  // 💾 Guardar en formato persistente
-  userSettings[id].bg = {
-    type: "base64",
-    data: base64
-  };
-
-  saveSettings();
-
-  await forceRender(id);
-
-  return msg.reply("Fondo actualizado y guardado permanentemente ✅");
-}
+      userSettings[id].bg = {
+        type: "base64",
+        data: base64
+      };
 
       saveSettings();
-
       await forceRender(id);
 
       return msg.reply("Fondo actualizado ✅");
