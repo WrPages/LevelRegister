@@ -278,13 +278,16 @@ if (settings.bg?.type === "base64") {
 }
 
 // =============================
-function createColorButtons(type, userId) {
+function createColorButtons(type) {
+
   return new ActionRowBuilder().addComponents(
-    Object.entries(colorMap).map(([name]) =>
+
+    Object.entries(colorMap).map(([name, hex]) =>
       new ButtonBuilder()
-        .setCustomId(`color_${type}_${userId}_${name}`)
-        .setLabel(name)
+        .setCustomId(`c_${type}_${name}`)
+        .setLabel(" ")
         .setStyle(ButtonStyle.Secondary)
+        .setEmoji("🟦") // puedes cambiar por diferentes emojis
     )
   );
 }
@@ -339,7 +342,8 @@ async function updatePanels() {
 client.on("interactionCreate", async (i) => {
 
   if (i.isStringSelectMenu()) {
-    const [, id] = i.customId.split("_");
+const [, type, colorName] = i.customId.split("_");
+const id = i.user.id;
     const option = i.values[0];
 
     editState[id] = option;
@@ -351,7 +355,7 @@ client.on("interactionCreate", async (i) => {
     if (option === "name" || option === "text") {
       return i.reply({
         content: "🎨 Selecciona un color:",
-        components: [createColorButtons(option, id)],
+        components: [createColorButtons(option)],
         ephemeral: true
       });
     }
