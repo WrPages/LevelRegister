@@ -105,16 +105,18 @@ function saveSettings() {
 }
 
 // =============================
-const colorMap = {
-  rojo: "#ff0000",
-  verde: "#00ff00",
-  azul: "#0099ff",
-  amarillo: "#ffff00",
-  morado: "#800080",
-  rosa: "#ff00ff",
-  cian: "#00ffff",
-  blanco: "#ffffff",
-};
+const colorOptions = [
+  { label: "🔴 Rojo / Red", value: "#ff4d4d" },
+  { label: "🔵 Azul / Blue", value: "#4da6ff" },
+  { label: "🟢 Verde / Green", value: "#4dff88" },
+  { label: "🟡 Amarillo / Yellow", value: "#ffff66" },
+  { label: "🟣 Morado / Purple", value: "#b84dff" },
+  { label: "🌸 Rosa / Pink", value: "#ff66cc" },
+  { label: "💎 Cian / Cyan", value: "#00ffff" },
+  { label: "⚪ Blanco / White", value: "#ffffff" },
+  { label: "🟠 Naranja / Orange", value: "#ff944d" },
+  { label: "🌑 Gris / Gray", value: "#999999" },
+];
 function isValidColor(color) {
   const canvas = createCanvas(10, 10);
   const ctx = canvas.getContext("2d");
@@ -292,7 +294,14 @@ if (settings.bg?.type === "base64") {
     gif: poke.gif
   };
 }
-
+function createColorMenu(type, userId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`color_${type}_${userId}`)
+      .setPlaceholder("Selecciona un color")
+      .addOptions(colorOptions)
+  );
+}
 // =============================
 
 // =============================
@@ -339,19 +348,7 @@ const { file, gif } = await renderPanel(id, channel);
     );
 
     await thread.send({
-      content: `🎮 Personalización / Customization
-
-ES:
-nombre rojo
-texto azul
-nombre #ff00ff
-
-EN:
-name red
-text blue
-name #00ffcc
-
-🖼️ Sube una imagen para fondo`,
+      content: "🎮 Personaliza tu panel",
       components: [menu],
     });
 
@@ -366,11 +363,13 @@ name #00ffcc
 // =============================
 client.on("interactionCreate", async (i) => {
 
-  if (i.isStringSelectMenu()) {
+  // =============================
+  // 🎮 MENU PRINCIPAL
+  // =============================
+  if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
+
     const id = i.user.id;
     const option = i.values[0];
-
-    editState[id] = option;
 
     if (option === "bg") {
       return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
@@ -378,10 +377,38 @@ client.on("interactionCreate", async (i) => {
 
     if (option === "name" || option === "text") {
       return i.reply({
-        content: "✏️ Escribe el color (ej: red, #ff0000)",
+        content: "🎨 Elige un color:",
+        components: [createColorMenu(option, id)],
         ephemeral: true
       });
     }
+  }
+
+  // =============================
+  // 🎨 SELECCIÓN DE COLOR
+  // =============================
+  if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
+
+    const [, type, userId] = i.customId.split("_");
+    const color = i.values[0];
+
+    if (!userSettings[userId]) userSettings[userId] = {};
+
+    if (type === "name") {
+      userSettings[userId].nameColor = color;
+    }
+
+    if (type === "text") {
+      userSettings[userId].textColor = color;
+    }
+
+    saveSettings();
+    await forceRender(userId);
+
+    return i.reply({
+      content: "✅ Color aplicado",
+      ephemeral: true
+    });
   }
 
 });
