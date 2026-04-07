@@ -379,12 +379,12 @@ function createCategoryMenu(type, userId) {
   );
 }
 
-function createColorMenu(type, userId) {
+function createColorMenu(type, userId, category) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`color_${type}_${userId}`)
       .setPlaceholder("Selecciona un color")
-      .addOptions(colorOptions)
+      .addOptions(colorCategories[category])
   );
 }
 
@@ -462,21 +462,29 @@ client.on("interactionCreate", async (i) => {
       return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
     }
 
-    if (option === "name" || option === "text") {
-      return i.reply({
-        content: "🎨 Elige un color:",
-        components: [createColorMenu(option, id)],
-        ephemeral: true
-      });
-    }
+   if (option === "name" || option === "text") {
+  return i.reply({
+    content: "🎨 Elige una categoría:",
+    components: [createCategoryMenu(option, id)],
+    ephemeral: true
+  });
+}
   }
 
   // =============================
   // 🎨 SELECCIÓN DE COLOR
   // =============================
- if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
+if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 
   const [, type, userId] = i.customId.split("_");
+
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
   const category = i.values[0];
 
   return i.update({
@@ -485,6 +493,47 @@ client.on("interactionCreate", async (i) => {
   });
 }
 
+
+ if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
+
+  const [, type, userId] = i.customId.split("_");
+  const color = i.values[0];
+
+  // 🔒 Seguridad: solo el dueño puede usarlo
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
+  const entry = Object.entries(userPanels)
+    .find(([_, data]) => data.threadId === i.channel.id);
+
+  if (!entry) {
+    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
+  }
+
+  const [id] = entry;
+
+  if (!userSettings[id]) userSettings[id] = {};
+
+  if (type === "name") userSettings[id].nameColor = color;
+  if (type === "text") userSettings[id].textColor = color;
+
+  saveSettings();
+
+  await i.update({
+    content: `✅ Color aplicado`,
+    components: []
+  });
+
+  await forceRender(id);
+}
+
+
+
+  
 });
 
   
