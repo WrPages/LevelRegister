@@ -280,16 +280,23 @@ if (settings.bg?.type === "base64") {
 // =============================
 function createColorButtons(type) {
 
-  return new ActionRowBuilder().addComponents(
-
-    Object.entries(colorMap).map(([name, hex]) =>
-      new ButtonBuilder()
-        .setCustomId(`c_${type}_${name}`)
-        .setLabel(" ")
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji("🟦") // puedes cambiar por diferentes emojis
-    )
+  const buttons = Object.keys(colorMap).map(name =>
+    new ButtonBuilder()
+      .setCustomId(`c_${type}_${name}`)
+      .setLabel(" ")
+      .setEmoji(colorEmojis[name])
+      .setStyle(ButtonStyle.Secondary)
   );
+
+  const rows = [];
+
+  while (buttons.length) {
+    rows.push(
+      new ActionRowBuilder().addComponents(buttons.splice(0, 5))
+    );
+  }
+
+  return rows;
 }
 
 // =============================
@@ -300,7 +307,9 @@ async function updatePanels() {
 
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
-    const { file, gif } = await renderPanel(id, channel);
+    if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
+
+const { file, gif } = await renderPanel(id, channel);
 
     if (userPanels[id]) {
       const msg = await channel.messages.fetch(userPanels[id].messageId);
@@ -361,11 +370,21 @@ const id = i.user.id;
     }
   }
 
-  if (i.isButton()) {
+if (i.isButton()) {
 
   await i.deferReply({ ephemeral: true });
 
-  const [, type, id, colorName] = i.customId.split("_");
+  const [, type, colorName] = i.customId.split("_");
+
+  // 🔥 Buscar el usuario dueño del panel por thread
+  const entry = Object.entries(userPanels)
+    .find(([_, data]) => data.threadId === i.channel.id);
+
+  if (!entry) {
+    return i.editReply({ content: "Error: panel no encontrado." });
+  }
+
+  const [id] = entry;
 
   if (!userSettings[id]) userSettings[id] = {};
 
@@ -448,10 +467,10 @@ async function forceRender(id) {
   const { file } = await renderPanel(id, channel);
   const msg = await channel.messages.fetch(userPanels[id].messageId);
 
-  await msg.edit({
-    content: `updated_${Date.now()}`,
-    files: [file]
-  });
+ // await msg.edit({
+  //  content: `updated_${Date.now()}`,
+ //  files: [file]
+ // });
 }
 
 // =============================
