@@ -186,7 +186,7 @@ async function runTrackingCycle() {
 
     const t = liveTracker[id];
 
-    const seconds = 300; // 5 minutos
+    const seconds = 60; // 5 minutos
     t.sessionTime += seconds;
 
     let xpPerSecond = (2 + t.instances * 0.5) / 60;
@@ -204,7 +204,7 @@ function startLoop() {
   runTrackingCycle();
 
   // 🔁 Luego cada 5 minutos
-  setInterval(runTrackingCycle, 300000);
+  setInterval(runTrackingCycle, 60000);
 }
 
 
