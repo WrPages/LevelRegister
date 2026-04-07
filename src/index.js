@@ -351,7 +351,7 @@ client.on("interactionCreate", async (i) => {
 
   return i.editReply({ content: "Color aplicado ✅" });
 }
-
+});
 // =============================
 // 🖼️ FONDO
 // =============================
