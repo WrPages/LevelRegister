@@ -312,10 +312,18 @@ async function updatePanels() {
 const { file, gif } = await renderPanel(id, channel);
 
     if (userPanels[id]) {
-      const msg = await channel.messages.fetch(userPanels[id].messageId);
-      await msg.edit({ files: [file] });
-      continue;
-    }
+  try {
+    const msg = await channel.messages.fetch(userPanels[id].messageId);
+
+    await msg.edit({ files: [file] });
+
+    continue;
+  } catch (err) {
+    console.log(`⚠️ Mensaje perdido para ${id}, recreando panel...`);
+
+    delete userPanels[id]; // 🔥 IMPORTANTE
+  }
+}
 
     const sent = await channel.send({ files: [file] });
 
@@ -372,16 +380,13 @@ const id = i.user.id;
 
 if (i.isButton()) {
 
-  await i.deferReply({ ephemeral: true });
-
   const [, type, colorName] = i.customId.split("_");
 
-  // 🔥 Buscar el usuario dueño del panel por thread
   const entry = Object.entries(userPanels)
     .find(([_, data]) => data.threadId === i.channel.id);
 
   if (!entry) {
-    return i.editReply({ content: "Error: panel no encontrado." });
+    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
   }
 
   const [id] = entry;
@@ -393,11 +398,12 @@ if (i.isButton()) {
 
   saveSettings();
 
-  await forceRender(id);
+  await i.reply({ content: "Aplicando color...", ephemeral: true });
 
-  return i.editReply({ content: "Color aplicado ✅" });
+  await forceRender(id);
 }
-});
+
+  
 // =============================
 // 🖼️ FONDO
 // =============================
@@ -467,10 +473,10 @@ async function forceRender(id) {
   const { file } = await renderPanel(id, channel);
   const msg = await channel.messages.fetch(userPanels[id].messageId);
 
- // await msg.edit({
+  await msg.edit({
   //  content: `updated_${Date.now()}`,
- //  files: [file]
- // });
+  files: [file]
+  });
 }
 
 // =============================
