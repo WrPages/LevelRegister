@@ -69,7 +69,8 @@ const GROUPS = {
   },
   eliteFour: {
     heartbeatChannelId: "1483616146996465735",
-    gpChannelId: "1486277594629275770",
+    gpChannelId: "1484015417411244082",
+   // gpChannelId: "1486277594629275770",
   usersGistId: "bb18eda2ea748723d8fe0131dd740b70",
     onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
   }
