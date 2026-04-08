@@ -305,6 +305,7 @@ startBackupLoop();
 
 async function runTrackingCycle() {
 
+   try {
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
   const trackingRaw = await getGist(process.env.GIST_TRACKING);
@@ -474,6 +475,9 @@ if (!trackingData[userId]) {
 );
 
   await updatePanels();
+      } catch (error) {
+    console.error("❌ Error en runTrackingCycle:", error);
+  }
 }
 
 
