@@ -348,9 +348,9 @@ if (!trackingData[userId]) {
 }
       const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
 
-      const isOnlineInThisGroup = idsToCheck.some(id =>
-        onlineGroupIds.includes(String(id))
-      );
+     const isOnlineInThisGroup = idsToCheck.some(id =>
+  groupOnlineMap[groupName]?.includes(id)
+);
 
       if (!isOnlineInThisGroup) continue;
 
