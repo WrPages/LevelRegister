@@ -463,7 +463,7 @@ if (settings.bg?.type === "base64") {
 
   ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
   ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
-  ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
+  ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
   ctx.fillText(`Packs: ${s.packs}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
@@ -669,6 +669,108 @@ client.on("messageCreate", async (msg) => {
 
   const content = msg.content.toLowerCase().trim();
 
+
+
+// =============================
+// 💎 DETECCIÓN GOD PACK
+// =============================
+for (const group of Object.values(GROUPS)) {
+
+  if (msg.channel.id === group.gpChannelId) {
+
+    const lines = msg.content.split("\n");
+    const firstLine = lines[0];
+
+    const match = firstLine.match(/@(.+?)\s+Kudos!/i);
+
+    if (!match) return;
+
+    const username = match[1].trim();
+
+    const userEntry = Object.entries(trackingData)
+      .find(([id, data]) => data.name === username);
+
+    if (userEntry) {
+
+      const [id] = userEntry;
+
+      if (!trackingData[id].gp)
+        trackingData[id].gp = 0;
+
+      trackingData[id].gp += 1;
+
+      console.log(`💎 GP sumado a ${username}`);
+    }
+  }
+}
+
+  
+// =============================
+// 📦 DETECCIÓN WEBHOOK TRACKING
+// =============================
+if (msg.webhookId) {
+
+  const content = msg.content;
+
+  const onlineMatch = content.match(/Online:\s*(.+)/i);
+  const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+if (packsMatch) {
+
+  const username = content.split("\n")[0]?.trim();
+  const currentPacks = Number(packsMatch[1]);
+
+  const userEntry = Object.entries(trackingData)
+    .find(([id, data]) => data.name === username);
+
+  if (userEntry) {
+
+    const [id] = userEntry;
+
+    if (!trackingData[id].lastPacks)
+      trackingData[id].lastPacks = currentPacks;
+
+    const diff = currentPacks - trackingData[id].lastPacks;
+
+    if (diff > 0) {
+      trackingData[id].packs += diff;
+    }
+
+    trackingData[id].lastPacks = currentPacks;
+  }
+}
+
+
+  
+  if (onlineMatch) {
+
+    const username = content.split("\n")[0]?.trim(); // Zannt
+    const onlineLine = onlineMatch[1];
+
+    const instances = onlineLine
+      .split(",")
+      .map(x => x.trim())
+      .filter(x => x !== "Main" && x.toLowerCase() !== "none")
+      .length;
+
+    const userEntry = Object.entries(trackingData)
+      .find(([id, data]) => data.name === username);
+
+    if (userEntry) {
+      const [id] = userEntry;
+
+      if (!trackingData[id].recordInstances)
+        trackingData[id].recordInstances = 0;
+
+      if (instances > trackingData[id].recordInstances) {
+        trackingData[id].recordInstances = instances;
+      }
+
+
+      
+    }
+  }
+}
   // =============================
   // 🎨 COLOR (ES + EN)
   // =============================
@@ -808,6 +910,11 @@ function sanitizeTracking() {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
     trackingData[k].gp = Number(trackingData[k].gp) || 0;
+    trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
+trackingData[k].packs = Number(trackingData[k].packs) || 0;
+        trackingData[k].lastPacks = Number(trackingData[k].lastPacks) || 0;
+
+//trackingData[k].gp = Number(trackingData[k].gp) || 0;
   }
 }
 
