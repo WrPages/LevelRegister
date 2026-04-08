@@ -49,7 +49,29 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
   ],
 });
-
+// =============================
+// 📌 CANALES Y GISTS POR GRUPO
+// =============================
+const GROUPS = {
+  trainer: {
+    heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
+    gpChannelId: "1487362022864588902",               // canal donde se cuentan GP
+   
+    onlineGistId: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c"     // Gist con usuarios online
+  },
+  gymLeader: {
+    heartbeatChannelId: "1491238609578360833",
+    gpChannelId: "1491238471556403281",
+    
+    onlineGistId: "e110c37b3e0b8de83a33a1b0a5eb64e8"
+  },
+  eliteFour: {
+    heartbeatChannelId: "1483616146996465735",
+    gpChannelId: "1486277594629275770",
+  
+    onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
+  }
+};
 // =============================
 let eliteUsers = {};
 let onlineIds = [];
@@ -193,19 +215,15 @@ function isValidColor(color) {
   return ctx.fillStyle !== "#000" || color === "#000";
 }
 // =============================
-function getUserRole(member) {
-  const roles = member.roles.cache;
+function getUserRoleByGroup(group) {
 
-  if (roles.some(r => r.name === "Champion"))
-    return { name: "Champion", color: "#FFD700" };
-
-  if (roles.some(r => r.name === "Elite_Four"))
+  if (group === "eliteFour")
     return { name: "Elite Four", color: "#800080" };
 
-  if (roles.some(r => r.name === "Gym_Leader"))
+  if (group === "gymLeader")
     return { name: "Gym Leader", color: "#0099ff" };
 
-  if (roles.some(r => r.name === "Trainer"))
+  if (group === "trainer")
     return { name: "Trainer", color: "#00ff00" };
 
   return { name: "Reroller", color: "#aaaaaa" };
@@ -227,7 +245,17 @@ client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
-  onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+  
+let combinedOnlineIds = [];
+
+for (const group of Object.values(GROUPS)) {
+  const raw = await getGist(group.onlineGistId);
+  const ids = cleanOnlineIds(raw);
+  combinedOnlineIds.push(...ids);
+}
+
+onlineIds = [...new Set(combinedOnlineIds)];
+  
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
   userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
@@ -245,18 +273,52 @@ async function runTrackingCycle() {
 
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
-  onlineIds = cleanOnlineIds(
-    await getGist(process.env.GIST_ONLINE)
-  );
+  // =============================
+  // 🔥 1️⃣ Unificar ONLINE de los 3 grupos
+  // =============================
+  let combinedOnlineIds = [];
 
+  for (const group of Object.values(GROUPS)) {
+    const raw = await getGist(group.onlineGistId);
+    const ids = cleanOnlineIds(raw);
+    combinedOnlineIds.push(...ids);
+  }
+
+  onlineIds = [...new Set(combinedOnlineIds)];
+
+  // =============================
+  // 🔥 2️⃣ Procesar usuarios
+  // =============================
   for (const [id, user] of Object.entries(eliteUsers)) {
 
+    // Detectar si está online
     const isOnline =
       onlineIds.includes(user.main_id) ||
       onlineIds.includes(user.sec_id);
 
     if (!isOnline) continue;
 
+    // Detectar grupo (según donde esté online)
+    let userGroup = null;
+
+    for (const [groupName, group] of Object.entries(GROUPS)) {
+      const raw = await getGist(group.onlineGistId);
+      const ids = cleanOnlineIds(raw);
+
+      if (
+        ids.includes(user.main_id) ||
+        ids.includes(user.sec_id)
+      ) {
+        userGroup = groupName;
+        break;
+      }
+    }
+
+    if (!userGroup) continue;
+
+    // =============================
+    // 🧠 Crear liveTracker si no existe
+    // =============================
     if (!liveTracker[id]) {
       liveTracker[id] = {
         sessionXP: 0,
@@ -265,30 +327,33 @@ async function runTrackingCycle() {
         boostUntil: 0,
         name: user.name,
         packs: 0,
+        gp: 0,
+        group: userGroup  // 🔥 NUEVO
       };
+    } else {
+      // Si ya existe, actualizar grupo si cambió
+      liveTracker[id].group = userGroup;
     }
 
     const t = liveTracker[id];
 
-    const seconds = 60; // 5 minutos
+    // =============================
+    // ⏱ Tiempo + XP
+    // =============================
+    const seconds = 60; // tu intervalo real
+
     t.sessionTime += seconds;
 
     let xpPerSecond = (2 + t.instances * 0.5) / 60;
-    if (Date.now() < t.boostUntil) xpPerSecond *= 2;
+
+    if (Date.now() < t.boostUntil) {
+      xpPerSecond *= 2;
+    }
 
     t.sessionXP += xpPerSecond * seconds;
   }
 
   await updatePanels();
-}
-
-function startLoop() {
-
-  // 🔥 Ejecuta inmediatamente al iniciar
-  runTrackingCycle();
-
-  // 🔁 Luego cada 5 minutos
-  setInterval(runTrackingCycle, 60000);
 }
 
 
@@ -318,8 +383,16 @@ async function renderPanel(id, channel) {
 
   const poke = getPokemonData(totalXP);
 
-  const member = await channel.guild.members.fetch(id).catch(() => null);
-  const role = member ? getUserRole(member) : { name: "Reroller", color: "#aaa" };
+let role;
+
+if (s?.group) {
+  role = getUserRoleByGroup(s.group);
+} else {
+  role = {
+    name: t.role || "Reroller",
+    color: "#aaaaaa"
+  };
+}
 
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
@@ -629,14 +702,16 @@ async function forceRender(id) {
   lastManualEdit[id] = Date.now();
 
   if (!liveTracker[id]) {
-    liveTracker[id] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: 1,
-      boostUntil: 0,
-      name: trackingData[id]?.name || "User",
-      packs: 0,
-    };
+  liveTracker[id] = {
+  sessionXP: 0,
+  sessionTime: 0,
+  instances: 1,
+  boostUntil: 0,
+  name: user.name,
+  packs: 0,
+  gp: 0,
+  group: userGroup   // 🔥 NUEVO
+};
   }
 
   const { file } = await renderPanel(id, channel);
@@ -658,9 +733,11 @@ function startBackupLoop() {
 
       const s = liveTracker[id];
 
-      trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
-      trackingData[id].packs = s.packs;
+   trackingData[id].xp += s.sessionXP;
+trackingData[id].time += Math.floor(s.sessionTime / 60);
+trackingData[id].packs = s.packs;
+trackingData[id].gp = s.gp;
+trackingData[id].role = getUserRoleByGroup(s.group).name;
 
       s.sessionXP = 0;
       s.sessionTime = 0;
