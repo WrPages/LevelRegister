@@ -411,7 +411,7 @@ if (!trackingData[userId]) {
         trackingData[userId].lastPacks = currentPacks;
       }
     }
-  }
+  
 
   // =============================
   // 🔥 2️⃣ PROCESAR XP Y TIEMPO (tu sistema actual)
