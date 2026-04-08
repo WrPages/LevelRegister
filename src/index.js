@@ -386,7 +386,7 @@ async function renderPanel(id, channel) {
 let role;
 
 if (s?.group) {
-  role = getUserRoleByGroup(s.group);
+ const role = getUserRoleByGroup(s.group);
 } else {
   role = {
     name: t.role || "Reroller",
