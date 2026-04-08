@@ -466,7 +466,7 @@ if (!trackingData[userId]) {
   await updateGist(
  // process.env.GIST_TRACKING,
  // JSON.stringify(trackingData, null, 2)
-//);
+);
 
   await updatePanels();
       } catch (error) {
