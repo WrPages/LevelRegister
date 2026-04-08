@@ -25,6 +25,14 @@ if (!process.env.GIST_SETTINGS) {
   throw new Error("❌ FALTA GIST_SETTINGS en Railway");
 }
 
+
+
+const commandMap = {
+  nombre: "name",
+  name: "name",
+  texto: "text",
+  text: "text",
+};
 // =============================
 // 🧠 FONT
 // =============================
@@ -39,9 +47,34 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers // 🔥 NECESARIO
   ],
 });
-
+const CHAMPION_ROLE_ID = "1486206362332434634";
+// =============================
+// 📌 CANALES Y GISTS POR GRUPO
+// =============================
+const GROUPS = {
+  trainer: {
+    heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
+    gpChannelId: "1487362022864588902",               // canal donde se cuentan GP
+   usersGistId: "1c066922bc39ac136b6f234fad6d9420",
+    onlineGistId: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c"     // Gist con usuarios online
+  },
+  gymLeader: {
+    heartbeatChannelId: "1491238609578360833",
+    gpChannelId: "1491238471556403281",
+    usersGistId: "a3f5f3d8a2e6ddf2378fb3481dff49f6",
+    onlineGistId: "e110c37b3e0b8de83a33a1b0a5eb64e8"
+  },
+  eliteFour: {
+    heartbeatChannelId: "1483616146996465735",
+    gpChannelId: "1484015417411244082",
+   // gpChannelId: "1486277594629275770",
+  usersGistId: "bb18eda2ea748723d8fe0131dd740b70",
+    onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
+  }
+};
 // =============================
 let eliteUsers = {};
 let onlineIds = [];
@@ -51,6 +84,8 @@ let userPanels = {};
 let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
+
+let groupOnlineMap = {};  // 🔥 GLOBAL
 
 // =============================
 // ⚡ CACHE DE IMÁGENES
@@ -97,31 +132,103 @@ function saveSettings() {
 }
 
 // =============================
-const colorMap = {
-  rojo: "#ff0000",
-  verde: "#00ff00",
-  azul: "#0099ff",
-  amarillo: "#ffff00",
-  morado: "#800080",
-  rosa: "#ff00ff",
-  cian: "#00ffff",
-  blanco: "#ffffff",
+const colorCategories = {
+  red: [
+    { label: "🔴 Red", value: "#ff4d4d" },
+    { label: "🔥 Crimson", value: "#dc143c" },
+    { label: "🍅 Tomato", value: "#ff6347" },
+    { label: "🩸 Dark Red", value: "#8b0000" },
+    { label: "❤️ Firebrick", value: "#b22222" },
+    { label: "🌹 Indian Red", value: "#cd5c5c" },
+    { label: "🍓 Light Coral", value: "#f08080" },
+  ],
+
+  blue: [
+    { label: "🔵 Blue", value: "#4da6ff" },
+    { label: "🌊 Dodger Blue", value: "#1e90ff" },
+    { label: "💎 Royal Blue", value: "#4169e1" },
+    { label: "🌌 Midnight Blue", value: "#191970" },
+    { label: "🌀 Steel Blue", value: "#4682b4" },
+    { label: "❄️ Light Blue", value: "#add8e6" },
+    { label: "🌫️ Sky Blue", value: "#87ceeb" },
+  ],
+
+  green: [
+    { label: "🟢 Green", value: "#4dff88" },
+    { label: "🌿 Lime", value: "#32cd32" },
+    { label: "🌲 Forest", value: "#228b22" },
+    { label: "🍃 Spring", value: "#00ff7f" },
+    { label: "🥑 Olive", value: "#808000" },
+    { label: "🌱 Sea Green", value: "#2e8b57" },
+    { label: "🌴 Dark Green", value: "#006400" },
+  ],
+
+  yellow: [
+    { label: "🟡 Yellow", value: "#ffff66" },
+    { label: "🌟 Gold", value: "#ffd700" },
+    { label: "🍋 Lemon", value: "#fff44f" },
+    { label: "🌻 Khaki", value: "#f0e68c" },
+    { label: "🧈 Light Yellow", value: "#ffffe0" },
+  ],
+
+  purple: [
+    { label: "🟣 Purple", value: "#b84dff" },
+    { label: "💜 Violet", value: "#ee82ee" },
+    { label: "🔮 Indigo", value: "#4b0082" },
+    { label: "🌌 Dark Violet", value: "#9400d3" },
+    { label: "🍇 Plum", value: "#dda0dd" },
+  ],
+
+  pink: [
+    { label: "🌸 Pink", value: "#ff66cc" },
+    { label: "💖 Hot Pink", value: "#ff69b4" },
+    { label: "🎀 Deep Pink", value: "#ff1493" },
+    { label: "🌺 Pale Violet", value: "#db7093" },
+  ],
+
+  neutral: [
+    { label: "⚪ White", value: "#ffffff" },
+    { label: "⬜ Light Gray", value: "#d3d3d3" },
+    { label: "🌑 Gray", value: "#808080" },
+    { label: "⬛ Dark Gray", value: "#404040" },
+    { label: "🖤 Black", value: "#000000" },
+  ],
+
+  special: [
+    { label: "💎 Cyan", value: "#00ffff" },
+    { label: "🧊 Aqua", value: "#7fdbff" },
+    { label: "🍊 Orange", value: "#ff944d" },
+    { label: "🔥 Dark Orange", value: "#ff8c00" },
+    { label: "🌈 Rainbow", value: "#ff00ff" },
+  ],
+
+  neon: [
+    { label: "⚡ Neon Blue", value: "#00ffff" },
+    { label: "💚 Neon Green", value: "#39ff14" },
+    { label: "💖 Neon Pink", value: "#ff10f0" },
+    { label: "🟡 Neon Yellow", value: "#ffff33" },
+    { label: "🟣 Neon Purple", value: "#bc13fe" },
+  ]
 };
+function isValidColor(color) {
+  const canvas = createCanvas(10, 10);
+  const ctx = canvas.getContext("2d");
 
+  ctx.fillStyle = "#000";
+  ctx.fillStyle = color;
+
+  return ctx.fillStyle !== "#000" || color === "#000";
+}
 // =============================
-function getUserRole(member) {
-  const roles = member.roles.cache;
+function getUserRoleByGroup(group) {
 
-  if (roles.some(r => r.name === "Champion"))
-    return { name: "Champion", color: "#FFD700" };
-
-  if (roles.some(r => r.name === "Elite_Four"))
+  if (group === "eliteFour")
     return { name: "Elite Four", color: "#800080" };
 
-  if (roles.some(r => r.name === "Gym_Leader"))
+  if (group === "gymLeader")
     return { name: "Gym Leader", color: "#0099ff" };
 
-  if (roles.some(r => r.name === "Trainer"))
+  if (group === "trainer")
     return { name: "Trainer", color: "#00ff00" };
 
   return { name: "Reroller", color: "#aaaaaa" };
@@ -142,53 +249,242 @@ function getPokemonData(totalXP) {
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
-  eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
-  onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
+  eliteUsers = {};
+
+for (const [groupName, group] of Object.entries(GROUPS)) {
+
+  const usersData = safeParse(await getGist(group.usersGistId));
+
+  // Agregamos el grupo automáticamente a cada usuario
+  for (const [id, user] of Object.entries(usersData)) {
+    eliteUsers[id] = {
+      ...user,
+      group: groupName
+    };
+  }
+}
+
+console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
+  
+groupOnlineMap = {};
+let combinedOnlineIds = [];
+
+for (const [groupName, group] of Object.entries(GROUPS)) {
+  const raw = await getGist(group.onlineGistId);
+  const ids = cleanOnlineIds(raw);
+
+  groupOnlineMap[groupName] = ids;
+  combinedOnlineIds.push(...ids);
+}
+
+onlineIds = [...new Set(combinedOnlineIds)];
+  
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
 
   userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
-  sanitizeTracking();
+sanitizeTracking();
 
-  startLoop();
-  startBackupLoop();
+// 🔥 FORZAR ACTUALIZACIÓN AL INICIAR
+console.log("🚀 Ejecutando actualización inicial...");
+
+await runTrackingCycle();
+
+// 🔥 Guardar inmediatamente en Gist
+await updateGist(process.env.GIST_TRACKING, trackingData);
+
+console.log("✅ Datos sincronizados al iniciar");
+
+// Luego iniciar loops normales
+startLoop();
+startBackupLoop();
+  
 });
 
 // =============================
-function startLoop() {
-  setInterval(async () => {
-    onlineIds = cleanOnlineIds(await getGist(process.env.GIST_ONLINE));
 
-    for (const [id, user] of Object.entries(eliteUsers)) {
-      const isOnline =
-        onlineIds.includes(user.main_id) ||
-        onlineIds.includes(user.sec_id);
+async function runTrackingCycle() {
 
-      if (!isOnline) continue;
+   try {
+  console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
+const trackingRaw = await getGist(process.env.GIST_TRACKING);
+ trackingData = trackingRaw ? safeParse(trackingRaw) : {};
+  
+  const groupOnlineMap = {};
+  let combinedOnlineIds = [];
 
-      if (!liveTracker[id]) {
-        liveTracker[id] = {
-          sessionXP: 0,
-          sessionTime: 0,
-          instances: 1,
-          boostUntil: 0,
-          name: user.name,
-          packs: 0,
-        };
-      }
+  // =============================
+  // 🔥 1️⃣ Cargar ONLINE de los 3 grupos
+  // =============================
+  for (const [groupName, group] of Object.entries(GROUPS)) {
 
-      const t = liveTracker[id];
-      t.sessionTime += 1;
+    const raw = await getGist(group.onlineGistId);
+    const ids = cleanOnlineIds(raw);
 
-      let xpPerSecond = (2 + t.instances * 0.5) / 60;
-      if (Date.now() < t.boostUntil) xpPerSecond *= 2;
+    groupOnlineMap[groupName] = ids;
+    combinedOnlineIds.push(...ids);
+  }
 
-      t.sessionXP += xpPerSecond;
+  const onlineIds = [...new Set(combinedOnlineIds)];
+
+  // =============================
+  // 📦 LEER HEARTBEAT POR GRUPO
+  // =============================
+
+
+for (const [groupName, group] of Object.entries(GROUPS)) {
+
+  const channel = await client.channels.fetch(group.heartbeatChannelId);
+  const messages = await channel.messages.fetch({ limit: 50 });
+
+  const onlineGroupIds = groupOnlineMap[groupName] || [];
+
+  for (const [userId, user] of Object.entries(eliteUsers)) {
+
+    // asegurar tracking
+    if (!trackingData[userId]) {
+      trackingData[userId] = {
+        xp: 0,
+        time: 0,
+        packs: 0,
+        gp: 0,
+        recordInstances: 0,
+        lastPacks: 0,
+        name: user.name
+      };
     }
 
-    await updatePanels();
-  }, 5000);
+   const idsToCheck = [user.main_id, user.sec_id]
+  .filter(Boolean)
+  .map(id => String(id));
+
+    const isOnlineInThisGroup = idsToCheck.some(id =>
+      onlineGroupIds.includes(id)
+    );
+
+    if (!isOnlineInThisGroup) continue;
+
+ const userMessage = messages.find(m => {
+  if (!m.webhookId) return false;
+
+  const firstLine = m.content.split("\n")[0]?.trim();
+
+  // normalizar
+  const normalizedMsgName = firstLine.replace("@", "").toLowerCase().trim();
+  const normalizedUserName = user.name.toLowerCase().trim();
+
+  return normalizedMsgName === normalizedUserName;
+});
+
+    if (!userMessage) continue;
+
+    const content = userMessage.content;
+
+    // =============================
+    // INSTANCIAS (record)
+    // =============================
+    const onlineMatch = content.match(/Online:\s*(.+)/i);
+
+    if (onlineMatch) {
+      const instances = onlineMatch[1]
+        .split(",")
+        .map(x => x.trim())
+        .filter(x =>
+          x.toLowerCase() !== "main" &&
+          x.toLowerCase() !== "none"
+        ).length;
+
+      if (instances > trackingData[userId].recordInstances) {
+        trackingData[userId].recordInstances = instances;
+      }
+    }
+
+    // =============================
+    // PACKS (por diferencia)
+    // =============================
+    const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+    if (packsMatch) {
+
+      const currentPacks = parseInt(packsMatch[1]);
+
+      if (currentPacks > trackingData[userId].lastPacks) {
+        const diff = currentPacks - trackingData[userId].lastPacks;
+        trackingData[userId].packs += diff;
+      }
+
+      trackingData[userId].lastPacks = currentPacks;
+    }
+  }
 }
+
+    
+  
+
+  // =============================
+  // 🔥 2️⃣ PROCESAR XP Y TIEMPO (tu sistema actual)
+  // =============================
+  for (const [id, user] of Object.entries(eliteUsers)) {
+
+    const userIds = [user.main_id, user.sec_id].filter(Boolean);
+    const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
+
+    if (!isOnline) continue;
+
+    let userGroup = null;
+
+    for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
+      if (userIds.some(uid => ids.includes(String(uid)))) {
+        userGroup = groupName;
+        break;
+      }
+    }
+
+    if (!userGroup) continue;
+
+    if (!liveTracker[id]) {
+      liveTracker[id] = {
+        sessionXP: 0,
+        sessionTime: 0,
+        instances: 1,
+        boostUntil: 0,
+        name: user.name,
+        packs: 0,
+        gp: 0,
+        group: userGroup
+      };
+    } else {
+      liveTracker[id].group = userGroup;
+    }
+
+    const t = liveTracker[id];
+
+    const seconds = 60;
+    t.sessionTime += seconds;
+
+    let xpPerSecond = (2 + t.instances * 0.5) / 60;
+
+    if (Date.now() < t.boostUntil)
+      xpPerSecond *= 2;
+
+    t.sessionXP += xpPerSecond * seconds;
+  }
+
+  // 🔥 Guardar tracking
+  await updateGist(
+  process.env.GIST_TRACKING,
+  JSON.stringify(trackingData, null, 2)
+);
+
+  await updatePanels();
+      } catch (error) {
+    console.error("❌ Error en runTrackingCycle:", error);
+  }
+}
+
+
+
+
 
 // =============================
 async function renderPanel(id, channel) {
@@ -211,13 +507,44 @@ async function renderPanel(id, channel) {
 
   const poke = getPokemonData(totalXP);
 
-  const member = await channel.guild.members.fetch(id).catch(() => null);
-  const role = member ? getUserRole(member) : { name: "Reroller", color: "#aaa" };
+let role;
+
+if (s?.group) {
+  role = getUserRoleByGroup(s.group);
+} else {
+  role = {
+    name: t.role || "Reroller",
+    color: "#aaaaaa"
+  };
+}
+
+// 👑 DETECCIÓN CHAMPION
+try {
+  const guild = client.guilds.cache.first();
+  const member = await guild.members.fetch(id);
+
+  if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
+    role = {
+      name: "Champion",
+      color: "#FFD700" // dorado 👑
+    };
+  }
+
+} catch (err) {
+  console.log("No se pudo verificar Champion:", err.message);
+}
 
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  const bg = await loadImageCached(settings.bg || "./assets/card.png");
+  let bg;
+
+if (settings.bg?.type === "base64") {
+  const buffer = Buffer.from(settings.bg.data, "base64");
+  bg = await loadImage(buffer);
+} else {
+  bg = await loadImageCached("./assets/card.png");
+}
   ctx.drawImage(bg, 0, 0, 800, 450);
 
   ctx.fillStyle = settings.nameColor;
@@ -237,8 +564,8 @@ async function renderPanel(id, channel) {
 
   ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
   ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
-  ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
-  ctx.fillText(`Packs: ${s.packs}`, 40, 290);
+  ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
+  ctx.fillText(`Packs: ${t.packs || 0}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
   return {
@@ -246,18 +573,36 @@ async function renderPanel(id, channel) {
     gif: poke.gif
   };
 }
-
-// =============================
-function createColorButtons(type, userId) {
+function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
-    Object.entries(colorMap).map(([name]) =>
-      new ButtonBuilder()
-        .setCustomId(`color_${type}_${userId}_${name}`)
-        .setLabel(name)
-        .setStyle(ButtonStyle.Secondary)
-    )
+    new StringSelectMenuBuilder()
+      .setCustomId(`cat_${type}_${userId}`)
+      .setPlaceholder("Elige categoría")
+      .addOptions([
+        { label: "🔴 Rojos", value: "red" },
+        { label: "🔵 Azules", value: "blue" },
+        { label: "🟢 Verdes", value: "green" },
+        { label: "🟡 Amarillos", value: "yellow" },
+        { label: "🟣 Morados", value: "purple" },
+        { label: "🌸 Rosas", value: "pink" },
+        { label: "⚫ Neutros", value: "neutral" },
+        { label: "🌈 Especiales", value: "special" },
+        { label: "⚡ Neon", value: "neon" },
+      ])
   );
 }
+
+function createColorMenu(type, userId, category) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`color_${type}_${userId}`)
+      .setPlaceholder("Selecciona un color")
+      .addOptions(colorCategories[category])
+  );
+}
+
+
+// =============================
 
 // =============================
 async function updatePanels() {
@@ -267,13 +612,23 @@ async function updatePanels() {
 
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
-    const { file, gif } = await renderPanel(id, channel);
+    if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
+
+const { file, gif } = await renderPanel(id, channel);
 
     if (userPanels[id]) {
-      const msg = await channel.messages.fetch(userPanels[id].messageId);
-      await msg.edit({ files: [file] });
-      continue;
-    }
+  try {
+    const msg = await channel.messages.fetch(userPanels[id].messageId);
+
+    await msg.edit({ files: [file] });
+
+    continue;
+  } catch (err) {
+    console.log(`⚠️ Mensaje perdido para ${id}, recreando panel...`);
+
+    delete userPanels[id]; // 🔥 IMPORTANTE
+  }
+}
 
     const sent = await channel.send({ files: [file] });
 
@@ -293,7 +648,7 @@ async function updatePanels() {
     );
 
     await thread.send({
-      content: "🎮 Panel de personalización",
+      content: "🎮 Personaliza tu panel",
       components: [menu],
     });
 
@@ -308,40 +663,94 @@ async function updatePanels() {
 // =============================
 client.on("interactionCreate", async (i) => {
 
-  if (i.isStringSelectMenu()) {
-    const [, id] = i.customId.split("_");
-    const option = i.values[0];
+  // =============================
+  // 🎮 MENU PRINCIPAL
+  // =============================
+  if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
 
-    editState[id] = option;
+    const id = i.user.id;
+    const option = i.values[0];
 
     if (option === "bg") {
       return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
     }
 
-    if (option === "name" || option === "text") {
-      return i.reply({
-        content: "🎨 Selecciona un color:",
-        components: [createColorButtons(option, id)],
-        ephemeral: true
-      });
-    }
+   if (option === "name" || option === "text") {
+  return i.reply({
+    content: "🎨 Elige una categoría:",
+    components: [createCategoryMenu(option, id)],
+    ephemeral: true
+  });
+}
   }
 
-  if (i.isButton()) {
-    const [, type, id, colorName] = i.customId.split("_");
+  // =============================
+  // 🎨 SELECCIÓN DE COLOR
+  // =============================
+if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 
-    if (!userSettings[id]) userSettings[id] = {};
+  const [, type, userId] = i.customId.split("_");
 
-    userSettings[id][type === "name" ? "nameColor" : "textColor"] =
-      colorMap[colorName];
-
-    saveSettings();
-
-    await forceRender(id);
-
-    return i.reply({ content: "Color aplicado ✅", ephemeral: true });
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
   }
+
+  const category = i.values[0];
+
+  return i.update({
+    content: "🎨 Ahora elige un color:",
+    components: [createColorMenu(type, userId, category)]
+  });
+}
+
+
+ if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
+
+  const [, type, userId] = i.customId.split("_");
+  const color = i.values[0];
+
+  // 🔒 Seguridad: solo el dueño puede usarlo
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
+  const entry = Object.entries(userPanels)
+    .find(([_, data]) => data.threadId === i.channel.id);
+
+  if (!entry) {
+    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
+  }
+
+  const [id] = entry;
+
+  if (!userSettings[id]) userSettings[id] = {};
+
+  if (type === "name") userSettings[id].nameColor = color;
+  if (type === "text") userSettings[id].textColor = color;
+
+  saveSettings();
+
+  await i.update({
+    content: `✅ Color aplicado`,
+    components: []
+  });
+
+  await forceRender(id);
+}
+
+
+
+  
 });
+
+  
+
 
 // =============================
 // 🖼️ FONDO
@@ -357,16 +766,171 @@ client.on("messageCreate", async (msg) => {
 
   const [id] = entry;
 
-  if (editState[id] !== "bg") return;
+  if (!userSettings[id]) userSettings[id] = {};
 
+  const content = msg.content.toLowerCase().trim();
+
+
+
+// =============================
+// 💎 DETECCIÓN GOD PACK
+// =============================
+for (const group of Object.values(GROUPS)) {
+
+  if (msg.channel.id === group.gpChannelId) {
+
+    const lines = msg.content.split("\n");
+    const firstLine = lines[0];
+
+    const match = firstLine.match(/@(.+?)\s+Kudos!/i);
+
+    if (!match) return;
+
+    const username = match[1].trim();
+
+    const userEntry = Object.entries(trackingData)
+      .find(([id, data]) => data.name === username);
+
+    if (userEntry) {
+
+      const [id] = userEntry;
+
+      if (!trackingData[id].gp)
+        trackingData[id].gp = 0;
+
+      trackingData[id].gp += 1;
+
+      console.log(`💎 GP sumado a ${username}`);
+    }
+  }
+}
+
+  
+// =============================
+// 📦 DETECCIÓN WEBHOOK TRACKING
+// =============================
+if (msg.webhookId) {
+
+  const content = msg.content;
+
+  const onlineMatch = content.match(/Online:\s*(.+)/i);
+  const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+if (packsMatch) {
+
+  const username = content.split("\n")[0]?.trim();
+  const currentPacks = Number(packsMatch[1]);
+
+  const userEntry = Object.entries(trackingData)
+    .find(([id, data]) => data.name === username);
+
+  if (userEntry) {
+
+    const [id] = userEntry;
+    
+if (trackingData[id].lastPacks === undefined) {
+    trackingData[id].lastPacks = currentPacks;
+}
+
+    const diff = currentPacks - trackingData[id].lastPacks;
+
+    if (diff > 0) {
+      trackingData[id].packs += diff;
+    }
+
+    trackingData[id].lastPacks = currentPacks;
+  }
+}
+
+
+  
+  if (onlineMatch) {
+
+    const username = content.split("\n")[0]?.trim(); // Zannt
+    const onlineLine = onlineMatch[1];
+
+    const instances = onlineLine
+      .split(",")
+      .map(x => x.trim())
+      .filter(x => x !== "Main" && x.toLowerCase() !== "none")
+      .length;
+
+    const userEntry = Object.entries(trackingData)
+      .find(([id, data]) => data.name === username);
+
+    if (userEntry) {
+      const [id] = userEntry;
+
+      if (!trackingData[id].recordInstances)
+        trackingData[id].recordInstances = 0;
+
+      if (instances > trackingData[id].recordInstances) {
+        trackingData[id].recordInstances = instances;
+      }
+
+
+      
+    }
+  }
+}
+  // =============================
+  // 🎨 COLOR (ES + EN)
+  // =============================
+  const parts = content.split(" ");
+
+  if (parts.length >= 2) {
+
+    let type = parts[0];
+    const value = parts[1];
+
+    type = commandMap[type];
+
+    if (type) {
+
+      let color = value;
+
+      if (!isValidColor(color)) {
+        return msg.reply(`❌ Color inválido / Invalid color
+
+Ejemplos:
+red, blue, gold
+#ff0000
+rgb(255,0,0)`);
+      }
+
+      if (type === "name") {
+        userSettings[id].nameColor = color;
+      }
+
+      if (type === "text") {
+        userSettings[id].textColor = color;
+      }
+
+      saveSettings();
+      await forceRender(id);
+
+      return msg.reply(`✅ Color aplicado: ${color}`);
+    }
+  }
+
+  // =============================
+  // 🖼️ FONDO
+  // =============================
   if (msg.attachments.size > 0) {
     const file = msg.attachments.first();
 
     if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
-      userSettings[id].bg = file.url;
+
+      const res = await fetch(file.url);
+      const buffer = await res.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
+
+      userSettings[id].bg = {
+        type: "base64",
+        data: base64
+      };
 
       saveSettings();
-
       await forceRender(id);
 
       return msg.reply("Fondo actualizado ✅");
@@ -380,25 +944,38 @@ async function forceRender(id) {
 
   lastManualEdit[id] = Date.now();
 
-  if (!liveTracker[id]) {
-    liveTracker[id] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: 1,
-      boostUntil: 0,
-      name: trackingData[id]?.name || "User",
-      packs: 0,
-    };
-  }
+if (!liveTracker[id]) {
+  liveTracker[id] = {
+    sessionXP: 0,
+    sessionTime: 0,
+    instances: 1,
+    boostUntil: 0,
+    name: trackingData[id]?.name || "Unknown",
+    packs: 0,
+    gp: 0,
+    group: trackingData[id]?.role
+  };
+}
 
   const { file } = await renderPanel(id, channel);
   const msg = await channel.messages.fetch(userPanels[id].messageId);
 
   await msg.edit({
-    content: `updated_${Date.now()}`,
-    files: [file]
+  //  content: `updated_${Date.now()}`,
+  files: [file]
   });
 }
+
+
+function startLoop() {
+
+  // Ejecuta inmediatamente
+  runTrackingCycle();
+
+  // Luego cada 1 minuto
+  setInterval(runTrackingCycle, 60000);
+}
+
 
 // =============================
 function startBackupLoop() {
@@ -410,9 +987,11 @@ function startBackupLoop() {
 
       const s = liveTracker[id];
 
-      trackingData[id].xp += s.sessionXP;
-      trackingData[id].time += Math.floor(s.sessionTime / 60);
-      trackingData[id].packs = s.packs;
+   trackingData[id].xp += s.sessionXP;
+trackingData[id].time += Math.floor(s.sessionTime / 60);
+//trackingData[id].packs = s.packs;
+trackingData[id].gp = s.gp;
+trackingData[id].role = getUserRoleByGroup(s.group).name;
 
       s.sessionXP = 0;
       s.sessionTime = 0;
@@ -433,12 +1012,21 @@ function sanitizeTracking() {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
     trackingData[k].gp = Number(trackingData[k].gp) || 0;
+    trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
+trackingData[k].packs = Number(trackingData[k].packs) || 0;
+        trackingData[k].lastPacks = Number(trackingData[k].lastPacks) || 0;
+
+//trackingData[k].gp = Number(trackingData[k].gp) || 0;
   }
 }
 
 function cleanOnlineIds(raw) {
   if (!raw) return [];
-  return raw.split("\n").map(x => x.trim()).filter(Boolean);
+
+  return raw
+    .split(/\r?\n/)
+    .map(x => x.trim())
+    .filter(x => x.length > 0);
 }
 
 client.login(process.env.DISCORD_TOKEN);
