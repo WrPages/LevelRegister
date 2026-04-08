@@ -283,10 +283,21 @@ onlineIds = [...new Set(combinedOnlineIds)];
 
   userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
-  sanitizeTracking();
+sanitizeTracking();
 
-  startLoop();
-  startBackupLoop();
+// 🔥 FORZAR ACTUALIZACIÓN AL INICIAR
+console.log("🚀 Ejecutando actualización inicial...");
+
+await runTrackingCycle();
+
+// 🔥 Guardar inmediatamente en Gist
+await updateGist(process.env.GIST_TRACKING, trackingData);
+
+console.log("✅ Datos sincronizados al iniciar");
+
+// Luego iniciar loops normales
+startLoop();
+startBackupLoop();
   
 });
 
@@ -311,6 +322,83 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
 }
 
 onlineIds = [...new Set(combinedOnlineIds)];
+
+
+// =============================
+// 📦 LEER HEARTBEAT POR GRUPO
+// =============================
+for (const [groupName, group] of Object.entries(GROUPS)) {
+
+  const channel = await client.channels.fetch(group.heartbeatChannelId);
+  const messages = await channel.messages.fetch({ limit: 50 });
+
+  const onlineGroupIds = groupOnlineMap[groupName];
+
+  for (const userId of Object.keys(eliteUsers)) {
+
+    const user = eliteUsers[userId];
+
+    const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
+
+    const isOnlineInThisGroup = idsToCheck.some(id =>
+      onlineGroupIds.includes(id)
+    );
+
+    if (!isOnlineInThisGroup) continue;
+
+    // 🔎 Buscar último mensaje del usuario
+    const userMessage = messages.find(m =>
+      m.webhookId &&
+      m.content.startsWith(user.name)
+    );
+
+    if (!userMessage) continue;
+
+    const content = userMessage.content;
+
+    // =============================
+    // 📦 PACKS
+    // =============================
+    const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+    if (packsMatch) {
+
+      const currentPacks = Number(packsMatch[1]);
+
+      if (!trackingData[userId].lastPacks)
+        trackingData[userId].lastPacks = currentPacks;
+
+      const diff = currentPacks - trackingData[userId].lastPacks;
+
+      if (diff > 0) {
+        trackingData[userId].packs += diff;
+      }
+
+      trackingData[userId].lastPacks = currentPacks;
+    }
+
+    // =============================
+    // 🥇 INSTANCIAS (sin Main)
+    // =============================
+    const onlineMatch = content.match(/Online:\s*(.+)/i);
+
+    if (onlineMatch) {
+
+      const instances = onlineMatch[1]
+        .split(",")
+        .map(x => x.trim())
+        .filter(x => x !== "Main" && x.toLowerCase() !== "none")
+        .length;
+
+      if (instances > trackingData[userId].recordInstances) {
+        trackingData[userId].recordInstances = instances;
+      }
+    }
+  }
+}
+
+
+  
 
   // =============================
   // 🔥 2️⃣ Procesar usuarios
