@@ -82,6 +82,8 @@ let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
 
+let groupOnlineMap = {};  // 🔥 GLOBAL
+
 // =============================
 // ⚡ CACHE DE IMÁGENES
 // =============================
@@ -246,7 +248,7 @@ client.once("clientReady", async () => {
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   
-let groupOnlineMap = {};
+groupOnlineMap = {};
 let combinedOnlineIds = [];
 
 for (const [groupName, group] of Object.entries(GROUPS)) {
@@ -279,15 +281,18 @@ async function runTrackingCycle() {
   // =============================
   // 🔥 1️⃣ Unificar ONLINE de los 3 grupos
   // =============================
-  let combinedOnlineIds = [];
+groupOnlineMap = {};
+let combinedOnlineIds = [];
 
-  for (const group of Object.values(GROUPS)) {
-    const raw = await getGist(group.onlineGistId);
-    const ids = cleanOnlineIds(raw);
-    combinedOnlineIds.push(...ids);
-  }
+for (const [groupName, group] of Object.entries(GROUPS)) {
+  const raw = await getGist(group.onlineGistId);
+  const ids = cleanOnlineIds(raw);
 
-  onlineIds = [...new Set(combinedOnlineIds)];
+  groupOnlineMap[groupName] = ids; // 🔥 guardar por grupo
+  combinedOnlineIds.push(...ids);
+}
+
+onlineIds = [...new Set(combinedOnlineIds)];
 
   // =============================
   // 🔥 2️⃣ Procesar usuarios
