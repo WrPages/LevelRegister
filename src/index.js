@@ -56,19 +56,19 @@ const GROUPS = {
   trainer: {
     heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
     gpChannelId: "1487362022864588902",               // canal donde se cuentan GP
-   
+   usersGistId: "1c066922bc39ac136b6f234fad6d9420",
     onlineGistId: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c"     // Gist con usuarios online
   },
   gymLeader: {
     heartbeatChannelId: "1491238609578360833",
     gpChannelId: "1491238471556403281",
-    
+    usersGistId: "a3f5f3d8a2e6ddf2378fb3481dff49f6",
     onlineGistId: "e110c37b3e0b8de83a33a1b0a5eb64e8"
   },
   eliteFour: {
     heartbeatChannelId: "1483616146996465735",
     gpChannelId: "1486277594629275770",
-  
+  usersGistId: "bb18eda2ea748723d8fe0131dd740b70",
     onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
   }
 };
@@ -246,7 +246,22 @@ function getPokemonData(totalXP) {
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
-  eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
+  eliteUsers = {};
+
+for (const [groupName, group] of Object.entries(GROUPS)) {
+
+  const usersData = safeParse(await getGist(group.usersGistId));
+
+  // Agregamos el grupo automáticamente a cada usuario
+  for (const [id, user] of Object.entries(usersData)) {
+    eliteUsers[id] = {
+      ...user,
+      group: groupName
+    };
+  }
+}
+
+console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
   
 groupOnlineMap = {};
 let combinedOnlineIds = [];
