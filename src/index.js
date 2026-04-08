@@ -307,25 +307,9 @@ async function runTrackingCycle() {
 
    try {
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
-const trackingRaw = await getGist(process.env.GIST_TRACKING);
- trackingData = trackingRaw ? safeParse(trackingRaw) : {};
+
   
-  const groupOnlineMap = {};
-  let combinedOnlineIds = [];
 
-  // =============================
-  // 🔥 1️⃣ Cargar ONLINE de los 3 grupos
-  // =============================
-  for (const [groupName, group] of Object.entries(GROUPS)) {
-
-    const raw = await getGist(group.onlineGistId);
-    const ids = cleanOnlineIds(raw);
-
-    groupOnlineMap[groupName] = ids;
-    combinedOnlineIds.push(...ids);
-  }
-
-  const onlineIds = [...new Set(combinedOnlineIds)];
 
   // =============================
   // 📦 LEER HEARTBEAT POR GRUPO
@@ -470,11 +454,7 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     t.sessionXP += xpPerSecond * seconds;
   }
 
-  // 🔥 Guardar tracking
-  await updateGist(
-  process.env.GIST_TRACKING,
-  JSON.stringify(trackingData, null, 2)
-);
+
 
   await updatePanels();
       } catch (error) {
