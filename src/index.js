@@ -246,11 +246,14 @@ client.once("clientReady", async () => {
 
   eliteUsers = safeParse(await getGist(process.env.GIST_USERS));
   
+let groupOnlineMap = {};
 let combinedOnlineIds = [];
 
-for (const group of Object.values(GROUPS)) {
+for (const [groupName, group] of Object.entries(GROUPS)) {
   const raw = await getGist(group.onlineGistId);
   const ids = cleanOnlineIds(raw);
+
+  groupOnlineMap[groupName] = ids;
   combinedOnlineIds.push(...ids);
 }
 
@@ -301,18 +304,15 @@ async function runTrackingCycle() {
     // Detectar grupo (según donde esté online)
     let userGroup = null;
 
-    for (const [groupName, group] of Object.entries(GROUPS)) {
-      const raw = await getGist(group.onlineGistId);
-      const ids = cleanOnlineIds(raw);
-
-      if (
-        ids.includes(user.main_id) ||
-        ids.includes(user.sec_id)
-      ) {
-        userGroup = groupName;
-        break;
-      }
-    }
+  for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
+  if (
+    ids.includes(user.main_id) ||
+    ids.includes(user.sec_id)
+  ) {
+    userGroup = groupName;
+    break;
+  }
+}
 
     if (!userGroup) continue;
 
@@ -386,7 +386,7 @@ async function renderPanel(id, channel) {
 let role;
 
 if (s?.group) {
- const role = getUserRoleByGroup(s.group);
+ role = getUserRoleByGroup(s.group);
 } else {
   role = {
     name: t.role || "Reroller",
@@ -701,18 +701,18 @@ async function forceRender(id) {
 
   lastManualEdit[id] = Date.now();
 
-  if (!liveTracker[id]) {
+if (!liveTracker[id]) {
   liveTracker[id] = {
-  sessionXP: 0,
-  sessionTime: 0,
-  instances: 1,
-  boostUntil: 0,
-  name: user.name,
-  packs: 0,
-  gp: 0,
-  group: userGroup   // 🔥 NUEVO
-};
-  }
+    sessionXP: 0,
+    sessionTime: 0,
+    instances: 1,
+    boostUntil: 0,
+    name: trackingData[id]?.name || "Unknown",
+    packs: 0,
+    gp: 0,
+    group: trackingData[id]?.role
+  };
+}
 
   const { file } = await renderPanel(id, channel);
   const msg = await channel.messages.fetch(userPanels[id].messageId);
