@@ -308,8 +308,7 @@ async function runTrackingCycle() {
    try {
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
-  const trackingRaw = await getGist(process.env.GIST_TRACKING);
-const trackingData = trackingRaw ? JSON.parse(trackingRaw) : {};
+ trackingData = trackingRaw ? JSON.parse(trackingRaw) : {};
   
   const groupOnlineMap = {};
   let combinedOnlineIds = [];
@@ -331,13 +330,11 @@ const trackingData = trackingRaw ? JSON.parse(trackingRaw) : {};
   // =============================
   // 📦 LEER HEARTBEAT POR GRUPO
   // =============================
-  for (const [groupName, group] of Object.entries(GROUPS)) {
+ 
+    for (const userId of Object.keys(eliteUsers)) {
 
-    const channel = await client.channels.fetch(group.heartbeatChannelId);
-    if (!channel) continue;
-
-    const messages = await channel.messages.fetch({ limit: 50 });
-    const onlineGroupIds = groupOnlineMap[groupName];
+      const user = eliteUsers[userId];
+      // 🔥 ASEGURAR QUE EXISTA EN TRACKING
 if (!trackingData[userId]) {
   trackingData[userId] = {
     xp: 0,
@@ -349,9 +346,6 @@ if (!trackingData[userId]) {
     name: user.name
   };
 }
-    for (const userId of Object.keys(eliteUsers)) {
-
-      const user = eliteUsers[userId];
       const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
 
       const isOnlineInThisGroup = idsToCheck.some(id =>
