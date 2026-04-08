@@ -347,10 +347,14 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     if (!isOnlineInThisGroup) continue;
 
     // 🔎 Buscar último mensaje del usuario
-    const userMessage = messages.find(m =>
-      m.webhookId &&
-      m.content.startsWith(user.name)
-    );
+   const userMessage = messages.find(m => {
+
+  if (!m.webhookId) return false;
+
+  const firstLine = m.content.split("\n")[0]?.trim();
+
+  return firstLine?.toLowerCase() === user.name.toLowerCase();
+});
 
     if (!userMessage) continue;
 
@@ -364,9 +368,10 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     if (packsMatch) {
 
       const currentPacks = Number(packsMatch[1]);
-
-      if (!trackingData[userId].lastPacks)
-        trackingData[userId].lastPacks = currentPacks;
+      
+if (trackingData[userId].lastPacks === undefined) {
+    trackingData[userId].lastPacks = currentPacks;
+}
 
       const diff = currentPacks - trackingData[userId].lastPacks;
 
@@ -1008,7 +1013,11 @@ trackingData[k].packs = Number(trackingData[k].packs) || 0;
 
 function cleanOnlineIds(raw) {
   if (!raw) return [];
-  return raw.split("\n").map(x => x.trim()).filter(Boolean);
+
+  return raw
+    .split(/\r?\n/)
+    .map(x => x.replace(/[^0-9]/g, "").trim())
+    .filter(x => x.length > 5);
 }
 
 client.login(process.env.DISCORD_TOKEN);
