@@ -47,10 +47,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers // 🔥 NECESARIO
   ],
 });
-const CHAMPION_ROLE_ID = "1486206362332434634";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
 // =============================
@@ -69,8 +67,7 @@ const GROUPS = {
   },
   eliteFour: {
     heartbeatChannelId: "1483616146996465735",
-    gpChannelId: "1484015417411244082",
-   // gpChannelId: "1486277594629275770",
+    gpChannelId: "1486277594629275770",
   usersGistId: "bb18eda2ea748723d8fe0131dd740b70",
     onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
   }
@@ -283,21 +280,10 @@ onlineIds = [...new Set(combinedOnlineIds)];
 
   userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
-sanitizeTracking();
+  sanitizeTracking();
 
-// 🔥 FORZAR ACTUALIZACIÓN AL INICIAR
-console.log("🚀 Ejecutando actualización inicial...");
-
-await runTrackingCycle();
-
-// 🔥 Guardar inmediatamente en Gist
-await updateGist(process.env.GIST_TRACKING, trackingData);
-
-console.log("✅ Datos sincronizados al iniciar");
-
-// Luego iniciar loops normales
-startLoop();
-startBackupLoop();
+  startLoop();
+  startBackupLoop();
   
 });
 
@@ -322,88 +308,6 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
 }
 
 onlineIds = [...new Set(combinedOnlineIds)];
-
-
-// =============================
-// 📦 LEER HEARTBEAT POR GRUPO
-// =============================
-for (const [groupName, group] of Object.entries(GROUPS)) {
-
-  const channel = await client.channels.fetch(group.heartbeatChannelId);
-  const messages = await channel.messages.fetch({ limit: 50 });
-
-  const onlineGroupIds = groupOnlineMap[groupName];
-
-  for (const userId of Object.keys(eliteUsers)) {
-
-    const user = eliteUsers[userId];
-
-    const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
-
-    const isOnlineInThisGroup = idsToCheck.some(id =>
-      onlineGroupIds.includes(id)
-    );
-
-    if (!isOnlineInThisGroup) continue;
-
-    // 🔎 Buscar último mensaje del usuario
-   const userMessage = messages.find(m => {
-
-  if (!m.webhookId) return false;
-
-  const firstLine = m.content.split("\n")[0]?.trim();
-
-  return firstLine?.toLowerCase() === user.name.toLowerCase();
-});
-
-    if (!userMessage) continue;
-
-    const content = userMessage.content;
-
-    // =============================
-    // 📦 PACKS
-    // =============================
-    const packsMatch = content.match(/Packs:\s*(\d+)/i);
-
-    if (packsMatch) {
-
-      const currentPacks = Number(packsMatch[1]);
-      
-if (trackingData[userId].lastPacks === undefined) {
-    trackingData[userId].lastPacks = currentPacks;
-}
-
-      const diff = currentPacks - trackingData[userId].lastPacks;
-
-      if (diff > 0) {
-        trackingData[userId].packs += diff;
-      }
-
-      trackingData[userId].lastPacks = currentPacks;
-    }
-
-    // =============================
-    // 🥇 INSTANCIAS (sin Main)
-    // =============================
-    const onlineMatch = content.match(/Online:\s*(.+)/i);
-
-    if (onlineMatch) {
-
-      const instances = onlineMatch[1]
-        .split(",")
-        .map(x => x.trim())
-        .filter(x => x !== "Main" && x.toLowerCase() !== "none")
-        .length;
-
-      if (instances > trackingData[userId].recordInstances) {
-        trackingData[userId].recordInstances = instances;
-      }
-    }
-  }
-}
-
-
-  
 
   // =============================
   // 🔥 2️⃣ Procesar usuarios
@@ -502,28 +406,12 @@ async function renderPanel(id, channel) {
 let role;
 
 if (s?.group) {
-  role = getUserRoleByGroup(s.group);
+ role = getUserRoleByGroup(s.group);
 } else {
   role = {
     name: t.role || "Reroller",
     color: "#aaaaaa"
   };
-}
-
-// 👑 DETECCIÓN CHAMPION
-try {
-  const guild = client.guilds.cache.first();
-  const member = await guild.members.fetch(id);
-
-  if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
-    role = {
-      name: "Champion",
-      color: "#FFD700" // dorado 👑
-    };
-  }
-
-} catch (err) {
-  console.log("No se pudo verificar Champion:", err.message);
 }
 
   const canvas = createCanvas(800, 450);
@@ -556,7 +444,7 @@ if (settings.bg?.type === "base64") {
 
   ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
   ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
-  ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
+  ctx.fillText(`Instancias: ${s.instances}`, 40, 250);
   ctx.fillText(`Packs: ${s.packs}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
@@ -762,108 +650,6 @@ client.on("messageCreate", async (msg) => {
 
   const content = msg.content.toLowerCase().trim();
 
-
-
-// =============================
-// 💎 DETECCIÓN GOD PACK
-// =============================
-for (const group of Object.values(GROUPS)) {
-
-  if (msg.channel.id === group.gpChannelId) {
-
-    const lines = msg.content.split("\n");
-    const firstLine = lines[0];
-
-    const match = firstLine.match(/@(.+?)\s+Kudos!/i);
-
-    if (!match) return;
-
-    const username = match[1].trim();
-
-    const userEntry = Object.entries(trackingData)
-      .find(([id, data]) => data.name === username);
-
-    if (userEntry) {
-
-      const [id] = userEntry;
-
-      if (!trackingData[id].gp)
-        trackingData[id].gp = 0;
-
-      trackingData[id].gp += 1;
-
-      console.log(`💎 GP sumado a ${username}`);
-    }
-  }
-}
-
-  
-// =============================
-// 📦 DETECCIÓN WEBHOOK TRACKING
-// =============================
-if (msg.webhookId) {
-
-  const content = msg.content;
-
-  const onlineMatch = content.match(/Online:\s*(.+)/i);
-  const packsMatch = content.match(/Packs:\s*(\d+)/i);
-
-if (packsMatch) {
-
-  const username = content.split("\n")[0]?.trim();
-  const currentPacks = Number(packsMatch[1]);
-
-  const userEntry = Object.entries(trackingData)
-    .find(([id, data]) => data.name === username);
-
-  if (userEntry) {
-
-    const [id] = userEntry;
-
-    if (!trackingData[id].lastPacks)
-      trackingData[id].lastPacks = currentPacks;
-
-    const diff = currentPacks - trackingData[id].lastPacks;
-
-    if (diff > 0) {
-      trackingData[id].packs += diff;
-    }
-
-    trackingData[id].lastPacks = currentPacks;
-  }
-}
-
-
-  
-  if (onlineMatch) {
-
-    const username = content.split("\n")[0]?.trim(); // Zannt
-    const onlineLine = onlineMatch[1];
-
-    const instances = onlineLine
-      .split(",")
-      .map(x => x.trim())
-      .filter(x => x !== "Main" && x.toLowerCase() !== "none")
-      .length;
-
-    const userEntry = Object.entries(trackingData)
-      .find(([id, data]) => data.name === username);
-
-    if (userEntry) {
-      const [id] = userEntry;
-
-      if (!trackingData[id].recordInstances)
-        trackingData[id].recordInstances = 0;
-
-      if (instances > trackingData[id].recordInstances) {
-        trackingData[id].recordInstances = instances;
-      }
-
-
-      
-    }
-  }
-}
   // =============================
   // 🎨 COLOR (ES + EN)
   // =============================
@@ -1003,21 +789,12 @@ function sanitizeTracking() {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
     trackingData[k].gp = Number(trackingData[k].gp) || 0;
-    trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
-trackingData[k].packs = Number(trackingData[k].packs) || 0;
-        trackingData[k].lastPacks = Number(trackingData[k].lastPacks) || 0;
-
-//trackingData[k].gp = Number(trackingData[k].gp) || 0;
   }
 }
 
 function cleanOnlineIds(raw) {
   if (!raw) return [];
-
-  return raw
-    .split(/\r?\n/)
-    .map(x => x.replace(/[^0-9]/g, "").trim())
-    .filter(x => x.length > 5);
+  return raw.split("\n").map(x => x.trim()).filter(Boolean);
 }
 
 client.login(process.env.DISCORD_TOKEN);
