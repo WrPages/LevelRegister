@@ -723,6 +723,17 @@ if (!liveTracker[id]) {
   });
 }
 
+
+function startLoop() {
+
+  // Ejecuta inmediatamente
+  runTrackingCycle();
+
+  // Luego cada 1 minuto
+  setInterval(runTrackingCycle, 60000);
+}
+
+
 // =============================
 function startBackupLoop() {
   setInterval(async () => {
