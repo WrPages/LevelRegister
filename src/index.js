@@ -47,8 +47,10 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers // 🔥 NECESARIO
   ],
 });
+const CHAMPION_ROLE_ID = "1486206362332434634";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
 // =============================
@@ -406,12 +408,28 @@ async function renderPanel(id, channel) {
 let role;
 
 if (s?.group) {
- role = getUserRoleByGroup(s.group);
+  role = getUserRoleByGroup(s.group);
 } else {
   role = {
     name: t.role || "Reroller",
     color: "#aaaaaa"
   };
+}
+
+// 👑 DETECCIÓN CHAMPION
+try {
+  const guild = client.guilds.cache.first();
+  const member = await guild.members.fetch(id);
+
+  if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
+    role = {
+      name: "Champion",
+      color: "#FFD700" // dorado 👑
+    };
+  }
+
+} catch (err) {
+  console.log("No se pudo verificar Champion:", err.message);
 }
 
   const canvas = createCanvas(800, 450);
