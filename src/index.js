@@ -302,24 +302,6 @@ startBackupLoop();
 });
 
 // =============================
-async function getGist(gistId) {
-  try {
-    const res = await fetch(`https://api.github.com/gists/${gistId}`);
-    const data = await res.json();
-
-    if (!data.files) return "";
-
-    const firstFile = Object.values(data.files)[0];
-    if (!firstFile) return "";
-
-    return firstFile.content || "";
-
-  } catch (err) {
-    console.log("Error cargando gist:", gistId);
-    return "";
-  }
-}
-
 
 
 
