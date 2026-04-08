@@ -464,9 +464,9 @@ if (!trackingData[userId]) {
 
   // 🔥 Guardar tracking
   await updateGist(
-  process.env.GIST_TRACKING,
-  JSON.stringify(trackingData, null, 2)
-);
+ // process.env.GIST_TRACKING,
+ // JSON.stringify(trackingData, null, 2)
+//);
 
   await updatePanels();
       } catch (error) {
@@ -995,20 +995,44 @@ trackingData[id].role = getUserRoleByGroup(s.group).name;
 
 // =============================
 function safeParse(data) {
-  try { return typeof data === "object" ? data : JSON.parse(data); }
-  catch { return {}; }
+  try {
+    if (!data) return {};
+
+    if (typeof data === "object") return data;
+
+    if (typeof data === "string") {
+      const parsed = JSON.parse(data);
+
+      if (typeof parsed === "object" && parsed !== null) {
+        return parsed;
+      }
+    }
+
+    return {};
+  } catch (err) {
+    console.error("❌ Error parseando JSON:", err.message);
+    return {};
+  }
 }
 
 function sanitizeTracking() {
+  if (typeof trackingData !== "object" || trackingData === null) {
+    console.error("❌ trackingData corrupto:", trackingData);
+    trackingData = {};
+    return;
+  }
+
   for (const k in trackingData) {
+    if (typeof trackingData[k] !== "object") {
+      trackingData[k] = {};
+    }
+
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
     trackingData[k].gp = Number(trackingData[k].gp) || 0;
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
-trackingData[k].packs = Number(trackingData[k].packs) || 0;
-        trackingData[k].lastPacks = Number(trackingData[k].lastPacks) || 0;
-
-//trackingData[k].gp = Number(trackingData[k].gp) || 0;
+    trackingData[k].packs = Number(trackingData[k].packs) || 0;
+    trackingData[k].lastPacks = Number(trackingData[k].lastPacks) || 0;
   }
 }
 
