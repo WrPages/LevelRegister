@@ -300,20 +300,20 @@ onlineIds = [...new Set(combinedOnlineIds)];
   for (const [id, user] of Object.entries(eliteUsers)) {
 
     // Detectar si está online
-    const isOnline =
-      onlineIds.includes(user.main_id) ||
-      onlineIds.includes(user.sec_id);
+   const userIds = [
+  user.main_id,
+  user.sec_id
+].filter(Boolean); // elimina undefined, null, ""
+
+const isOnline = userIds.some(id => onlineIds.includes(id));
 
     if (!isOnline) continue;
 
     // Detectar grupo (según donde esté online)
     let userGroup = null;
 
-  for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
-  if (
-    ids.includes(user.main_id) ||
-    ids.includes(user.sec_id)
-  ) {
+for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
+  if (userIds.some(id => ids.includes(id))) {
     userGroup = groupName;
     break;
   }
