@@ -311,6 +311,7 @@ async function runTrackingCycle() {
   // 🔥 1️⃣ Unificar ONLINE de los 3 grupos
   // =============================
 groupOnlineMap = {};
+  console.log("Trainer online IDs:", groupOnlineMap["trainer"]);
 let combinedOnlineIds = [];
 
 for (const [groupName, group] of Object.entries(GROUPS)) {
@@ -363,7 +364,7 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     // =============================
     // 📦 PACKS
     // =============================
-    const packsMatch = content.match(/Packs:\s*(\d+)/i);
+  //  const packsMatch = content.match(/Packs:\s*(\d+)/i);
 
     if (packsMatch) {
 
@@ -557,7 +558,7 @@ if (settings.bg?.type === "base64") {
   ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
   ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
   ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
-  ctx.fillText(`Packs: ${s.packs}`, 40, 290);
+  ctx.fillText(`Packs: ${t.packs || 0}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
   return {
@@ -819,9 +820,10 @@ if (packsMatch) {
   if (userEntry) {
 
     const [id] = userEntry;
-
-    if (!trackingData[id].lastPacks)
-      trackingData[id].lastPacks = currentPacks;
+    
+if (trackingData[id].lastPacks === undefined) {
+    trackingData[id].lastPacks = currentPacks;
+}
 
     const diff = currentPacks - trackingData[id].lastPacks;
 
@@ -980,7 +982,7 @@ function startBackupLoop() {
 
    trackingData[id].xp += s.sessionXP;
 trackingData[id].time += Math.floor(s.sessionTime / 60);
-trackingData[id].packs = s.packs;
+//trackingData[id].packs = s.packs;
 trackingData[id].gp = s.gp;
 trackingData[id].role = getUserRoleByGroup(s.group).name;
 
