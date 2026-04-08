@@ -246,7 +246,7 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
-client.once("clientReady", async () => {
+client.once("Ready", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
   eliteUsers = {};
