@@ -305,135 +305,136 @@ startBackupLoop();
 
 async function runTrackingCycle() {
 
-   try {
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
- trackingData = trackingRaw ? JSON.parse(trackingRaw) : {};
-  
-  const groupOnlineMap = {};
-  let combinedOnlineIds = [];
-
   // =============================
-  // 🔥 1️⃣ Cargar ONLINE de los 3 grupos
+  // 🔥 1️⃣ Unificar ONLINE de los 3 grupos
   // =============================
-  for (const [groupName, group] of Object.entries(GROUPS)) {
+groupOnlineMap = {};
+let combinedOnlineIds = [];
 
-    const raw = await getGist(group.onlineGistId);
-    const ids = cleanOnlineIds(raw);
+for (const [groupName, group] of Object.entries(GROUPS)) {
+  const raw = await getGist(group.onlineGistId);
+  const ids = cleanOnlineIds(raw);
 
-    groupOnlineMap[groupName] = ids;
-    combinedOnlineIds.push(...ids);
-  }
-
-  const onlineIds = [...new Set(combinedOnlineIds)];
-
-  // =============================
-  // 📦 LEER HEARTBEAT POR GRUPO
-  // =============================
- 
-    for (const userId of Object.keys(eliteUsers)) {
-
-      const user = eliteUsers[userId];
-      // 🔥 ASEGURAR QUE EXISTA EN TRACKING
-if (!trackingData[userId]) {
-  trackingData[userId] = {
-    xp: 0,
-    time: 0,
-    packs: 0,
-    gp: 0,
-    recordInstances: 0,
-    lastPacks: 0,
-    name: user.name
-  };
+  groupOnlineMap[groupName] = ids; // 🔥 guardar por grupo
+  combinedOnlineIds.push(...ids);
 }
-      const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
 
-      const isOnlineInThisGroup = idsToCheck.some(id =>
-        onlineGroupIds.includes(String(id))
-      );
+onlineIds = [...new Set(combinedOnlineIds)];
 
-      if (!isOnlineInThisGroup) continue;
 
-      const userMessage = messages.find(m => {
-        if (!m.webhookId) return false;
+// =============================
+// 📦 LEER HEARTBEAT POR GRUPO
+// =============================
+for (const [groupName, group] of Object.entries(GROUPS)) {
 
-        const firstLine = m.content.split("\n")[0]?.trim().toLowerCase();
-        return firstLine === user.name.toLowerCase();
-      });
+  const channel = await client.channels.fetch(group.heartbeatChannelId);
+  const messages = await channel.messages.fetch({ limit: 50 });
 
-      if (!userMessage) continue;
+  const onlineGroupIds = groupOnlineMap[groupName];
 
-      const content = userMessage.content;
+  for (const userId of Object.keys(eliteUsers)) {
 
-      // =============================
-      // 🥇 INSTANCIAS (record sin Main)
-      // =============================
-      const onlineMatch = content.match(/Online:\s*(.+)/i);
+    const user = eliteUsers[userId];
 
-      if (onlineMatch) {
+    const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
 
-        const instances = onlineMatch[1]
-          .split(",")
-          .map(x => x.trim())
-          .filter(x =>
-            x.toLowerCase() !== "main" &&
-            x.toLowerCase() !== "none"
-          ).length;
+    const isOnlineInThisGroup = idsToCheck.some(id =>
+      onlineGroupIds.includes(id)
+    );
 
-        if (!trackingData[userId].recordInstances)
-          trackingData[userId].recordInstances = 0;
+    if (!isOnlineInThisGroup) continue;
 
-        if (instances > trackingData[userId].recordInstances) {
-          trackingData[userId].recordInstances = instances;
-        }
+    // 🔎 Buscar último mensaje del usuario
+   const userMessage = messages.find(m => {
+
+  if (!m.webhookId) return false;
+
+  const firstLine = m.content.split("\n")[0]?.trim();
+
+  return firstLine?.toLowerCase() === user.name.toLowerCase();
+});
+
+    if (!userMessage) continue;
+
+    const content = userMessage.content;
+
+    // =============================
+    // 📦 PACKS
+    // =============================
+    const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+    if (packsMatch) {
+
+      const currentPacks = Number(packsMatch[1]);
+      
+if (trackingData[userId].lastPacks === undefined) {
+    trackingData[userId].lastPacks = currentPacks;
+}
+
+      const diff = currentPacks - trackingData[userId].lastPacks;
+
+      if (diff > 0) {
+        trackingData[userId].packs += diff;
       }
 
-      // =============================
-      // 📦 PACKS (POR DIFERENCIA)
-      // =============================
-      const packsMatch = content.match(/Packs:\s*(\d+)/i);
+      trackingData[userId].lastPacks = currentPacks;
+    }
 
-      if (packsMatch) {
+    // =============================
+    // 🥇 INSTANCIAS (sin Main)
+    // =============================
+    const onlineMatch = content.match(/Online:\s*(.+)/i);
 
-        const currentPacks = parseInt(packsMatch[1]);
+    if (onlineMatch) {
 
-        if (!trackingData[userId].lastPacks)
-          trackingData[userId].lastPacks = 0;
+      const instances = onlineMatch[1]
+        .split(",")
+        .map(x => x.trim())
+        .filter(x => x !== "Main" && x.toLowerCase() !== "none")
+        .length;
 
-        if (!trackingData[userId].packs)
-          trackingData[userId].packs = 0;
-
-        if (currentPacks > trackingData[userId].lastPacks) {
-          const diff = currentPacks - trackingData[userId].lastPacks;
-          trackingData[userId].packs += diff;
-        }
-
-        trackingData[userId].lastPacks = currentPacks;
+      if (instances > trackingData[userId].recordInstances) {
+        trackingData[userId].recordInstances = instances;
       }
     }
+  }
+}
+
+
   
 
   // =============================
-  // 🔥 2️⃣ PROCESAR XP Y TIEMPO (tu sistema actual)
+  // 🔥 2️⃣ Procesar usuarios
   // =============================
   for (const [id, user] of Object.entries(eliteUsers)) {
 
-    const userIds = [user.main_id, user.sec_id].filter(Boolean);
-    const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
+    // Detectar si está online
+   const userIds = [
+  user.main_id,
+  user.sec_id
+].filter(Boolean); // elimina undefined, null, ""
+
+const isOnline = userIds.some(id => onlineIds.includes(id));
 
     if (!isOnline) continue;
 
+    // Detectar grupo (según donde esté online)
     let userGroup = null;
 
-    for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
-      if (userIds.some(uid => ids.includes(String(uid)))) {
-        userGroup = groupName;
-        break;
-      }
-    }
+for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
+  if (userIds.some(id => ids.includes(id))) {
+    userGroup = groupName;
+    break;
+  }
+}
 
     if (!userGroup) continue;
 
+    // =============================
+    // 🧠 Crear liveTracker si no existe
+    // =============================
     if (!liveTracker[id]) {
       liveTracker[id] = {
         sessionXP: 0,
@@ -443,36 +444,35 @@ if (!trackingData[userId]) {
         name: user.name,
         packs: 0,
         gp: 0,
-        group: userGroup
+        group: userGroup  // 🔥 NUEVO
       };
     } else {
+      // Si ya existe, actualizar grupo si cambió
       liveTracker[id].group = userGroup;
     }
 
     const t = liveTracker[id];
 
-    const seconds = 60;
+    // =============================
+    // ⏱ Tiempo + XP
+    // =============================
+    const seconds = 60; // tu intervalo real
+
     t.sessionTime += seconds;
 
     let xpPerSecond = (2 + t.instances * 0.5) / 60;
 
-    if (Date.now() < t.boostUntil)
+    if (Date.now() < t.boostUntil) {
       xpPerSecond *= 2;
+    }
 
     t.sessionXP += xpPerSecond * seconds;
   }
 
-  // 🔥 Guardar tracking
-  await updateGist(
-  process.env.GIST_TRACKING,
-  JSON.stringify(trackingData, null, 2)
-);
-
   await updatePanels();
-      } catch (error) {
-    console.error("❌ Error en runTrackingCycle:", error);
-  }
 }
+
+
 
 
 
@@ -557,7 +557,7 @@ if (settings.bg?.type === "base64") {
   ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
   ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
   ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
-  ctx.fillText(`Packs: ${t.packs || 0}`, 40, 290);
+  ctx.fillText(`Packs: ${s.packs}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
   return {
@@ -819,10 +819,9 @@ if (packsMatch) {
   if (userEntry) {
 
     const [id] = userEntry;
-    
-if (trackingData[id].lastPacks === undefined) {
-    trackingData[id].lastPacks = currentPacks;
-}
+
+    if (!trackingData[id].lastPacks)
+      trackingData[id].lastPacks = currentPacks;
 
     const diff = currentPacks - trackingData[id].lastPacks;
 
@@ -981,7 +980,7 @@ function startBackupLoop() {
 
    trackingData[id].xp += s.sessionXP;
 trackingData[id].time += Math.floor(s.sessionTime / 60);
-//trackingData[id].packs = s.packs;
+trackingData[id].packs = s.packs;
 trackingData[id].gp = s.gp;
 trackingData[id].role = getUserRoleByGroup(s.group).name;
 
