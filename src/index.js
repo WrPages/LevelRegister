@@ -246,7 +246,7 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
-client.once("Ready", async () => {
+client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
   eliteUsers = {};
@@ -307,102 +307,110 @@ async function runTrackingCycle() {
 
    try {
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
-
+const trackingRaw = await getGist(process.env.GIST_TRACKING);
+ trackingData = trackingRaw ? safeParse(trackingRaw) : {};
   
+  const groupOnlineMap = {};
+  let combinedOnlineIds = [];
 
+  // =============================
+  // 🔥 1️⃣ Cargar ONLINE de los 3 grupos
+  // =============================
+  for (const [groupName, group] of Object.entries(GROUPS)) {
+
+    const raw = await getGist(group.onlineGistId);
+    const ids = cleanOnlineIds(raw);
+
+    groupOnlineMap[groupName] = ids;
+    combinedOnlineIds.push(...ids);
+  }
+
+  const onlineIds = [...new Set(combinedOnlineIds)];
 
   // =============================
   // 📦 LEER HEARTBEAT POR GRUPO
   // =============================
+ 
+    for (const userId of Object.keys(eliteUsers)) {
 
-
-for (const [groupName, group] of Object.entries(GROUPS)) {
-
-  const channel = await client.channels.fetch(group.heartbeatChannelId);
-  const messages = await channel.messages.fetch({ limit: 50 });
-
-  const onlineGroupIds = groupOnlineMap[groupName] || [];
-
-  for (const [userId, user] of Object.entries(eliteUsers)) {
-
-    // asegurar tracking
-    if (!trackingData[userId]) {
-      trackingData[userId] = {
-        xp: 0,
-        time: 0,
-        packs: 0,
-        gp: 0,
-        recordInstances: 0,
-        lastPacks: 0,
-        name: user.name
-      };
-    }
-
-   const idsToCheck = [user.main_id, user.sec_id]
-  .filter(Boolean)
-  .map(id => String(id));
-
-    const isOnlineInThisGroup = idsToCheck.some(id =>
-      onlineGroupIds.includes(id)
-    );
-
-    if (!isOnlineInThisGroup) continue;
-
- const userMessage = messages.find(m => {
-  if (!m.webhookId) return false;
-
-  const firstLine = m.content.split("\n")[0]?.trim();
-
-  // normalizar
-  const normalizedMsgName = firstLine.replace("@", "").toLowerCase().trim();
-  const normalizedUserName = user.name.toLowerCase().trim();
-
-  return normalizedMsgName === normalizedUserName;
-});
-
-    if (!userMessage) continue;
-
-    const content = userMessage.content;
-
-    // =============================
-    // INSTANCIAS (record)
-    // =============================
-    const onlineMatch = content.match(/Online:\s*(.+)/i);
-
-    if (onlineMatch) {
-      const instances = onlineMatch[1]
-        .split(",")
-        .map(x => x.trim())
-        .filter(x =>
-          x.toLowerCase() !== "main" &&
-          x.toLowerCase() !== "none"
-        ).length;
-
-      if (instances > trackingData[userId].recordInstances) {
-        trackingData[userId].recordInstances = instances;
-      }
-    }
-
-    // =============================
-    // PACKS (por diferencia)
-    // =============================
-    const packsMatch = content.match(/Packs:\s*(\d+)/i);
-
-    if (packsMatch) {
-
-      const currentPacks = parseInt(packsMatch[1]);
-
-      if (currentPacks > trackingData[userId].lastPacks) {
-        const diff = currentPacks - trackingData[userId].lastPacks;
-        trackingData[userId].packs += diff;
-      }
-
-      trackingData[userId].lastPacks = currentPacks;
-    }
-  }
+      const user = eliteUsers[userId];
+      // 🔥 ASEGURAR QUE EXISTA EN TRACKING
+if (!trackingData[userId]) {
+  trackingData[userId] = {
+    xp: 0,
+    time: 0,
+    packs: 0,
+    gp: 0,
+    recordInstances: 0,
+    lastPacks: 0,
+    name: user.name
+  };
 }
+      const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
 
-    
+     const isOnlineInThisGroup = idsToCheck.some(id =>
+  groupOnlineMap[groupName]?.includes(id)
+);
+
+      if (!isOnlineInThisGroup) continue;
+
+      const userMessage = messages.find(m => {
+        if (!m.webhookId) return false;
+
+        const firstLine = m.content.split("\n")[0]?.trim().toLowerCase();
+        return firstLine === user.name.toLowerCase();
+      });
+
+      if (!userMessage) continue;
+
+      const content = userMessage.content;
+
+      // =============================
+      // 🥇 INSTANCIAS (record sin Main)
+      // =============================
+      const onlineMatch = content.match(/Online:\s*(.+)/i);
+
+      if (onlineMatch) {
+
+        const instances = onlineMatch[1]
+          .split(",")
+          .map(x => x.trim())
+          .filter(x =>
+            x.toLowerCase() !== "main" &&
+            x.toLowerCase() !== "none"
+          ).length;
+
+        if (!trackingData[userId].recordInstances)
+          trackingData[userId].recordInstances = 0;
+
+        if (instances > trackingData[userId].recordInstances) {
+          trackingData[userId].recordInstances = instances;
+        }
+      }
+
+      // =============================
+      // 📦 PACKS (POR DIFERENCIA)
+      // =============================
+      const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+      if (packsMatch) {
+
+        const currentPacks = parseInt(packsMatch[1]);
+
+        if (!trackingData[userId].lastPacks)
+          trackingData[userId].lastPacks = 0;
+
+        if (!trackingData[userId].packs)
+          trackingData[userId].packs = 0;
+
+        if (currentPacks > trackingData[userId].lastPacks) {
+          const diff = currentPacks - trackingData[userId].lastPacks;
+          trackingData[userId].packs += diff;
+        }
+
+        trackingData[userId].lastPacks = currentPacks;
+      }
+    }
   
 
   // =============================
@@ -454,7 +462,11 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     t.sessionXP += xpPerSecond * seconds;
   }
 
-
+  // 🔥 Guardar tracking
+  await updateGist(
+  process.env.GIST_TRACKING,
+  JSON.stringify(trackingData, null, 2)
+);
 
   await updatePanels();
       } catch (error) {
@@ -1005,8 +1017,8 @@ function cleanOnlineIds(raw) {
 
   return raw
     .split(/\r?\n/)
-    .map(x => x.trim())
-    .filter(x => x.length > 0);
+    .map(x => x.replace(/[^0-9]/g, "").trim())
+    .filter(x => x.length > 5);
 }
 
 client.login(process.env.DISCORD_TOKEN);
