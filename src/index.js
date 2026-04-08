@@ -303,125 +303,140 @@ startBackupLoop();
 
 // =============================
 
-
-
 async function runTrackingCycle() {
 
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
-  // =============================
-  // 🔥 1️⃣ Unificar ONLINE de los 3 grupos
-  // =============================
-groupOnlineMap = {};
-  console.log("Trainer online IDs:", groupOnlineMap["trainer"]);
-let combinedOnlineIds = [];
+  const trackingData = await getTracking(); // 🔥 IMPORTANTE
+  const groupOnlineMap = {};
+  let combinedOnlineIds = [];
 
-for (const [groupName, group] of Object.entries(GROUPS)) {
-  const raw = await getGist(group.onlineGistId);
-  const ids = cleanOnlineIds(raw);
+  // =============================
+  // 🔥 1️⃣ Cargar ONLINE de los 3 grupos
+  // =============================
+  for (const [groupName, group] of Object.entries(GROUPS)) {
 
-  groupOnlineMap[groupName] = ids; // 🔥 guardar por grupo
-  combinedOnlineIds.push(...ids);
+    const raw = await getGist(group.onlineGistId);
+    const ids = cleanOnlineIds(raw);
+
+    groupOnlineMap[groupName] = ids;
+    combinedOnlineIds.push(...ids);
+  }
+
+  const onlineIds = [...new Set(combinedOnlineIds)];
+
+  // =============================
+  // 📦 LEER HEARTBEAT POR GRUPO
+  // =============================
+  for (const [groupName, group] of Object.entries(GROUPS)) {
+
+    const channel = await client.channels.fetch(group.heartbeatChannelId);
+    if (!channel) continue;
+
+    const messages = await channel.messages.fetch({ limit: 50 });
+    const onlineGroupIds = groupOnlineMap[groupName];
+if (!trackingData[userId]) {
+  trackingData[userId] = {
+    xp: 0,
+    time: 0,
+    packs: 0,
+    gp: 0,
+    recordInstances: 0,
+    lastPacks: 0,
+    name: user.name
+  };
 }
+    for (const userId of Object.keys(eliteUsers)) {
 
-onlineIds = [...new Set(combinedOnlineIds)];
+      const user = eliteUsers[userId];
+      const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
 
+      const isOnlineInThisGroup = idsToCheck.some(id =>
+        onlineGroupIds.includes(String(id))
+      );
 
-// =============================
-// 📦 LEER HEARTBEAT POR GRUPO
-// =============================
-for (const [groupName, group] of Object.entries(GROUPS)) {
+      if (!isOnlineInThisGroup) continue;
 
-  const channel = await client.channels.fetch(group.heartbeatChannelId);
-  const messages = await channel.messages.fetch({ limit: 50 });
+      const userMessage = messages.find(m => {
+        if (!m.webhookId) return false;
 
-  const onlineGroupIds = groupOnlineMap[groupName];
+        const firstLine = m.content.split("\n")[0]?.trim().toLowerCase();
+        return firstLine === user.name.toLowerCase();
+      });
 
-  for (const userId of Object.keys(eliteUsers)) {
+      if (!userMessage) continue;
 
-    const user = eliteUsers[userId];
+      const content = userMessage.content;
 
-    const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
+      // =============================
+      // 🥇 INSTANCIAS (record sin Main)
+      // =============================
+      const onlineMatch = content.match(/Online:\s*(.+)/i);
 
-    const isOnlineInThisGroup = idsToCheck.some(id =>
-      onlineGroupIds.includes(id)
-    );
+      if (onlineMatch) {
 
-    if (!isOnlineInThisGroup) continue;
+        const instances = onlineMatch[1]
+          .split(",")
+          .map(x => x.trim())
+          .filter(x =>
+            x.toLowerCase() !== "main" &&
+            x.toLowerCase() !== "none"
+          ).length;
 
-    // 🔎 Buscar último mensaje del usuario
-   const userMessage = messages.find(m => {
+        if (!trackingData[userId].recordInstances)
+          trackingData[userId].recordInstances = 0;
 
-  if (!m.webhookId) return false;
+        if (instances > trackingData[userId].recordInstances) {
+          trackingData[userId].recordInstances = instances;
+        }
+      }
 
-  const firstLine = m.content.split("\n")[0]?.trim();
+      // =============================
+      // 📦 PACKS (POR DIFERENCIA)
+      // =============================
+      const packsMatch = content.match(/Packs:\s*(\d+)/i);
 
-  return firstLine?.toLowerCase() === user.name.toLowerCase();
-});
+      if (packsMatch) {
 
-    if (!userMessage) continue;
+        const currentPacks = parseInt(packsMatch[1]);
 
-    const content = userMessage.content;
+        if (!trackingData[userId].lastPacks)
+          trackingData[userId].lastPacks = 0;
 
-    // =============================
-    // 📦 PACKS
-    // =============================
-  //  const packsMatch = content.match(/Packs:\s*(\d+)/i);
+        if (!trackingData[userId].packs)
+          trackingData[userId].packs = 0;
 
- 
-    // =============================
-    // 🥇 INSTANCIAS (sin Main)
-    // =============================
-    const onlineMatch = content.match(/Online:\s*(.+)/i);
+        if (currentPacks > trackingData[userId].lastPacks) {
+          const diff = currentPacks - trackingData[userId].lastPacks;
+          trackingData[userId].packs += diff;
+        }
 
-    if (onlineMatch) {
-
-      const instances = onlineMatch[1]
-        .split(",")
-        .map(x => x.trim())
-        .filter(x => x !== "Main" && x.toLowerCase() !== "none")
-        .length;
-
-      if (instances > trackingData[userId].recordInstances) {
-        trackingData[userId].recordInstances = instances;
+        trackingData[userId].lastPacks = currentPacks;
       }
     }
   }
-}
-
-
-  
 
   // =============================
-  // 🔥 2️⃣ Procesar usuarios
+  // 🔥 2️⃣ PROCESAR XP Y TIEMPO (tu sistema actual)
   // =============================
   for (const [id, user] of Object.entries(eliteUsers)) {
 
-    // Detectar si está online
-   const userIds = [
-  user.main_id,
-  user.sec_id
-].filter(Boolean); // elimina undefined, null, ""
-
-const isOnline = userIds.some(id => onlineIds.includes(id));
+    const userIds = [user.main_id, user.sec_id].filter(Boolean);
+    const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
 
     if (!isOnline) continue;
 
-    // Detectar grupo (según donde esté online)
     let userGroup = null;
 
-for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
-  if (userIds.some(id => ids.includes(id))) {
-    userGroup = groupName;
-    break;
-  }
-}
+    for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
+      if (userIds.some(uid => ids.includes(String(uid)))) {
+        userGroup = groupName;
+        break;
+      }
+    }
 
     if (!userGroup) continue;
 
-    // =============================
-    // 🧠 Crear liveTracker si no existe
-    // =============================
     if (!liveTracker[id]) {
       liveTracker[id] = {
         sessionXP: 0,
@@ -431,35 +446,30 @@ for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
         name: user.name,
         packs: 0,
         gp: 0,
-        group: userGroup  // 🔥 NUEVO
+        group: userGroup
       };
     } else {
-      // Si ya existe, actualizar grupo si cambió
       liveTracker[id].group = userGroup;
     }
 
     const t = liveTracker[id];
 
-    // =============================
-    // ⏱ Tiempo + XP
-    // =============================
-    const seconds = 60; // tu intervalo real
-
+    const seconds = 60;
     t.sessionTime += seconds;
 
     let xpPerSecond = (2 + t.instances * 0.5) / 60;
 
-    if (Date.now() < t.boostUntil) {
+    if (Date.now() < t.boostUntil)
       xpPerSecond *= 2;
-    }
 
     t.sessionXP += xpPerSecond * seconds;
   }
 
+  // 🔥 Guardar tracking
+  await updateTracking(trackingData);
+
   await updatePanels();
 }
-
-
 
 
 
