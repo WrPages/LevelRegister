@@ -411,29 +411,7 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
   }
 }
 
-      // =============================
-      // 📦 PACKS (POR DIFERENCIA)
-      // =============================
-      const packsMatch = content.match(/Packs:\s*(\d+)/i);
-
-      if (packsMatch) {
-
-        const currentPacks = parseInt(packsMatch[1]);
-
-        if (!trackingData[userId].lastPacks)
-          trackingData[userId].lastPacks = 0;
-
-        if (!trackingData[userId].packs)
-          trackingData[userId].packs = 0;
-
-        if (currentPacks > trackingData[userId].lastPacks) {
-          const diff = currentPacks - trackingData[userId].lastPacks;
-          trackingData[userId].packs += diff;
-        }
-
-        trackingData[userId].lastPacks = currentPacks;
-      }
-    }
+    
   
 
   // =============================
