@@ -307,8 +307,8 @@ async function runTrackingCycle() {
 
    try {
   console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
-const trackingRaw = await getGist(process.env.GIST_TRACKING);
- trackingData = trackingRaw ? safeParse(trackingRaw) : {};
+
+ trackingData = trackingRaw ? JSON.parse(trackingRaw) : {};
   
   const groupOnlineMap = {};
   let combinedOnlineIds = [];
