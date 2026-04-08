@@ -354,20 +354,27 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
       };
     }
 
-    const idsToCheck = [user.main_id, user.sec_id].filter(Boolean);
+   const idsToCheck = [user.main_id, user.sec_id]
+  .filter(Boolean)
+  .map(id => String(id));
 
     const isOnlineInThisGroup = idsToCheck.some(id =>
-      onlineGroupIds.includes(String(id))
+      onlineGroupIds.includes(id)
     );
 
     if (!isOnlineInThisGroup) continue;
 
-    const userMessage = messages.find(m => {
-      if (!m.webhookId) return false;
+ const userMessage = messages.find(m => {
+  if (!m.webhookId) return false;
 
-      const firstLine = m.content.split("\n")[0]?.trim().toLowerCase();
-      return firstLine === user.name.toLowerCase();
-    });
+  const firstLine = m.content.split("\n")[0]?.trim();
+
+  // normalizar
+  const normalizedMsgName = firstLine.replace("@", "").toLowerCase().trim();
+  const normalizedUserName = user.name.toLowerCase().trim();
+
+  return normalizedMsgName === normalizedUserName;
+});
 
     if (!userMessage) continue;
 
@@ -1018,8 +1025,8 @@ function cleanOnlineIds(raw) {
 
   return raw
     .split(/\r?\n/)
-    .map(x => x.replace(/[^0-9]/g, "").trim())
-    .filter(x => x.length > 5);
+    .map(x => x.trim())
+    .filter(x => x.length > 0);
 }
 
 client.login(process.env.DISCORD_TOKEN);
