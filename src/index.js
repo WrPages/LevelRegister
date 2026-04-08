@@ -366,23 +366,7 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     // =============================
   //  const packsMatch = content.match(/Packs:\s*(\d+)/i);
 
-    if (packsMatch) {
-
-      const currentPacks = Number(packsMatch[1]);
-      
-if (trackingData[userId].lastPacks === undefined) {
-    trackingData[userId].lastPacks = currentPacks;
-}
-
-      const diff = currentPacks - trackingData[userId].lastPacks;
-
-      if (diff > 0) {
-        trackingData[userId].packs += diff;
-      }
-
-      trackingData[userId].lastPacks = currentPacks;
-    }
-
+ 
     // =============================
     // 🥇 INSTANCIAS (sin Main)
     // =============================
