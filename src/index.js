@@ -673,35 +673,43 @@ client.on("messageCreate", async (msg) => {
   // =============================
 
   // 💎 GP
-  for (const group of Object.values(GROUPS)) {
-    if (msg.channel.id === group.gpChannelId) {
+ for (const [groupName, group] of Object.entries(GROUPS)) {
 
-      const match = msg.content.match(/@(.+?)\s+Kudos!/i);
+  if (msg.channel.id === group.gpChannelId) {
 
-      if (match) {
-        const username = match[1].trim();
+    const match = msg.content.match(/@(.+?)\s+Kudos!/i);
+
+    if (match) {
+      const username = match[1].trim();
 
       const userEntry = Object.entries(trackingData)
-  .find(([id, data]) =>
-    data.name === username &&
-    eliteUsers[id]?.group === groupName
-  );
+        .find(([id, data]) =>
+          data.name.toLowerCase() === username.toLowerCase() &&
+          eliteUsers[id]?.group === groupName
+        );
 
-        if (userEntry) {
-          const [id] = userEntry;
-          trackingData[id].gp = (trackingData[id].gp || 0) + 1;
+      if (userEntry) {
+        const [id] = userEntry;
 
-          console.log("💎 GP:", username);
-        }
+        trackingData[id].gp = (trackingData[id].gp || 0) + 1;
+
+        console.log("💎 GP:", username, groupName);
       }
     }
   }
+}
 ////nose si va aqui
 
-  const groupEntry = Object.entries(GROUPS)
-  .find(([_, g]) => g.heartbeatChannelId === msg.channel.id);
+  let groupName = null;
 
-if (!groupEntry) return;
+for (const [gName, group] of Object.entries(GROUPS)) {
+  if (group.heartbeatChannelId === msg.channel.id) {
+    groupName = gName;
+    break;
+  }
+}
+
+// ❌ NO returns aquí todavía
 
 const [groupName] = groupEntry;
 
@@ -709,7 +717,7 @@ const [groupName] = groupEntry;
   
 
   // 📦 WEBHOOK (packs + instancias)
-  if (msg.webhookId) {
+  if (msg.webhookId && groupName) {
 
     const content = msg.content;
     const username = content.split("\n")[0]?.trim();
