@@ -695,23 +695,21 @@ client.on("messageCreate", async (msg) => {
     const baseImage = await loadImageCached(attachment.url);
     const logo = await loadImageCached(WATERMARK_LOGO_PATH);
 
-    const canvas = createCanvas(baseImage.width, baseImage.height);
-    const ctx = canvas.getContext("2d");
+  const canvas = createCanvas(baseImage.width, baseImage.height);
+const ctx = canvas.getContext("2d");
 
-    // Dibujar imagen original
-    ctx.drawImage(baseImage, 0, 0);
+ctx.drawImage(baseImage, 0, 0, baseImage.width, baseImage.height);
 
-    // Tamaño relativo del logo
-    const logoWidth = baseImage.width * 0.25;
-    const logoHeight = logo.height * (logoWidth / logo.width);
+// Tamaño del logo (más grande)
+const logoWidth = baseImage.width * 1; // 50% del ancho
+const logoHeight = logo.height * (logoWidth / logo.width);
 
-    const margin = 30;
+// Centro perfecto
+const x = (baseImage.width - logoWidth) / 2;
+const y = (baseImage.height - logoHeight) / 2;
 
-    const x = baseImage.width - logoWidth - margin;
-    const y = baseImage.height - logoHeight - margin;
-
-    ctx.globalAlpha = 0.5; // transparencia
-    ctx.drawImage(logo, x, y, logoWidth, logoHeight);
+ctx.globalAlpha = 0.6;
+ctx.drawImage(logo, x, y, logoWidth, logoHeight);
 
     const buffer = canvas.toBuffer("image/png");
 
