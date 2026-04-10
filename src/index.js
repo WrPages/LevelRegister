@@ -681,10 +681,11 @@ client.on("messageCreate", async (msg) => {
       if (match) {
         const username = match[1].trim();
 
-        const userEntry = Object.entries(trackingData)
-          .find(([_, data]) =>
-            data.name.toLowerCase() === username.toLowerCase()
-          );
+      const userEntry = Object.entries(trackingData)
+  .find(([id, data]) =>
+    data.name === username &&
+    eliteUsers[id]?.group === groupName
+  );
 
         if (userEntry) {
           const [id] = userEntry;
@@ -695,6 +696,17 @@ client.on("messageCreate", async (msg) => {
       }
     }
   }
+////nose si va aqui
+
+  const groupEntry = Object.entries(GROUPS)
+  .find(([_, g]) => g.heartbeatChannelId === msg.channel.id);
+
+if (!groupEntry) return;
+
+const [groupName] = groupEntry;
+
+
+  
 
   // 📦 WEBHOOK (packs + instancias)
   if (msg.webhookId) {
@@ -702,8 +714,11 @@ client.on("messageCreate", async (msg) => {
     const content = msg.content;
     const username = content.split("\n")[0]?.trim();
 
-    const userEntry = Object.entries(trackingData)
-      .find(([_, data]) => data.name === username);
+  const userEntry = Object.entries(trackingData)
+  .find(([id, data]) =>
+    data.name === username &&
+    eliteUsers[id]?.group === groupName
+  );
 
     if (userEntry) {
       const [id] = userEntry;
