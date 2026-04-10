@@ -336,12 +336,12 @@ async function runTrackingCycle() {
 
       let userGroup = null;
 
-      for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
-        if (userIds.some(uid => ids.includes(String(uid)))) {
-          userGroup = groupName;
-          break;
-        }
-      }
+     for (const [gName, ids] of Object.entries(groupOnlineMap)) {
+  if (userIds.some(uid => ids.includes(String(uid)))) {
+    userGroup = gName;
+    break;
+  }
+}
 
       if (!userGroup) continue;
 
@@ -674,10 +674,11 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
   str.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 
 const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) =>
-    normalize(user.name) === normalize(username) &&
-    user.group === groupName
-  );
+.find(([id, user]) =>
+  normalize(user.name) === normalize(username) &&
+  groupName === user.group
+);
+);
 
       if (userEntry) {
         const [id, user] = userEntry;
@@ -727,9 +728,10 @@ for (const [gName, group] of Object.entries(GROUPS)) {
 
 const userEntry = Object.entries(eliteUsers)
   .find(([id, user]) =>
-    normalize(user.name) === normalize(username) &&
-    user.group === groupName
-  );
+  normalize(user.name) === normalize(username) &&
+  groupName === user.group
+);
+);
 
     if (userEntry) {
       const [id] = userEntry;
