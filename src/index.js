@@ -334,8 +334,10 @@ const trackingRaw = await getGist(process.env.GIST_TRACKING);
   // =============================
   // 🔥 2️⃣ PROCESAR XP Y TIEMPO (tu sistema actual)
   // =============================
+     console.log("BUSCANDO:", username);
   for (const [id, user] of Object.entries(eliteUsers)) {
-
+console.log("->", user.name, "| group:", user.group);
+    
     const userIds = [user.main_id, user.sec_id].filter(Boolean);
     const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
 
@@ -682,11 +684,14 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     if (match) {
       const username = match[1].trim();
 
-      const userEntry = Object.entries(eliteUsers)
-        .find(([id, user]) =>
-          user.name.toLowerCase().trim() === username.toLowerCase().trim() &&
-          user.group === groupName
-        );
+    const normalize = str =>
+  str.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+
+const userEntry = Object.entries(eliteUsers)
+  .find(([id, user]) =>
+    normalize(user.name) === normalize(username) &&
+    user.group === groupName
+  );
 
       if (userEntry) {
         const [id, user] = userEntry;
@@ -731,10 +736,13 @@ for (const [gName, group] of Object.entries(GROUPS)) {
     const content = msg.content;
     const username = content.split("\n")[0]?.trim();
 
-  const userEntry = Object.entries(eliteUsers)
-  .find(([id, data]) =>
-    data.name.toLowerCase().trim() === username.toLowerCase().trim() &&
-    eliteUsers[id]?.group === groupName
+  const normalize = str =>
+  str.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+
+const userEntry = Object.entries(eliteUsers)
+  .find(([id, user]) =>
+    normalize(user.name) === normalize(username) &&
+    user.group === groupName
   );
 
     if (userEntry) {
