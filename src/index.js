@@ -731,7 +731,7 @@ const userEntry = Object.entries(eliteUsers)
   normalize(user.name) === normalize(username) &&
   groupName === user.group
 );
-);
+
 
     if (userEntry) {
       const [id] = userEntry;
