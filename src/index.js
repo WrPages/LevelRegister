@@ -711,7 +711,6 @@ for (const [gName, group] of Object.entries(GROUPS)) {
 
 // ❌ NO returns aquí todavía
 
-const [groupName] = groupEntry;
 
 
   
