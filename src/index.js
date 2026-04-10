@@ -673,7 +673,7 @@ client.on("messageCreate", async (msg) => {
   // =============================
 
   // 💎 GP
- for (const [groupName, group] of Object.entries(GROUPS)) {
+for (const [groupName, group] of Object.entries(GROUPS)) {
 
   if (msg.channel.id === group.gpChannelId) {
 
@@ -682,14 +682,24 @@ client.on("messageCreate", async (msg) => {
     if (match) {
       const username = match[1].trim();
 
-      const userEntry = Object.entries(trackingData)
-        .find(([id, data]) =>
-          data.name.toLowerCase() === username.toLowerCase() &&
-          eliteUsers[id]?.group === groupName
+      const userEntry = Object.entries(eliteUsers)
+        .find(([id, user]) =>
+          user.name.toLowerCase().trim() === username.toLowerCase().trim() &&
+          user.group === groupName
         );
 
       if (userEntry) {
-        const [id] = userEntry;
+        const [id, user] = userEntry;
+
+        if (!trackingData[id]) {
+          trackingData[id] = {
+            name: user.name,
+            xp: 0,
+            time: 0,
+            packs: 0,
+            gp: 0
+          };
+        }
 
         trackingData[id].gp = (trackingData[id].gp || 0) + 1;
 
@@ -721,9 +731,9 @@ for (const [gName, group] of Object.entries(GROUPS)) {
     const content = msg.content;
     const username = content.split("\n")[0]?.trim();
 
-  const userEntry = Object.entries(trackingData)
+  const userEntry = Object.entries(eliteUsers)
   .find(([id, data]) =>
-    data.name === username &&
+    data.name.toLowerCase().trim() === username.toLowerCase().trim() &&
     eliteUsers[id]?.group === groupName
   );
 
