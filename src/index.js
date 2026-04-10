@@ -718,7 +718,7 @@ ctx.drawImage(logo, x, y, logoWidth, logoHeight);
     });
 
     await msg.channel.send({
-      content: `${msg.author}`,
+     // content: `${msg.author}`,
       files: [watermarked]
     });
 
