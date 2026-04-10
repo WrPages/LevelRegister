@@ -348,6 +348,11 @@ async function runTrackingCycle() {
 console.log("MAP RESULT:", idMap[String(uid)]);
 
   const id = idMap[String(uid)];
+
+if (id && eliteUsers[id]) {
+  console.log("🟢 ONLINE:", eliteUsers[id].name);
+}
+    
   if (!id) continue;
 
   const user = eliteUsers[id];
@@ -724,7 +729,7 @@ if (match) {
 
     trackingData[id].gp += 1;
 
-    console.log("💎 GP SUMADO:", user.name);
+    console.log("💎 GP:", eliteUsers[id]?.name, groupName);
   } else {
     console.log("❌ GP usuario no encontrado:", username);
   }
@@ -770,6 +775,8 @@ const userEntry = Object.entries(eliteUsers)
     if (userEntry) {
       const [id] = userEntry;
 
+console.log(`🟢 HEARTBEAT: ${eliteUsers[id]?.name} (${groupName})`);
+      
       if (!trackingData[id]) {
   trackingData[id] = {
     name: eliteUsers[id].name,
@@ -803,7 +810,7 @@ const userEntry = Object.entries(eliteUsers)
           trackingData[id].lastPacks = currentPacks;
         }
 
-        console.log("📦 PACKS:", username, trackingData[id].packs);
+        console.log("📦 PACKS:", eliteUsers[id]?.name, trackingData[id].packs);
       }
 
       // =============================
@@ -825,9 +832,12 @@ const userEntry = Object.entries(eliteUsers)
           trackingData[id].recordInstances = instances;
         }
 
-        console.log("🥇 INSTANCES:", username, instances);
+        console.log("🥇 INSTANCES:", eliteUsers[id]?.name, instances);
       }
     }
+    else {
+  console.log("❌ No match:", msg.content.split("\n")[0]);
+}
   }
 
   // =============================
