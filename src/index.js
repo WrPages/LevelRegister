@@ -119,6 +119,8 @@ async function loadImageCached(src) {
   }
 }
 let idMap = {};
+console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
+console.log("ONLINE IDS:", onlineIds.slice(0, 10));
 // =============================
 // 💾 SAVE SETTINGS (DEBOUNCE)
 // =============================
@@ -342,6 +344,8 @@ async function runTrackingCycle() {
 
     // 🔥 XP / TIEMPO
   for (const uid of onlineIds) {
+    console.log("UID ONLINE:", uid);
+console.log("MAP RESULT:", idMap[String(uid)]);
 
   const id = idMap[String(uid)];
   if (!id) continue;
@@ -994,8 +998,8 @@ function cleanOnlineIds(raw) {
 
   return raw
     .split(/\r?\n/)
-    .map(x => x.replace(/[^0-9]/g, "").trim())
-    .filter(x => x.length > 5);
+    .map(x => x.trim())
+    .filter(x => x.length > 0);
 }
 
 client.login(process.env.DISCORD_TOKEN);
