@@ -118,7 +118,7 @@ async function loadImageCached(src) {
     return await loadImage("./assets/card.png");
   }
 }
-
+let idMap = {};
 // =============================
 // 💾 SAVE SETTINGS (DEBOUNCE)
 // =============================
@@ -251,6 +251,7 @@ client.once("clientReady", async () => {
 
   eliteUsers = {};
 
+
 for (const [groupName, group] of Object.entries(GROUPS)) {
 
   const usersData = safeParse(await getGist(group.usersGistId));
@@ -263,6 +264,21 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     };
   }
 }
+
+// 🔥 CREAR ID MAP DESPUÉS DE CARGAR USUARIOS
+idMap = {};
+
+for (const [id, user] of Object.entries(eliteUsers)) {
+  if (user.main_id)
+    idMap[String(user.main_id)] = id;
+
+  if (user.sec_id)
+    idMap[String(user.sec_id)] = id;
+}
+
+console.log("ID MAP creado:", Object.keys(idMap).length);
+
+  
 
 console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
   
@@ -322,56 +338,55 @@ async function runTrackingCycle() {
       combinedOnlineIds.push(...ids);
     }
 
-    const onlineIds = [...new Set(combinedOnlineIds)];
+    onlineIds = [...new Set(combinedOnlineIds)];
 
     // 🔥 XP / TIEMPO
-    for (const [id, user] of Object.entries(eliteUsers)) {
+  for (const uid of onlineIds) {
 
-      console.log("->", user.name, "| group:", user.group);
+  const id = idMap[String(uid)];
+  if (!id) continue;
 
-      const userIds = [user.main_id, user.sec_id].filter(Boolean);
-      const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
+  const user = eliteUsers[id];
+  if (!user) continue;
 
-      if (!isOnline) continue;
+  let userGroup = null;
 
-      let userGroup = null;
-
-     for (const [gName, ids] of Object.entries(groupOnlineMap)) {
-  if (userIds.some(uid => ids.includes(String(uid)))) {
-    userGroup = gName;
-    break;
-  }
-}
-
-      if (!userGroup) continue;
-
-      if (!liveTracker[id]) {
-        liveTracker[id] = {
-          sessionXP: 0,
-          sessionTime: 0,
-          instances: 1,
-          boostUntil: 0,
-          name: user.name,
-          packs: 0,
-          gp: 0,
-          group: userGroup
-        };
-      } else {
-        liveTracker[id].group = userGroup;
-      }
-
-      const t = liveTracker[id];
-
-      const seconds = 60;
-      t.sessionTime += seconds;
-
-      let xpPerSecond = (2 + t.instances * 0.5) / 60;
-
-      if (Date.now() < t.boostUntil)
-        xpPerSecond *= 2;
-
-      t.sessionXP += xpPerSecond * seconds;
+  for (const [gName, ids] of Object.entries(groupOnlineMap)) {
+    if (ids.includes(String(uid))) {
+      userGroup = gName;
+      break;
     }
+  }
+
+  if (!userGroup) continue;
+
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: user.name,
+      packs: 0,
+      gp: 0,
+      group: userGroup
+    };
+  } else {
+    liveTracker[id].group = userGroup;
+  }
+
+  const t = liveTracker[id];
+
+  const seconds = 60;
+  t.sessionTime += seconds;
+
+  let xpPerSecond = (2 + t.instances * 0.5) / 60;
+
+  if (Date.now() < t.boostUntil)
+    xpPerSecond *= 2;
+
+  t.sessionXP += xpPerSecond * seconds;
+}
 
     await updatePanels();
 
@@ -674,11 +689,9 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
   str.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 
 const userEntry = Object.entries(eliteUsers)
-.find(([id, user]) =>
-  normalize(user.name) === normalize(username) &&
-  groupName === user.group
-);
-
+  .find(([id, user]) =>
+    normalize(user.name) === normalize(username)
+  );
 
       if (userEntry) {
         const [id, user] = userEntry;
@@ -728,13 +741,25 @@ for (const [gName, group] of Object.entries(GROUPS)) {
 
 const userEntry = Object.entries(eliteUsers)
   .find(([id, user]) =>
-  normalize(user.name) === normalize(username) &&
-  groupName === user.group
-);
+    normalize(user.name) === normalize(username)
+  );
 
 
     if (userEntry) {
       const [id] = userEntry;
+
+      if (!trackingData[id]) {
+  trackingData[id] = {
+    name: eliteUsers[id].name,
+    xp: 0,
+    time: 0,
+    packs: 0,
+    gp: 0,
+    lastPacks: 0,
+    recordInstances: 0
+  };
+}
+      
 
       // =============================
       // 📦 PACKS
@@ -873,7 +898,7 @@ if (!liveTracker[id]) {
     name: trackingData[id]?.name || "Unknown",
     packs: 0,
     gp: 0,
-    group: trackingData[id]?.role
+    group: eliteUsers[id]?.group
   };
 }
 
