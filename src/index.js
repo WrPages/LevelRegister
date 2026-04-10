@@ -304,92 +304,78 @@ startBackupLoop();
 // =============================
 
 async function runTrackingCycle() {
+  try {
+    console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
-   try {
-  console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
-const trackingRaw = await getGist(process.env.GIST_TRACKING);
- trackingData = trackingRaw ? safeParse(trackingRaw) : {};
-  
-  groupOnlineMap = {};
-  let combinedOnlineIds = [];
+    const trackingRaw = await getGist(process.env.GIST_TRACKING);
+    trackingData = trackingRaw ? safeParse(trackingRaw) : {};
 
-  // =============================
-  // 🔥 1️⃣ Cargar ONLINE de los 3 grupos
-  // =============================
-  for (const [groupName, group] of Object.entries(GROUPS)) {
+    groupOnlineMap = {};
+    let combinedOnlineIds = [];
 
-    const raw = await getGist(group.onlineGistId);
-    const ids = cleanOnlineIds(raw);
+    // 🔥 ONLINE
+    for (const [groupName, group] of Object.entries(GROUPS)) {
+      const raw = await getGist(group.onlineGistId);
+      const ids = cleanOnlineIds(raw);
 
-    groupOnlineMap[groupName] = ids;
-    combinedOnlineIds.push(...ids);
-  }
+      groupOnlineMap[groupName] = ids;
+      combinedOnlineIds.push(...ids);
+    }
 
-  const onlineIds = [...new Set(combinedOnlineIds)];
+    const onlineIds = [...new Set(combinedOnlineIds)];
 
+    // 🔥 XP / TIEMPO
+    for (const [id, user] of Object.entries(eliteUsers)) {
 
+      console.log("->", user.name, "| group:", user.group);
 
-  
+      const userIds = [user.main_id, user.sec_id].filter(Boolean);
+      const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
 
-  // =============================
-  // 🔥 2️⃣ PROCESAR XP Y TIEMPO (tu sistema actual)
-  // =============================
-     console.log("BUSCANDO:", username);
-  for (const [id, user] of Object.entries(eliteUsers)) {
-console.log("->", user.name, "| group:", user.group);
-    
-    const userIds = [user.main_id, user.sec_id].filter(Boolean);
-    const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
+      if (!isOnline) continue;
 
-    if (!isOnline) continue;
+      let userGroup = null;
 
-    let userGroup = null;
-
-    for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
-      if (userIds.some(uid => ids.includes(String(uid)))) {
-        userGroup = groupName;
-        break;
+      for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
+        if (userIds.some(uid => ids.includes(String(uid)))) {
+          userGroup = groupName;
+          break;
+        }
       }
+
+      if (!userGroup) continue;
+
+      if (!liveTracker[id]) {
+        liveTracker[id] = {
+          sessionXP: 0,
+          sessionTime: 0,
+          instances: 1,
+          boostUntil: 0,
+          name: user.name,
+          packs: 0,
+          gp: 0,
+          group: userGroup
+        };
+      } else {
+        liveTracker[id].group = userGroup;
+      }
+
+      const t = liveTracker[id];
+
+      const seconds = 60;
+      t.sessionTime += seconds;
+
+      let xpPerSecond = (2 + t.instances * 0.5) / 60;
+
+      if (Date.now() < t.boostUntil)
+        xpPerSecond *= 2;
+
+      t.sessionXP += xpPerSecond * seconds;
     }
 
-    if (!userGroup) continue;
+    await updatePanels();
 
-    if (!liveTracker[id]) {
-      liveTracker[id] = {
-        sessionXP: 0,
-        sessionTime: 0,
-        instances: 1,
-        boostUntil: 0,
-        name: user.name,
-        packs: 0,
-        gp: 0,
-        group: userGroup
-      };
-    } else {
-      liveTracker[id].group = userGroup;
-    }
-
-    const t = liveTracker[id];
-
-    const seconds = 60;
-    t.sessionTime += seconds;
-
-    let xpPerSecond = (2 + t.instances * 0.5) / 60;
-
-    if (Date.now() < t.boostUntil)
-      xpPerSecond *= 2;
-
-    t.sessionXP += xpPerSecond * seconds;
-  }
-
-  // 🔥 Guardar tracking
-  await updateGist(
- // process.env.GIST_TRACKING,
- // JSON.stringify(trackingData, null, 2)
-);
-
-  await updatePanels();
-      } catch (error) {
+  } catch (error) {
     console.error("❌ Error en runTrackingCycle:", error);
   }
 }
