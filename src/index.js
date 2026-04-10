@@ -761,13 +761,14 @@ for (const [gName, group] of Object.entries(GROUPS)) {
 const normalize = str =>
   str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const text = normalize(content);
+//const text = normalize(content);
+
+const firstLine = msg.content.split("\n")[0];
 
 const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) => {
-    const name = normalize(user.name);
-    return text.startsWith(name); // 🔥 clave: el nombre SIEMPRE está al inicio
-  });
+  .find(([id, user]) =>
+    normalize(user.name) === normalize(firstLine)
+  );
 
 
     
