@@ -684,37 +684,51 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
 
   if (msg.channel.id === group.gpChannelId) {
 
-    const match = msg.content.match(/@(.+?)\s+Kudos!/i);
-
-    if (match) {
-      const username = match[1].trim();
-
-    const normalize = str =>
-  str.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+   const normalize = str =>
+  str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) =>
-    normalize(user.name) === normalize(username)
-  );
+  .find(([id, user]) => {
+    const name = normalize(user.name);
+    const text = normalize(msg.content);
+    return text.includes(name);
+  });
 
-      if (userEntry) {
-        const [id, user] = userEntry;
+   const match = msg.content.match(/<@(.+?)>/);
 
-        if (!trackingData[id]) {
-          trackingData[id] = {
-            name: user.name,
-            xp: 0,
-            time: 0,
-            packs: 0,
-            gp: 0
-          };
-        }
+if (match) {
+  const username = match[1];
 
-        trackingData[id].gp = (trackingData[id].gp || 0) + 1;
+  const normalize = str =>
+    str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-        console.log("💎 GP:", username, groupName);
-      }
+  const cleanUsername = normalize(username);
+
+  const userEntry = Object.entries(eliteUsers)
+    .find(([id, user]) =>
+      normalize(user.name) === cleanUsername
+    );
+
+  if (userEntry) {
+    const [id, user] = userEntry;
+
+    if (!trackingData[id]) {
+      trackingData[id] = {
+        name: user.name,
+        xp: 0,
+        time: 0,
+        packs: 0,
+        gp: 0
+      };
     }
+
+    trackingData[id].gp += 1;
+
+    console.log("💎 GP SUMADO:", user.name);
+  } else {
+    console.log("❌ GP usuario no encontrado:", username);
+  }
+}
   }
 }
 ////nose si va aqui
@@ -738,16 +752,20 @@ for (const [gName, group] of Object.entries(GROUPS)) {
   if (msg.webhookId && groupName) {
 
     const content = msg.content;
-    const username = content.split("\n")[0]?.trim();
 
-  const normalize = str =>
-  str.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+const normalize = str =>
+  str.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const text = normalize(content);
 
 const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) =>
-    normalize(user.name) === normalize(username)
-  );
+  .find(([id, user]) => {
+    const name = normalize(user.name);
+    return text.startsWith(name); // 🔥 clave: el nombre SIEMPRE está al inicio
+  });
 
+
+    
 
     if (userEntry) {
       const [id] = userEntry;
