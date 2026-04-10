@@ -52,7 +52,7 @@ const client = new Client({
 });
 const CHAMPION_ROLE_ID = "1486206362332434634";
 
-const WATERMARK_CHANNEL_ID = "1484015417411244082";
+const WATERMARK_CHANNEL_ID = "1491708808882294878";
 const WATERMARK_LOGO_PATH = "./assets/logo.png";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
