@@ -124,6 +124,9 @@ async function loadImageCached(src) {
 let idMap = {};
 console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
 console.log("ONLINE IDS:", onlineIds.slice(0, 10));
+
+let nameMap = {};
+
 // =============================
 // 💾 SAVE SETTINGS (DEBOUNCE)
 // =============================
@@ -283,6 +286,17 @@ for (const [id, user] of Object.entries(eliteUsers)) {
 
 console.log("ID MAP creado:", Object.keys(idMap).length);
 
+// 🔥 CREAR NAMEMAP (lookup O(1))
+nameMap = {};
+
+for (const [id, user] of Object.entries(eliteUsers)) {
+  const normalized = normalize(user.name);
+  nameMap[normalized] = id;
+}
+
+console.log("NameMap creado:", Object.keys(nameMap).length);
+
+  
   
 
 console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
@@ -742,59 +756,46 @@ client.on("messageCreate", async (msg) => {
   // =============================
   // 🔥 1. TRACKING GLOBAL (SIEMPRE)
   // =============================
-
-  // 💎 GP
+// =============================
+// 💎 GP ROBUSTO
+// =============================
 for (const [groupName, group] of Object.entries(GROUPS)) {
 
-  if (msg.channel.id === group.gpChannelId) {
+  if (msg.channel.id !== group.gpChannelId) continue;
 
-   const normalize = str =>
-  str.toLowerCase().replace(/[^a-z0-9]/g, "");
+  // 1️⃣ Intentar mention real <@123> o <@!123>
+  const mentionMatch = msg.content.match(/<@!?(\d+)>/);
 
-const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) => {
-    const name = normalize(user.name);
-    const text = normalize(msg.content);
-    return text.includes(name);
-  });
+  let id = null;
 
-   const match = msg.content.match(/<@(.+?)>/);
-
-if (match) {
-  const username = match[1];
-
-  const normalize = str =>
-    str.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-  const cleanUsername = normalize(username);
-
-  const userEntry = Object.entries(eliteUsers)
-    .find(([id, user]) =>
-      normalize(user.name) === cleanUsername
-    );
-
-  if (userEntry) {
-    const [id, user] = userEntry;
-
-    if (!trackingData[id]) {
-      trackingData[id] = {
-        name: user.name,
-        xp: 0,
-        time: 0,
-        packs: 0,
-        gp: 0
-      };
-    }
-
-    trackingData[id].gp += 1;
-
-    console.log("💎 GP:", eliteUsers[id]?.name, groupName);
+  if (mentionMatch) {
+    id = mentionMatch[1]; // Discord ID real
   } else {
-    console.log("❌ GP usuario no encontrado:", username);
+    // 2️⃣ Fallback por nombre (primer palabra)
+    const firstWord = msg.content.split(" ")[0];
+    id = nameMap[normalize(firstWord)];
   }
-}
+
+  if (!id || !eliteUsers[id]) {
+    console.log("❌ GP usuario no encontrado");
+    continue;
   }
+
+  if (!trackingData[id]) {
+    trackingData[id] = {
+      name: eliteUsers[id].name,
+      xp: 0,
+      time: 0,
+      packs: 0,
+      gp: 0
+    };
+  }
+
+  trackingData[id].gp += 1;
+
+  console.log("💎 GP:", eliteUsers[id].name, groupName);
 }
+
 ////nose si va aqui
 
   let groupName = null;
@@ -817,17 +818,25 @@ for (const [gName, group] of Object.entries(GROUPS)) {
 
     const content = msg.content;
 
-const normalize = str =>
-  str.toLowerCase().replace(/[^a-z0-9]/g, "");
+const firstLine = msg.content.split("\n")[0]?.trim();
+const id = nameMap[normalize(firstLine)];
 
-//const text = normalize(content);
+if (!id) {
+  console.log("❌ Heartbeat usuario no encontrado:", firstLine);
+  return;
+}
 
-const firstLine = msg.content.split("\n")[0];
-
-const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) =>
-    normalize(user.name) === normalize(firstLine)
-  );
+if (!trackingData[id]) {
+  trackingData[id] = {
+    name: eliteUsers[id].name,
+    xp: 0,
+    time: 0,
+    packs: 0,
+    gp: 0,
+    lastPacks: 0,
+    recordInstances: 0
+  };
+}
 
 
     
@@ -1027,7 +1036,7 @@ function startBackupLoop() {
    trackingData[id].xp += s.sessionXP;
 trackingData[id].time += Math.floor(s.sessionTime / 60);
 //trackingData[id].packs = s.packs;
-trackingData[id].gp = s.gp;
+trackingData[id].gp += s.gp;
 trackingData[id].role = getUserRoleByGroup(s.group).name;
 
       s.sessionXP = 0;
@@ -1037,6 +1046,18 @@ trackingData[id].role = getUserRoleByGroup(s.group).name;
     await updateGist(process.env.GIST_TRACKING, trackingData);
   }, 600000);
 }
+
+
+// =============================
+// 🔤 NORMALIZE GLOBAL
+// =============================
+function normalize(str) {
+  return str
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
 
 // =============================
 function safeParse(data) {
