@@ -51,10 +51,22 @@ const GISTS = {
 // =========================
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 const lastSeen = {};
+
+// =========================
+// READY LOG
+// =========================
+
+client.once("ready", () => {
+  console.log(`✅ Bot conectado como ${client.user.tag}`);
+});
 
 // =========================
 // GIST FUNCTIONS
@@ -69,7 +81,7 @@ async function getGistData(id) {
     const file = Object.values(res.data.files)[0];
     return JSON.parse(file.content);
   } catch (err) {
-    console.log("Error leyendo gist", err.message);
+    console.log("❌ Error leyendo gist:", err.message);
     return {};
   }
 }
@@ -88,7 +100,7 @@ async function updateGist(id, data) {
       { headers: HEADERS }
     );
   } catch (err) {
-    console.log("Error guardando gist", err.message);
+    console.log("❌ Error guardando gist:", err.message);
   }
 }
 
@@ -130,7 +142,10 @@ function updateLevel(user) {
 // =========================
 
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
+  console.log("📩 Mensaje detectado en canal:", message.channel.id);
+
+  // ✅ Permitir webhooks pero bloquear bots normales
+  if (message.author.bot && !message.webhookId) return;
 
   const channelId = message.channel.id;
 
@@ -138,18 +153,27 @@ client.on("messageCreate", async (message) => {
   // HEARTBEAT
   // =========================
   for (const [group, chId] of Object.entries(HEARTBEAT_CHANNELS)) {
-    if (channelId === chId) {
+    if (channelId == chId) {
+      console.log("🔥 HEARTBEAT DETECTADO:", group);
+
       const key = group === "gym_leader" ? "gym" : group;
 
       const register = await getGistData(GISTS[`register_${key}`]);
       const online = await getGistData(GISTS[`online_${key}`]);
       const globalStats = await getGistData(GISTS["global"]);
 
+      console.log("📦 Datos cargados");
+
       const lines = message.content.split("\n");
       const username = lines[0].trim();
 
+      console.log("👤 Usuario detectado:", username);
+
       const [discordId, userData] = getUser(register, username);
-      if (!discordId) return;
+      if (!discordId) {
+        console.log("❌ Usuario no encontrado en registro");
+        return;
+      }
 
       if (!globalStats[discordId]) {
         globalStats[discordId] = {
@@ -212,6 +236,8 @@ client.on("messageCreate", async (message) => {
   // GODPACK
   // =========================
   if (GP_CHANNELS.includes(channelId)) {
+    console.log("💎 GODPACK DETECTADO");
+
     const globalStats = await getGistData(GISTS.global);
 
     const match = message.content.match(/^@(\w+)/);
