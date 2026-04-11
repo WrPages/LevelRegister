@@ -701,7 +701,7 @@ const ctx = canvas.getContext("2d");
 ctx.drawImage(baseImage, 0, 0, baseImage.width, baseImage.height);
 
 // Tamaño del logo (más grande)
-const logoWidth = baseImage.width * 2; // 50% del ancho
+const logoWidth = baseImage.width * 3; // 50% del ancho
 const logoHeight = logo.height * (logoWidth / logo.width);
 
 // Centro perfecto
