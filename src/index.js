@@ -255,94 +255,104 @@ function getPokemonData(totalXP) {
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
+  // =============================
+  // 1️⃣ CARGAR USUARIOS
+  // =============================
   eliteUsers = {};
 
+  for (const [groupName, group] of Object.entries(GROUPS)) {
 
-for (const [groupName, group] of Object.entries(GROUPS)) {
-console.log("Grupo actual:", groupName);
-console.log("Usuarios en grupo:", Object.keys(usersByGroup[groupName] || {}).length);
-  const usersData = safeParse(await getGist(group.usersGistId));
+    const usersData = safeParse(await getGist(group.usersGistId));
 
-  // Agregamos el grupo automáticamente a cada usuario
-  for (const [id, user] of Object.entries(usersData)) {
-    eliteUsers[id] = {
-      ...user,
-      group: groupName
-    };
-  }
-}
-
-
-
-  // 🔥 Crear mapa de usuarios por grupo
-usersByGroup = {};
-
-for (const [id, user] of Object.entries(eliteUsers)) {
-  if (!usersByGroup[user.group]) {
-    usersByGroup[user.group] = {};
+    for (const [id, user] of Object.entries(usersData)) {
+      eliteUsers[id] = {
+        ...user,
+        group: groupName
+      };
+    }
   }
 
-  usersByGroup[user.group][id] = user;
-}
+  console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
 
-  
 
-// 🔥 CREAR ID MAP DESPUÉS DE CARGAR USUARIOS
-idMap = {};
+  // =============================
+  // 2️⃣ CREAR usersByGroup
+  // =============================
+  usersByGroup = {};
 
-for (const [id, user] of Object.entries(eliteUsers)) {
-  if (user.main_id)
-    idMap[String(user.main_id)] = id;
+  for (const [id, user] of Object.entries(eliteUsers)) {
+    if (!usersByGroup[user.group]) {
+      usersByGroup[user.group] = {};
+    }
 
-  if (user.sec_id)
-    idMap[String(user.sec_id)] = id;
-}
+    usersByGroup[user.group][id] = user;
+  }
 
-console.log("ID MAP creado:", Object.keys(idMap).length);
 
-  
+  // =============================
+  // 3️⃣ CREAR ID MAP
+  // =============================
+  idMap = {};
 
-console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
-  
-groupOnlineMap = {};
-let combinedOnlineIds = [];
+  for (const [id, user] of Object.entries(eliteUsers)) {
+    if (user.main_id)
+      idMap[String(user.main_id)] = id;
 
-for (const [groupName, group] of Object.entries(GROUPS)) {
-  const raw = await getGist(group.onlineGistId);
-  const ids = cleanOnlineIds(raw);
+    if (user.sec_id)
+      idMap[String(user.sec_id)] = id;
+  }
 
-  groupOnlineMap[groupName] = ids;
-  combinedOnlineIds.push(...ids);
-}
+  console.log("ID MAP creado:", Object.keys(idMap).length);
 
-onlineIds = [...new Set(combinedOnlineIds)];
-  
+
+  // =============================
+  // 4️⃣ CARGAR ONLINE IDS
+  // =============================
+  groupOnlineMap = {};
+  let combinedOnlineIds = [];
+
+  for (const [groupName, group] of Object.entries(GROUPS)) {
+    const raw = await getGist(group.onlineGistId);
+    const ids = cleanOnlineIds(raw);
+
+    groupOnlineMap[groupName] = ids;
+    combinedOnlineIds.push(...ids);
+  }
+
+  onlineIds = [...new Set(combinedOnlineIds)];
+
+
+  // =============================
+  // 5️⃣ CARGAR TRACKING Y SETTINGS
+  // =============================
   trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-
   userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
 
-sanitizeTracking();
+  sanitizeTracking();
 
-// 🔥 FORZAR ACTUALIZACIÓN AL INICIAR
-console.log("🚀 Ejecutando actualización inicial...");
 
-await runTrackingCycle();
+  // =============================
+  // 6️⃣ EJECUTAR PRIMERA ACTUALIZACIÓN
+  // =============================
+  console.log("🚀 Ejecutando actualización inicial...");
+
+  await runTrackingCycle();
   await scanHeartbeats();
 
-// 🔥 Guardar inmediatamente en Gist
-await updateGist(process.env.GIST_TRACKING, trackingData);
+  await updateGist(process.env.GIST_TRACKING, trackingData);
 
-console.log("✅ Datos sincronizados al iniciar");
+  console.log("✅ Datos sincronizados al iniciar");
 
-// Luego iniciar loops normales
-startLoop();
-  // 🔥 Escaneo heartbeat cada 5 minutos
-setInterval(scanHeartbeats, 300000);
-startBackupLoop();
-  
+
+  // =============================
+  // 7️⃣ INICIAR LOOPS
+  // =============================
+  startLoop();
+  setInterval(scanHeartbeats, 300000);
+  startBackupLoop();
 });
 
-// =============================
+// ============================= end cloentonce
 
 async function runTrackingCycle() {
   try {
