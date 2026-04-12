@@ -82,6 +82,7 @@ const GROUPS = {
 let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
+let usersByGroup = {};
 let liveTracker = {};
 let userPanels = {};
 let userSettings = {};
@@ -269,6 +270,21 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
     };
   }
 }
+
+
+
+  // 🔥 Crear mapa de usuarios por grupo
+usersByGroup = {};
+
+for (const [id, user] of Object.entries(eliteUsers)) {
+  if (!usersByGroup[user.group]) {
+    usersByGroup[user.group] = {};
+  }
+
+  usersByGroup[user.group][id] = user;
+}
+
+  
 
 // 🔥 CREAR ID MAP DESPUÉS DE CARGAR USUARIOS
 idMap = {};
@@ -530,7 +546,133 @@ function createColorMenu(type, userId, category) {
 }
 
 
-// =============================
+// =============================scanHeartbeats____scanHeartbeats
+
+ async function scanHeartbeats() {
+  console.log("🔎 Escaneando heartbeats...");
+
+  const normalize = str =>
+    str?.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  for (const [groupName, group] of Object.entries(GROUPS)) {
+
+    try {
+      const channel = await client.channels.fetch(group.heartbeatChannelId);
+      if (!channel) continue;
+
+      const messages = await channel.messages.fetch({ limit: 50 });
+
+      // Guardar último mensaje válido por usuario
+      const latestByUser = {};
+
+      for (const msg of messages.values()) {
+
+        if (!msg.webhookId) continue;
+
+        const lines = msg.content.split("\n");
+        if (!lines.length) continue;
+
+        const firstLine = normalize(lines[0].trim());
+        
+  const groupUsers = usersByGroup[groupName] || {};
+
+const userEntry = Object.entries(groupUsers)
+  .find(([id, user]) =>
+    normalize(user.name) === firstLine
+  );
+        
+
+        if (!userEntry) continue;
+
+        const [id] = userEntry;
+
+        if (!latestByUser[id]) {
+          latestByUser[id] = msg; // el primero ya es el más reciente
+        }
+      }
+
+      // Procesar cada usuario encontrado
+      for (const [id, msg] of Object.entries(latestByUser)) {
+
+    if (!trackingData[id]) {
+    trackingData[id] = {
+      name: eliteUsers[id].name,
+      xp: 0,
+      time: 0,
+      packs: 0,
+      gp: 0,
+      lastPacks: 0,
+      recordInstances: 0,
+      lastHeartbeatMessageId: null
+    };
+  }
+
+  // 🚫 Evitar reprocesar el mismo heartbeat
+  if (trackingData[id].lastHeartbeatMessageId === msg.id) {
+    continue;
+  }
+
+  const content = msg.content;
+
+        // =====================
+        // 📦 PACKS
+        // =====================
+        const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+        if (packsMatch) {
+          const currentPacks = Number(packsMatch[1]);
+
+          if (!trackingData[id].lastPacks) {
+            trackingData[id].lastPacks = currentPacks;
+          } else {
+            const diff = currentPacks - trackingData[id].lastPacks;
+
+            if (diff > 0 && diff < 1000) {
+              trackingData[id].packs += diff;
+            }
+
+            trackingData[id].lastPacks = currentPacks;
+          }
+
+          console.log("📦 PACKS:", eliteUsers[id].name, trackingData[id].packs);
+        }
+
+        // =====================
+        // 🥇 INSTANCIAS
+        // =====================
+       
+          const onlineMatch = content.match(/Online:\s*(.+)/i);
+
+if (onlineMatch) {
+
+  const rawOnline = onlineMatch[1];
+
+  const instances = rawOnline
+    .split(/[, ]+/)
+    .map(x => x.trim().toLowerCase())
+    .filter(x =>
+      x !== "" &&
+      x !== "main" &&
+      x !== "none"
+    ).length;
+
+  if (instances > (trackingData[id].recordInstances || 0)) {
+    trackingData[id].recordInstances = instances;
+  }
+
+  console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
+}
+// ✅ guardar último heartbeat procesado
+trackingData[id].lastHeartbeatMessageId = msg.id;
+    } catch (err) {
+      console.error("❌ Error escaneando grupo:", groupName, err.message);
+    }
+  }
+
+  await updateGist(process.env.GIST_TRACKING, trackingData);
+   
+}
+
 
 // =============================
 async function updatePanels() {
@@ -817,121 +959,7 @@ for (const [gName, group] of Object.entries(GROUPS)) {
 
   // 📦 WEBHOOK (packs + instancias)
  
-  async function scanHeartbeats() {
-  console.log("🔎 Escaneando heartbeats...");
-
-  const normalize = str =>
-    str?.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-  for (const [groupName, group] of Object.entries(GROUPS)) {
-
-    try {
-      const channel = await client.channels.fetch(group.heartbeatChannelId);
-      if (!channel) continue;
-
-      const messages = await channel.messages.fetch({ limit: 50 });
-
-      // Guardar último mensaje válido por usuario
-      const latestByUser = {};
-
-      for (const msg of messages.values()) {
-
-        if (!msg.webhookId) continue;
-
-        const lines = msg.content.split("\n");
-        if (!lines.length) continue;
-
-        const firstLine = normalize(lines[0].trim());
-
-        const userEntry = Object.entries(eliteUsers)
-          .find(([id, user]) =>
-            normalize(user.name) === firstLine
-          );
-
-        if (!userEntry) continue;
-
-        const [id] = userEntry;
-
-        if (!latestByUser[id]) {
-          latestByUser[id] = msg; // el primero ya es el más reciente
-        }
-      }
-
-      // Procesar cada usuario encontrado
-      for (const [id, msg] of Object.entries(latestByUser)) {
-
-       if (!trackingData[id]) {
-  trackingData[id] = {
-    name: eliteUsers[id].name,
-    xp: 0,
-    time: 0,
-    packs: 0,
-    gp: 0,
-    lastPacks: 0,
-    recordInstances: 0,
-    lastHeartbeatMessageId: null
-  };
-}
-// 🚫 Evitar reprocesar el mismo heartbeat
-if (trackingData[id].lastHeartbeatMessageId === msg.id) {
-  continue;
-}
-        const content = msg.content;
-
-        // =====================
-        // 📦 PACKS
-        // =====================
-        const packsMatch = content.match(/Packs:\s*(\d+)/i);
-
-        if (packsMatch) {
-          const currentPacks = Number(packsMatch[1]);
-
-          if (!trackingData[id].lastPacks) {
-            trackingData[id].lastPacks = currentPacks;
-          } else {
-            const diff = currentPacks - trackingData[id].lastPacks;
-
-            if (diff > 0 && diff < 1000) {
-              trackingData[id].packs += diff;
-            }
-
-            trackingData[id].lastPacks = currentPacks;
-          }
-
-          console.log("📦 PACKS:", eliteUsers[id].name, trackingData[id].packs);
-        }
-
-        // =====================
-        // 🥇 INSTANCIAS
-        // =====================
-        const onlineMatch = content.match(/Online:\s*(.+)/i);
-
-        if (onlineMatch) {
-          const instances = onlineMatch[1]
-            .split(",")
-            .map(x => x.trim().toLowerCase())
-            .filter(x =>
-              x !== "" &&
-              x !== "main" &&
-              x !== "none"
-            ).length;
-
-          if (instances > (trackingData[id].recordInstances || 0)) {
-            trackingData[id].recordInstances = instances;
-          }
-
-          console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
-        }
-      }
-
-    } catch (err) {
-      console.error("❌ Error escaneando grupo:", groupName, err.message);
-    }
-  }
-
-  await updateGist(process.env.GIST_TRACKING, trackingData);
-}
-
+ 
   // =============================
   // 🎨 2. PERSONALIZACIÓN (SOLO THREAD)
   // =============================
@@ -1110,6 +1138,7 @@ function sanitizeTracking() {
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
     trackingData[k].packs = Number(trackingData[k].packs) || 0;
     trackingData[k].lastPacks = Number(trackingData[k].lastPacks) || 0;
+    trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
   }
 }
 
