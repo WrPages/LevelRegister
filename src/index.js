@@ -860,18 +860,22 @@ for (const [gName, group] of Object.entries(GROUPS)) {
       // Procesar cada usuario encontrado
       for (const [id, msg] of Object.entries(latestByUser)) {
 
-        if (!trackingData[id]) {
-          trackingData[id] = {
-            name: eliteUsers[id].name,
-            xp: 0,
-            time: 0,
-            packs: 0,
-            gp: 0,
-            lastPacks: 0,
-            recordInstances: 0
-          };
-        }
-
+       if (!trackingData[id]) {
+  trackingData[id] = {
+    name: eliteUsers[id].name,
+    xp: 0,
+    time: 0,
+    packs: 0,
+    gp: 0,
+    lastPacks: 0,
+    recordInstances: 0,
+    lastHeartbeatMessageId: null
+  };
+}
+// 🚫 Evitar reprocesar el mismo heartbeat
+if (trackingData[id].lastHeartbeatMessageId === msg.id) {
+  continue;
+}
         const content = msg.content;
 
         // =====================
