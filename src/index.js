@@ -567,11 +567,17 @@ function createColorMenu(type, userId, category) {
 
   for (const [groupName, group] of Object.entries(GROUPS)) {
 
+    console.log("=================================");
+console.log("GRUPO ACTUAL:", groupName);
+console.log("Usuarios en este grupo:", Object.keys(usersByGroup[groupName] || {}).length);
+console.log("Canal ID:", group.heartbeatChannelId);
+
     try {
       const channel = await client.channels.fetch(group.heartbeatChannelId);
       if (!channel) continue;
 
       const messages = await channel.messages.fetch({ limit: 50 });
+      console.log("Nombre del canal:", channel?.name);
 
       // Guardar último mensaje válido por usuario
       const latestByUser = {};
