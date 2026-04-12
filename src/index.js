@@ -868,7 +868,7 @@ const logoHeight = logo.height * (logoWidth / logo.width);
 const x = (baseImage.width - logoWidth) / 2;
 const y = (baseImage.height - logoHeight) / 2;
 
-ctx.globalAlpha = 0.6;
+ctx.globalAlpha = 0.8;
 ctx.drawImage(logo, x, y, logoWidth, logoHeight);
 
     const buffer = canvas.toBuffer("image/png");
