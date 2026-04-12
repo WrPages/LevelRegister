@@ -259,7 +259,8 @@ client.once("clientReady", async () => {
 
 
 for (const [groupName, group] of Object.entries(GROUPS)) {
-
+console.log("Grupo actual:", groupName);
+console.log("Usuarios en grupo:", Object.keys(usersByGroup[groupName] || {}).length);
   const usersData = safeParse(await getGist(group.usersGistId));
 
   // Agregamos el grupo automáticamente a cada usuario
@@ -572,15 +573,18 @@ function createColorMenu(type, userId, category) {
         const lines = msg.content.split("\n");
         if (!lines.length) continue;
 
-        const firstLine = normalize(lines[0].trim());
+       const firstLineRaw = lines[0].trim();
+const firstLine = normalize(firstLineRaw.split(" ")[0]);
         
   const groupUsers = usersByGroup[groupName] || {};
+        console.log("First line:", firstLine);
+console.log("Usuarios del grupo:", Object.values(groupUsers).map(u => u.name));
+        
 
 const userEntry = Object.entries(groupUsers)
   .find(([id, user]) =>
-    normalize(user.name) === firstLine
+    firstLine.includes(normalize(user.name))
   );
-        
 
         if (!userEntry) continue;
 
