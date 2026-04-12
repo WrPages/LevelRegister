@@ -664,6 +664,7 @@ if (onlineMatch) {
 }
 // ✅ guardar último heartbeat procesado
 trackingData[id].lastHeartbeatMessageId = msg.id;
+      }
     } catch (err) {
       console.error("❌ Error escaneando grupo:", groupName, err.message);
     }
