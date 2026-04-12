@@ -54,6 +54,8 @@ const CHAMPION_ROLE_ID = "1486206362332434634";
 
 const WATERMARK_CHANNEL_ID = "1484015417411244082";
 const WATERMARK_LOGO_PATH = "./assets/logo.png";
+
+const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
 // =============================
@@ -560,138 +562,126 @@ function createColorMenu(type, userId, category) {
 // =============================scanHeartbeats____scanHeartbeats
 
  async function scanHeartbeats() {
-  console.log("🔎 Escaneando heartbeats...");
+  console.log("🔎 Escaneando heartbeats (GLOBAL)...");
 
   const normalize = str =>
     str?.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-  for (const [groupName, group] of Object.entries(GROUPS)) {
+  try {
 
-    console.log("=================================");
-console.log("GRUPO ACTUAL:", groupName);
-console.log("Usuarios en este grupo:", Object.keys(usersByGroup[groupName] || {}).length);
-console.log("Canal ID:", group.heartbeatChannelId);
+    // 🔥 Canal global de heartbeat
+    const channel = await client.channels.fetch(GLOBAL_HEARTBEAT_CHANNEL_ID);
+    if (!channel) return;
 
-    try {
-      const channel = await client.channels.fetch(group.heartbeatChannelId);
-      if (!channel) continue;
+    // 🔥 Traer más mensajes
+    const messages = await channel.messages.fetch({ limit: 200 });
 
-      const messages = await channel.messages.fetch({ limit: 50 });
-      console.log("Nombre del canal:", channel?.name);
+    const latestByUser = {};
 
-      // Guardar último mensaje válido por usuario
-      const latestByUser = {};
+    for (const msg of messages.values()) {
 
-      for (const msg of messages.values()) {
+      if (!msg.webhookId) continue;
 
-        if (!msg.webhookId) continue;
+      const lines = msg.content.split("\n");
+      if (!lines.length) continue;
 
-        const lines = msg.content.split("\n");
-        if (!lines.length) continue;
+      const firstLine = normalize(lines[0].trim());
 
-       const firstLineRaw = lines[0].trim();
-const firstLine = normalize(firstLineRaw.split(" ")[0]);
-        
-  const groupUsers = usersByGroup[groupName] || {};
-        console.log("First line:", firstLine);
-console.log("Usuarios del grupo:", Object.values(groupUsers).map(u => u.name));
-        
+      // 🔥 Buscar usuario en TODOS los grupos
+      const userEntry = Object.entries(eliteUsers)
+        .find(([id, user]) =>
+          normalize(user.name) === firstLine
+        );
 
-const userEntry = Object.entries(groupUsers)
-  .find(([id, user]) =>
-    firstLine.includes(normalize(user.name))
-  );
+      if (!userEntry) continue;
 
-        if (!userEntry) continue;
+      const [id] = userEntry;
 
-        const [id] = userEntry;
+      if (!latestByUser[id]) {
+        latestByUser[id] = msg;
+      }
+    }
 
-        if (!latestByUser[id]) {
-          latestByUser[id] = msg; // el primero ya es el más reciente
-        }
+    // 🔥 Procesar usuarios encontrados
+    for (const [id, msg] of Object.entries(latestByUser)) {
+
+      if (!trackingData[id]) {
+        trackingData[id] = {
+          name: eliteUsers[id].name,
+          xp: 0,
+          time: 0,
+          packs: 0,
+          gp: 0,
+          lastPacks: 0,
+          recordInstances: 0,
+          lastHeartbeatMessageId: null
+        };
       }
 
-      // Procesar cada usuario encontrado
-      for (const [id, msg] of Object.entries(latestByUser)) {
+      if (trackingData[id].lastHeartbeatMessageId === msg.id) {
+        continue;
+      }
 
-    if (!trackingData[id]) {
-    trackingData[id] = {
-      name: groupUsers[id].name,
-      xp: 0,
-      time: 0,
-      packs: 0,
-      gp: 0,
-      lastPacks: 0,
-      recordInstances: 0,
-      lastHeartbeatMessageId: null
-    };
-  }
+      const content = msg.content;
 
-  // 🚫 Evitar reprocesar el mismo heartbeat
-  if (trackingData[id].lastHeartbeatMessageId === msg.id) {
-    continue;
-  }
+      // =====================
+      // 📦 PACKS
+      // =====================
+      const packsMatch = content.match(/packs?\s*[:\-]?\s*(\d+)/i);
 
-  const content = msg.content;
+      if (packsMatch) {
 
-        // =====================
-        // 📦 PACKS
-        // =====================
-        const packsMatch = content.match(/Packs:\s*(\d+)/i);
+        const currentPacks = Number(packsMatch[1]);
 
-        if (packsMatch) {
-          const currentPacks = Number(packsMatch[1]);
+        if (!trackingData[id].lastPacks) {
+          trackingData[id].lastPacks = currentPacks;
+        } else {
 
-          if (!trackingData[id].lastPacks) {
-            trackingData[id].lastPacks = currentPacks;
-          } else {
-            const diff = currentPacks - trackingData[id].lastPacks;
+          const diff = currentPacks - trackingData[id].lastPacks;
 
-            if (diff > 0 && diff < 1000) {
-              trackingData[id].packs += diff;
-            }
-
-            trackingData[id].lastPacks = currentPacks;
+          if (diff > 0 && diff < 1000) {
+            trackingData[id].packs += diff;
           }
 
-          console.log("📦 PACKS:", groupUsers[id].name, trackingData[id].packs);
+          trackingData[id].lastPacks = currentPacks;
         }
 
-        // =====================
-        // 🥇 INSTANCIAS
-        // =====================
-       
-          const onlineMatch = content.match(/Online:\s*(.+)/i);
-
-if (onlineMatch) {
-
-  const rawOnline = onlineMatch[1];
-
-  const instances = rawOnline
-    .split(/[, ]+/)
-    .map(x => x.trim().toLowerCase())
-    .filter(x =>
-      x !== "" &&
-      x !== "main" &&
-      x !== "none"
-    ).length;
-
-  if (instances > (trackingData[id].recordInstances || 0)) {
-    trackingData[id].recordInstances = instances;
-  }
-
-  console.log("🥇 INSTANCES:", groupUsers[id].name, instances);
-}
-// ✅ guardar último heartbeat procesado
-trackingData[id].lastHeartbeatMessageId = msg.id;
+        console.log("📦 PACKS:", eliteUsers[id].name, trackingData[id].packs);
       }
-    } catch (err) {
-      console.error("❌ Error escaneando grupo:", groupName, err.message);
-    }
-  }
 
-  await updateGist(process.env.GIST_TRACKING, trackingData);
-   
+      // =====================
+      // 🥇 INSTANCIAS
+      // =====================
+      const onlineMatch = content.match(/online\s*[:\-]?\s*(.+)/i);
+
+      if (onlineMatch) {
+
+        const rawOnline = onlineMatch[1];
+
+        const instances = rawOnline
+          .split(/[, ]+/)
+          .map(x => x.trim().toLowerCase())
+          .filter(x =>
+            x !== "" &&
+            x !== "main" &&
+            x !== "none"
+          ).length;
+
+        if (instances > (trackingData[id].recordInstances || 0)) {
+          trackingData[id].recordInstances = instances;
+        }
+
+        console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
+      }
+
+      trackingData[id].lastHeartbeatMessageId = msg.id;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+
+  } catch (err) {
+    console.error("❌ Error escaneando heartbeat global:", err.message);
+  }
 }
 
 
