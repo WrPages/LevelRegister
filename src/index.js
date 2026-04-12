@@ -256,7 +256,37 @@ function getPokemonData(totalXP) {
 // =============================
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
+    console.log("🔎 Escaneando heartbeats (GLOBAL)...");
 
+    client.globalHeartbeatMessages = new Map();
+
+    for (const guild of client.guilds.cache.values()) {
+
+        const globalChannel = guild.channels.cache.get(GLOBAL_HEARTBEAT_CHANNEL_ID);
+        if (!globalChannel) continue;
+
+        const messages = await globalChannel.messages.fetch({ limit: 100 });
+
+        for (const msg of messages.values()) {
+
+            if (msg.author.id !== client.user.id) continue;
+
+            const content = msg.content;
+
+            // Intentar identificar usuario desde el contenido
+            // (IMPORTANTE: necesitas incluir el nombre en el mensaje)
+            const match = content.match(/^```(.*?)\n/);
+
+            if (match) {
+                const username = match[1].trim();
+                client.globalHeartbeatMessages.set(username, msg.id);
+            }
+        }
+    }
+
+    console.log("EJEMPLO IDMAP:", [...client.globalHeartbeatMessages.entries()].slice(0, 5));
+
+  
   // =============================
   // 1️⃣ CARGAR USUARIOS
   // =============================
