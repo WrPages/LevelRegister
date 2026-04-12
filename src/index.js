@@ -265,7 +265,7 @@ client.once("clientReady", async () => {
         const globalChannel = guild.channels.cache.get(GLOBAL_HEARTBEAT_CHANNEL_ID);
         if (!globalChannel) continue;
 
-        const messages = await globalChannel.messages.fetch({ limit: 100 });
+        const messages = await globalChannel.messages.fetch({ limit: 50 });
 
         for (const msg of messages.values()) {
 
@@ -992,7 +992,51 @@ for (const [gName, group] of Object.entries(GROUPS)) {
     break;
   }
 }
+if (groupName) {
 
+  const content = msg.content;
+
+  const firstLine = content.split("\n")[0]?.trim();
+
+  // Buscar usuario
+  const userEntry = Object.entries(eliteUsers)
+    .find(([id, user]) =>
+      user.name.toLowerCase() === firstLine.toLowerCase()
+    );
+
+  if (!userEntry) return;
+
+  const [discordId, userData] = userEntry;
+
+  const globalChannel = await client.channels.fetch(GLOBAL_HEARTBEAT_CHANNEL_ID);
+  if (!globalChannel) return;
+
+  // Inicializar mapa
+  if (!client.globalHeartbeatMessages) {
+    client.globalHeartbeatMessages = new Map();
+  }
+
+  const normalize = str => str.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const key = normalize(userData.name);
+
+  const existingMsgId = client.globalHeartbeatMessages.get(key);
+
+  const newContent = `${userData.name}\n${content}`;
+
+  if (existingMsgId) {
+    const oldMsg = await globalChannel.messages.fetch(existingMsgId).catch(() => null);
+
+    if (oldMsg) {
+      await oldMsg.edit(newContent);
+    } else {
+      const newMsg = await globalChannel.send(newContent);
+      client.globalHeartbeatMessages.set(key, newMsg.id);
+    }
+  } else {
+    const newMsg = await globalChannel.send(newContent);
+    client.globalHeartbeatMessages.set(key, newMsg.id);
+  }
+}
 // ❌ NO returns aquí todavía
 
 
