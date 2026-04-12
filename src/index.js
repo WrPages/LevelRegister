@@ -872,7 +872,7 @@ const logoHeight = logo.height * (logoWidth / logo.width);
 
 // Centro perfecto
 const x = (baseImage.width - logoWidth) / 2;
-const y = (baseImage.height - logoHeight);
+const y = (baseImage.height - logoHeight)*2;
 
 ctx.globalAlpha = 1;
 ctx.drawImage(logo, x, y, logoWidth, logoHeight);
