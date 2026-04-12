@@ -310,6 +310,7 @@ sanitizeTracking();
 console.log("🚀 Ejecutando actualización inicial...");
 
 await runTrackingCycle();
+  await scanHeartbeats();
 
 // 🔥 Guardar inmediatamente en Gist
 await updateGist(process.env.GIST_TRACKING, trackingData);
@@ -318,6 +319,8 @@ console.log("✅ Datos sincronizados al iniciar");
 
 // Luego iniciar loops normales
 startLoop();
+  // 🔥 Escaneo heartbeat cada 5 minutos
+setInterval(scanHeartbeats, 300000);
 startBackupLoop();
   
 });
@@ -813,92 +816,117 @@ for (const [gName, group] of Object.entries(GROUPS)) {
   
 
   // 📦 WEBHOOK (packs + instancias)
-  if (msg.webhookId && groupName) {
+ 
+  async function scanHeartbeats() {
+  console.log("🔎 Escaneando heartbeats...");
 
-    const content = msg.content;
+  const normalize = str =>
+    str?.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const normalize = str =>
-  str.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const [groupName, group] of Object.entries(GROUPS)) {
 
-//const text = normalize(content);
+    try {
+      const channel = await client.channels.fetch(group.heartbeatChannelId);
+      if (!channel) continue;
 
-const firstLine = msg.content.split("\n")[0];
+      const messages = await channel.messages.fetch({ limit: 50 });
 
-const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) =>
-    normalize(user.name) === normalize(firstLine)
-  );
+      // Guardar último mensaje válido por usuario
+      const latestByUser = {};
 
+      for (const msg of messages.values()) {
 
-    
+        if (!msg.webhookId) continue;
 
-    if (userEntry) {
-      const [id] = userEntry;
+        const lines = msg.content.split("\n");
+        if (!lines.length) continue;
 
-console.log(`🟢 HEARTBEAT: ${eliteUsers[id]?.name} (${groupName})`);
-      
-      if (!trackingData[id]) {
-  trackingData[id] = {
-    name: eliteUsers[id].name,
-    xp: 0,
-    time: 0,
-    packs: 0,
-    gp: 0,
-    lastPacks: 0,
-    recordInstances: 0
-  };
-}
-      
+        const firstLine = normalize(lines[0].trim());
 
-      // =============================
-      // 📦 PACKS
-      // =============================
-      const packsMatch = content.match(/Packs:\s*(\d+)/i);
+        const userEntry = Object.entries(eliteUsers)
+          .find(([id, user]) =>
+            normalize(user.name) === firstLine
+          );
 
-      if (packsMatch) {
-        const currentPacks = Number(packsMatch[1]);
+        if (!userEntry) continue;
 
-        if (trackingData[id].lastPacks === undefined) {
-          trackingData[id].lastPacks = currentPacks;
-        } else {
-          const diff = currentPacks - trackingData[id].lastPacks;
+        const [id] = userEntry;
 
-          if (diff > 0 && diff < 1000) {
-            trackingData[id].packs += diff;
+        if (!latestByUser[id]) {
+          latestByUser[id] = msg; // el primero ya es el más reciente
+        }
+      }
+
+      // Procesar cada usuario encontrado
+      for (const [id, msg] of Object.entries(latestByUser)) {
+
+        if (!trackingData[id]) {
+          trackingData[id] = {
+            name: eliteUsers[id].name,
+            xp: 0,
+            time: 0,
+            packs: 0,
+            gp: 0,
+            lastPacks: 0,
+            recordInstances: 0
+          };
+        }
+
+        const content = msg.content;
+
+        // =====================
+        // 📦 PACKS
+        // =====================
+        const packsMatch = content.match(/Packs:\s*(\d+)/i);
+
+        if (packsMatch) {
+          const currentPacks = Number(packsMatch[1]);
+
+          if (!trackingData[id].lastPacks) {
+            trackingData[id].lastPacks = currentPacks;
+          } else {
+            const diff = currentPacks - trackingData[id].lastPacks;
+
+            if (diff > 0 && diff < 1000) {
+              trackingData[id].packs += diff;
+            }
+
+            trackingData[id].lastPacks = currentPacks;
           }
 
-          trackingData[id].lastPacks = currentPacks;
+          console.log("📦 PACKS:", eliteUsers[id].name, trackingData[id].packs);
         }
 
-        console.log("📦 PACKS:", eliteUsers[id]?.name, trackingData[id].packs);
-      }
+        // =====================
+        // 🥇 INSTANCIAS
+        // =====================
+        const onlineMatch = content.match(/Online:\s*(.+)/i);
 
-      // =============================
-      // 🥇 INSTANCIAS
-      // =============================
-      const onlineMatch = content.match(/Online:\s*(.+)/i);
+        if (onlineMatch) {
+          const instances = onlineMatch[1]
+            .split(",")
+            .map(x => x.trim().toLowerCase())
+            .filter(x =>
+              x !== "" &&
+              x !== "main" &&
+              x !== "none"
+            ).length;
 
-      if (onlineMatch) {
-        const instances = onlineMatch[1]
-          .split(",")
-          .map(x => x.trim().toLowerCase())
-          .filter(x =>
-            x !== "" &&
-            x !== "main" &&
-            x !== "none"
-          ).length;
+          if (instances > (trackingData[id].recordInstances || 0)) {
+            trackingData[id].recordInstances = instances;
+          }
 
-        if (instances > (trackingData[id].recordInstances || 0)) {
-          trackingData[id].recordInstances = instances;
+          console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
         }
-
-        console.log("🥇 INSTANCES:", eliteUsers[id]?.name, instances);
       }
+
+    } catch (err) {
+      console.error("❌ Error escaneando grupo:", groupName, err.message);
     }
-    else {
-  console.log("❌ No match:", msg.content.split("\n")[0]);
-}
   }
+
+  await updateGist(process.env.GIST_TRACKING, trackingData);
+}
 
   // =============================
   // 🎨 2. PERSONALIZACIÓN (SOLO THREAD)
