@@ -578,9 +578,10 @@ function createColorMenu(type, userId, category) {
 
     const latestByUser = {};
 
-    for (const msg of messages.values()) {
+  for (const msg of messages.values()) {
 
-      if (!msg.webhookId) continue;
+  // Solo aceptar mensajes de bots
+  if (!msg.author.bot) continue;
 
       const lines = msg.content.split("\n");
       if (!lines.length) continue;
