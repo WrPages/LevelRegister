@@ -610,7 +610,7 @@ const userEntry = Object.entries(groupUsers)
 
     if (!trackingData[id]) {
     trackingData[id] = {
-      name: eliteUsers[id].name,
+      name: groupUsers[id].name,
       xp: 0,
       time: 0,
       packs: 0,
@@ -648,7 +648,7 @@ const userEntry = Object.entries(groupUsers)
             trackingData[id].lastPacks = currentPacks;
           }
 
-          console.log("📦 PACKS:", eliteUsers[id].name, trackingData[id].packs);
+          console.log("📦 PACKS:", groupUsers[id].name, trackingData[id].packs);
         }
 
         // =====================
@@ -674,7 +674,7 @@ if (onlineMatch) {
     trackingData[id].recordInstances = instances;
   }
 
-  console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
+  console.log("🥇 INSTANCES:", groupUsers[id].name, instances);
 }
 // ✅ guardar último heartbeat procesado
 trackingData[id].lastHeartbeatMessageId = msg.id;
