@@ -574,7 +574,7 @@ function createColorMenu(type, userId, category) {
     if (!channel) return;
 
     // 🔥 Traer más mensajes
-    const messages = await channel.messages.fetch({ limit: 200 });
+    const messages = await channel.messages.fetch({ limit: 50 });
 
     const latestByUser = {};
 
