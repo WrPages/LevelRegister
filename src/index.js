@@ -467,35 +467,46 @@ const gpData = await loadUserGPs();
 
 for (const [id, data] of Object.entries(gpData)) {
 
-  const newGP = data.gp || 0;
-  const oldGP = lastGPMap[id] || 0;
+  const newGP = Number(data.gp) || 0;
+  const oldGP = Number(lastGPMap[id]) || 0;
+
+  // 🔥 ASEGURAR NOMBRE SIEMPRE
+  const username =
+    data.username ||
+    data.name ||
+    eliteUsers[id]?.name ||
+    "Unknown";
+
+  // 🔥 CREAR TRACKER SI NO EXISTE
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: username,
+      packs: 0,
+      gp: newGP,
+      group: eliteUsers[id]?.group
+    };
+  } else {
+    // 🔥 mantener nombre actualizado
+    liveTracker[id].name = username;
+  }
 
   // 🔥 DETECTAR NUEVO GP
   if (newGP > oldGP) {
 
-    console.log(`🚀 BOOST ACTIVADO para ${data.username}`);
-
-    if (!liveTracker[id]) {
-      liveTracker[id] = {
-        sessionXP: 0,
-        sessionTime: 0,
-        instances: 1,
-        boostUntil: 0,
-        name: data.username,
-        packs: 0,
-        gp: 0,
-        group: eliteUsers[id]?.group
-      };
-    }
+    console.log(`🚀 BOOST ACTIVADO para ${username}`);
 
     // 💥 BOOST 1 HORA
     liveTracker[id].boostUntil = Date.now() + (60 * 60 * 1000);
   }
 
-  // 🔥 ACTUALIZAR TRACKING
+  // 🔥 ASEGURAR TRACKING DATA
   if (!trackingData[id]) {
     trackingData[id] = {
-      name: data.username || "Unknown",
+      name: username,
       xp: 0,
       time: 0,
       totalpacks: 0,
@@ -505,6 +516,7 @@ for (const [id, data] of Object.entries(gpData)) {
     };
   }
 
+  // 🔥 SINCRONIZAR GP
   trackingData[id].gp = newGP;
 
   // 🔥 GUARDAR ESTADO
@@ -666,13 +678,9 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 ctx.fillText(gpText, 40, 330);
 
 // 🔥 SI TIENE BOOST → dibujar fuego
-if (s && Date.now() < s.boostUntil) {
-
-  ctx.font = "28px Righteous"; // tamaño del emoji
-
- const fire = Date.now() % 1000 < 500 ? "🔥" : "⚡";
-
-ctx.fillText(fire, 40 + ctx.measureText(gpText).width + 10, 330);
+if (s && s.boostUntil && Date.now() < s.boostUntil) {
+  ctx.font = "28px Righteous";
+  ctx.fillText("🔥", 40 + ctx.measureText(gpText).width + 10, 330);
 }
 
   return {
