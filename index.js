@@ -16,8 +16,30 @@ import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
+
 dotenv.config();
 
+
+async function loadUserGPs() {
+  try {
+    const res = await fetch(`https://api.github.com/gists/${USERS_GP_GIST_ID}?t=${Date.now()}`, {
+      headers: {
+        Authorization: `token ${process.env.GITHUB_TOKEN}`
+      }
+    });
+
+    const data = await res.json();
+
+    const fileKey = Object.keys(data.files || {})[0];
+    if (!fileKey) return {};
+
+    return JSON.parse(data.files[fileKey].content);
+
+  } catch (err) {
+    console.error("❌ ERROR cargando users_gp:", err);
+    return {};
+  }
+}
 // =============================
 // 🛑 VALIDACIÓN ENV
 // =============================
@@ -51,24 +73,28 @@ const client = new Client({
   ],
 });
 const CHAMPION_ROLE_ID = "1486206362332434634";
+
+
+const USERS_GP_GIST_ID = "5131a73fcee46b4a5c7b7faeea16efe9"; // 🔥 users_gp.json
+const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
 // =============================
 const GROUPS = {
   trainer: {
-    heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
-    gpChannelId: "1487362022864588902",               // canal donde se cuentan GP
+//    heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
+    gpChannelId: "1484015417411244082",               // canal donde se cuentan GP
    usersGistId: "1c066922bc39ac136b6f234fad6d9420",
     onlineGistId: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c"     // Gist con usuarios online
   },
   gymLeader: {
-    heartbeatChannelId: "1491238609578360833",
-    gpChannelId: "1491238471556403281",
+ //   heartbeatChannelId: "1491238609578360833",
+    gpChannelId: "1484015417411244082",
     usersGistId: "a3f5f3d8a2e6ddf2378fb3481dff49f6",
     onlineGistId: "e110c37b3e0b8de83a33a1b0a5eb64e8"
   },
   eliteFour: {
-    heartbeatChannelId: "1483616146996465735",
+ //   heartbeatChannelId: "1483616146996465735",
     gpChannelId: "1484015417411244082",
    // gpChannelId: "1486277594629275770",
   usersGistId: "bb18eda2ea748723d8fe0131dd740b70",
@@ -79,14 +105,24 @@ const GROUPS = {
 let eliteUsers = {};
 let onlineIds = [];
 let trackingData = {};
+let usersByGroup = {};
 let liveTracker = {};
 let userPanels = {};
 let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
+let lastGPMap = {};
 
 let groupOnlineMap = {};  // 🔥 GLOBAL
 
+let panelSaveTimeout;
+
+function savePanels() {
+  clearTimeout(panelSaveTimeout);
+  panelSaveTimeout = setTimeout(() => {
+    updateGist(process.env.GIST_PANELS, userPanels, "panels.json");
+  }, 2000);
+}
 // =============================
 // ⚡ CACHE DE IMÁGENES
 // =============================
@@ -110,7 +146,10 @@ async function loadImageCached(src) {
 
     imageCache.set(src, img);
 
-    if (imageCache.size > 50) imageCache.clear();
+    if (imageCache.size > 50) {
+  const firstKey = imageCache.keys().next().value;
+  imageCache.delete(firstKey);
+}
 
     return img;
   } catch (err) {
@@ -118,7 +157,9 @@ async function loadImageCached(src) {
     return await loadImage("./assets/card.png");
   }
 }
-
+let idMap = {};
+console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
+console.log("ONLINE IDS:", onlineIds.slice(0, 10));
 // =============================
 // 💾 SAVE SETTINGS (DEBOUNCE)
 // =============================
@@ -127,7 +168,7 @@ let saveTimeout;
 function saveSettings() {
   clearTimeout(saveTimeout);
   saveTimeout = setTimeout(() => {
-    updateGist(process.env.GIST_SETTINGS, userSettings);
+    updateGist(process.env.GIST_SETTINGS, userSettings, "settings.json");
   }, 2000);
 }
 
@@ -248,76 +289,94 @@ function getPokemonData(totalXP) {
 // =============================
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
+    console.log("🔎 Escaneando heartbeats (GLOBAL)...");
 
+    client.globalHeartbeatMessages = new Map();
+
+    for (const guild of client.guilds.cache.values()) {
+
+        const globalChannel = guild.channels.cache.get(GLOBAL_HEARTBEAT_CHANNEL_ID);
+        if (!globalChannel) continue;
+
+        const messages = await globalChannel.messages.fetch({ limit: 50 });
+
+        for (const msg of messages.values()) {
+
+            if (msg.author.id !== client.user.id) continue;
+
+            const content = msg.content;
+
+            // Intentar identificar usuario desde el contenido
+            // (IMPORTANTE: necesitas incluir el nombre en el mensaje)
+            const match = content.match(/^```(.*?)\n/);
+
+            if (match) {
+                const username = match[1].trim();
+                client.globalHeartbeatMessages.set(username, msg.id);
+            }
+        }
+    }
+
+    console.log("EJEMPLO IDMAP:", [...client.globalHeartbeatMessages.entries()].slice(0, 5));
+
+  
+  // =============================
+  // 1️⃣ CARGAR USUARIOS
+  // =============================
   eliteUsers = {};
 
-for (const [groupName, group] of Object.entries(GROUPS)) {
-
-  const usersData = safeParse(await getGist(group.usersGistId));
-
-  // Agregamos el grupo automáticamente a cada usuario
-  for (const [id, user] of Object.entries(usersData)) {
-    eliteUsers[id] = {
-      ...user,
-      group: groupName
-    };
-  }
-}
-
-console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
-  
-groupOnlineMap = {};
-let combinedOnlineIds = [];
-
-for (const [groupName, group] of Object.entries(GROUPS)) {
-  const raw = await getGist(group.onlineGistId);
-  const ids = cleanOnlineIds(raw);
-
-  groupOnlineMap[groupName] = ids;
-  combinedOnlineIds.push(...ids);
-}
-
-onlineIds = [...new Set(combinedOnlineIds)];
-  
-  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-
-  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
-
-sanitizeTracking();
-
-// 🔥 FORZAR ACTUALIZACIÓN AL INICIAR
-console.log("🚀 Ejecutando actualización inicial...");
-
-await runTrackingCycle();
-
-// 🔥 Guardar inmediatamente en Gist
-await updateGist(process.env.GIST_TRACKING, trackingData);
-
-console.log("✅ Datos sincronizados al iniciar");
-
-// Luego iniciar loops normales
-startLoop();
-startBackupLoop();
-  
-});
-
-// =============================
-
-async function runTrackingCycle() {
-
-   try {
-  console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
-const trackingRaw = await getGist(process.env.GIST_TRACKING);
- trackingData = trackingRaw ? safeParse(trackingRaw) : {};
-  
-  const groupOnlineMap = {};
-  let combinedOnlineIds = [];
-
-  // =============================
-  // 🔥 1️⃣ Cargar ONLINE de los 3 grupos
-  // =============================
   for (const [groupName, group] of Object.entries(GROUPS)) {
 
+    const usersData = safeParse(await getGist(group.usersGistId));
+
+    for (const [id, user] of Object.entries(usersData)) {
+      eliteUsers[id] = {
+        ...user,
+        group: groupName
+      };
+    }
+  }
+
+  console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
+
+
+  // =============================
+  // 2️⃣ CREAR usersByGroup
+  // =============================
+  usersByGroup = {};
+
+  for (const [id, user] of Object.entries(eliteUsers)) {
+    if (!usersByGroup[user.group]) {
+      usersByGroup[user.group] = {};
+    }
+
+    usersByGroup[user.group][id] = user;
+  }
+
+
+  // =============================
+  // 3️⃣ CREAR ID MAP
+  // =============================
+  idMap = {};
+
+  for (const [id, user] of Object.entries(eliteUsers)) {
+    if (user.main_id)
+      idMap[String(user.main_id)] = id;
+
+    if (user.sec_id)
+      idMap[String(user.sec_id)] = id;
+  }
+
+  console.log("ID MAP creado:", Object.keys(idMap).length);
+
+
+  // =============================
+  // 4️⃣ CARGAR ONLINE IDS
+  // =============================
+  groupOnlineMap = {};
+  let combinedOnlineIds = [];
+
+  for (const [groupName, group] of Object.entries(GROUPS)) {
     const raw = await getGist(group.onlineGistId);
     const ids = cleanOnlineIds(raw);
 
@@ -325,159 +384,204 @@ const trackingRaw = await getGist(process.env.GIST_TRACKING);
     combinedOnlineIds.push(...ids);
   }
 
-  const onlineIds = [...new Set(combinedOnlineIds)];
+  onlineIds = [...new Set(combinedOnlineIds)];
+
 
   // =============================
-  // 📦 LEER HEARTBEAT POR GRUPO
+  // 5️⃣ CARGAR TRACKING Y SETTINGS
   // =============================
+  userPanels = safeParse(await getGist(process.env.GIST_PANELS, "panels.json"));
+trackingData = safeParse(await getGist(process.env.GIST_TRACKING, "tracking.json"));
+userSettings = safeParse(await getGist(process.env.GIST_SETTINGS, "settings.json"));
+
+  sanitizeTracking();
 
 
-for (const [groupName, group] of Object.entries(GROUPS)) {
+  // =============================
+  // 6️⃣ EJECUTAR PRIMERA ACTUALIZACIÓN
+  // =============================
+  console.log("🚀 Ejecutando actualización inicial...");
 
-  const channel = await client.channels.fetch(group.heartbeatChannelId);
-  const messages = await channel.messages.fetch({ limit: 50 });
+  await runTrackingCycle();
+  await scanHeartbeats();
 
-  const onlineGroupIds = groupOnlineMap[groupName] || [];
+  await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
 
-  for (const [userId, user] of Object.entries(eliteUsers)) {
+  console.log("✅ Datos sincronizados al iniciar");
 
-    // asegurar tracking
-    if (!trackingData[userId]) {
-      trackingData[userId] = {
-        xp: 0,
-        time: 0,
-        packs: 0,
-        gp: 0,
-        recordInstances: 0,
-        lastPacks: 0,
-        name: user.name
-      };
-    }
 
-   const idsToCheck = [user.main_id, user.sec_id]
-  .filter(Boolean)
-  .map(id => String(id));
-
-    const isOnlineInThisGroup = idsToCheck.some(id =>
-      onlineGroupIds.includes(id)
-    );
-
-    if (!isOnlineInThisGroup) continue;
-
- const userMessage = messages.find(m => {
-  if (!m.webhookId) return false;
-
-  const firstLine = m.content.split("\n")[0]?.trim();
-
-  // normalizar
-  const normalizedMsgName = firstLine.replace("@", "").toLowerCase().trim();
-  const normalizedUserName = user.name.toLowerCase().trim();
-
-  return normalizedMsgName === normalizedUserName;
+  // =============================
+  // 7️⃣ INICIAR LOOPS
+  // =============================
+  startLoop();
+  setInterval(scanHeartbeats, 300000);
+  startBackupLoop();
 });
 
-    if (!userMessage) continue;
+// ============================= end cloentonce
 
-    const content = userMessage.content;
+async function runTrackingCycle() {
+  try {
+    console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
-    // =============================
-    // INSTANCIAS (record)
-    // =============================
-    const onlineMatch = content.match(/Online:\s*(.+)/i);
+    const trackingRaw = await getGist(process.env.GIST_TRACKING, "tracking.json");
+    trackingData = trackingRaw ? safeParse(trackingRaw) : {};
 
-    if (onlineMatch) {
-      const instances = onlineMatch[1]
-        .split(",")
-        .map(x => x.trim())
-        .filter(x =>
-          x.toLowerCase() !== "main" &&
-          x.toLowerCase() !== "none"
-        ).length;
+    groupOnlineMap = {};
+    let combinedOnlineIds = [];
 
-      if (instances > trackingData[userId].recordInstances) {
-        trackingData[userId].recordInstances = instances;
-      }
+    // 🔥 ONLINE
+    for (const [groupName, group] of Object.entries(GROUPS)) {
+      const raw = await getGist(group.onlineGistId);
+      const ids = cleanOnlineIds(raw);
+
+      groupOnlineMap[groupName] = ids;
+      combinedOnlineIds.push(...ids);
     }
 
-    // =============================
-    // PACKS (por diferencia)
-    // =============================
-    const packsMatch = content.match(/Packs:\s*(\d+)/i);
+    onlineIds = [...new Set(combinedOnlineIds)];
 
-    if (packsMatch) {
 
-      const currentPacks = parseInt(packsMatch[1]);
+///sep
+    for (const id in liveTracker) {
 
-      if (currentPacks > trackingData[userId].lastPacks) {
-        const diff = currentPacks - trackingData[userId].lastPacks;
-        trackingData[userId].packs += diff;
-      }
+  const isStillOnline = onlineIds.some(uid => idMap[String(uid)] === id);
 
-      trackingData[userId].lastPacks = currentPacks;
+  if (!isStillOnline) {
+
+    if (!trackingData[id]) continue;
+
+    if (trackingData[id].currentpacks > 0) {
+      trackingData[id].totalpacks += trackingData[id].currentpacks;
+      trackingData[id].currentpacks = 0;
+
+      console.log("📦 Flush packs offline:", trackingData[id].name);
     }
+
+    delete liveTracker[id];
   }
 }
 
-    
-  
+// 🔥 CARGAR GP DESDE GIST
+const gpData = await loadUserGPs();
 
-  // =============================
-  // 🔥 2️⃣ PROCESAR XP Y TIEMPO (tu sistema actual)
-  // =============================
-  for (const [id, user] of Object.entries(eliteUsers)) {
+for (const [id, data] of Object.entries(gpData)) {
 
-    const userIds = [user.main_id, user.sec_id].filter(Boolean);
-    const isOnline = userIds.some(uid => onlineIds.includes(String(uid)));
+  const newGP = Number(data.gp) || 0;
+  const oldGP = Number(lastGPMap[id]) || 0;
 
-    if (!isOnline) continue;
+  // 🔥 ASEGURAR NOMBRE SIEMPRE
+  const username =
+    data.username ||
+    data.name ||
+    eliteUsers[id]?.name ||
+    "Unknown";
 
-    let userGroup = null;
-
-    for (const [groupName, ids] of Object.entries(groupOnlineMap)) {
-      if (userIds.some(uid => ids.includes(String(uid)))) {
-        userGroup = groupName;
-        break;
-      }
-    }
-
-    if (!userGroup) continue;
-
-    if (!liveTracker[id]) {
-      liveTracker[id] = {
-        sessionXP: 0,
-        sessionTime: 0,
-        instances: 1,
-        boostUntil: 0,
-        name: user.name,
-        packs: 0,
-        gp: 0,
-        group: userGroup
-      };
-    } else {
-      liveTracker[id].group = userGroup;
-    }
-
-    const t = liveTracker[id];
-
-    const seconds = 60;
-    t.sessionTime += seconds;
-
-    let xpPerSecond = (2 + t.instances * 0.5) / 60;
-
-    if (Date.now() < t.boostUntil)
-      xpPerSecond *= 2;
-
-    t.sessionXP += xpPerSecond * seconds;
+  // 🔥 CREAR TRACKER SI NO EXISTE
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: username,
+      packs: 0,
+      gp: newGP,
+      group: eliteUsers[id]?.group
+    };
+  } else {
+    // 🔥 mantener nombre actualizado
+    liveTracker[id].name = username;
   }
 
-  // 🔥 Guardar tracking
-  await updateGist(
-  process.env.GIST_TRACKING,
-  JSON.stringify(trackingData, null, 2)
-);
+  // 🔥 DETECTAR NUEVO GP
+  if (newGP > oldGP) {
 
-  await updatePanels();
-      } catch (error) {
+    console.log(`🚀 BOOST ACTIVADO para ${username}`);
+
+    // 💥 BOOST 1 HORA
+    liveTracker[id].boostUntil = Date.now() + (60 * 60 * 1000);
+  }
+
+  // 🔥 ASEGURAR TRACKING DATA
+  if (!trackingData[id]) {
+    trackingData[id] = {
+      name: username,
+      xp: 0,
+      time: 0,
+      totalpacks: 0,
+      currentpacks: 0,
+      gp: 0,
+      recordInstances: 0
+    };
+  }
+
+  // 🔥 SINCRONIZAR GP
+  trackingData[id].gp = newGP;
+
+  // 🔥 GUARDAR ESTADO
+  lastGPMap[id] = newGP;
+}
+
+    
+    // 🔥 XP / TIEMPO
+  for (const uid of onlineIds) {
+    console.log("UID ONLINE:", uid);
+console.log("MAP RESULT:", idMap[String(uid)]);
+
+  const id = idMap[String(uid)];
+
+if (id && eliteUsers[id]) {
+  console.log("🟢 ONLINE:", eliteUsers[id].name);
+}
+    
+  if (!id) continue;
+
+  const user = eliteUsers[id];
+  if (!user) continue;
+
+  let userGroup = null;
+
+  for (const [gName, ids] of Object.entries(groupOnlineMap)) {
+    if (ids.includes(String(uid))) {
+      userGroup = gName;
+      break;
+    }
+  }
+
+  if (!userGroup) continue;
+
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: user.name,
+      packs: 0,
+      gp: 0,
+      group: userGroup
+    };
+  } else {
+    liveTracker[id].group = userGroup;
+  }
+
+  const t = liveTracker[id];
+
+  const seconds = 60;
+  t.sessionTime += seconds;
+
+  let xpPerSecond = (1 + t.instances * 0.1) / 60;
+
+  if (Date.now() < t.boostUntil)
+    xpPerSecond *= 2;
+
+  t.sessionXP += xpPerSecond * seconds;
+}
+
+    await updatePanels();
+
+  } catch (error) {
     console.error("❌ Error en runTrackingCycle:", error);
   }
 }
@@ -503,7 +607,7 @@ async function renderPanel(id, channel) {
 
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
   const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-  const level = Math.floor(totalXP / 100);
+  const level = Math.floor(totalXP / 200);
 
   const poke = getPokemonData(totalXP);
 
@@ -520,7 +624,7 @@ if (s?.group) {
 
 // 👑 DETECCIÓN CHAMPION
 try {
-  const guild = client.guilds.cache.first();
+  const guild = client.guilds.cache.get(1483615153743462571);
   const member = await guild.members.fetch(id);
 
   if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
@@ -565,8 +669,19 @@ if (settings.bg?.type === "base64") {
   ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
   ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
   ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
-  ctx.fillText(`Packs: ${t.packs || 0}`, 40, 290);
-  ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
+  const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
+ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
+  
+  const gpText = `GP: ${t.gp || 0}`;
+
+// 🔥 Dibujar GP
+ctx.fillText(gpText, 40, 330);
+
+// 🔥 SI TIENE BOOST → dibujar fuego
+if (s && s.boostUntil && Date.now() < s.boostUntil) {
+  ctx.font = "28px Righteous";
+  ctx.fillText("🔥", 40 + ctx.measureText(gpText).width + 10, 330);
+}
 
   return {
     file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
@@ -602,7 +717,141 @@ function createColorMenu(type, userId, category) {
 }
 
 
-// =============================
+// =============================scanHeartbeats____scanHeartbeats
+
+ async function scanHeartbeats() {
+  console.log("🔎 Escaneando heartbeats (GLOBAL)...");
+
+  const normalize = str =>
+    str?.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  try {
+
+    // 🔥 Canal global de heartbeat
+    const channel = await client.channels.fetch(GLOBAL_HEARTBEAT_CHANNEL_ID);
+    if (!channel) return;
+
+    // 🔥 Traer más mensajes
+    const messages = await channel.messages.fetch({ limit: 50 });
+
+    const latestByUser = {};
+
+  for (const msg of messages.values()) {
+
+  // Solo aceptar mensajes de bots
+  if (!msg.author.bot) continue;
+
+// 🔥 LIMPIAR mensaje primero
+let content = msg.content.replace(/```/g, "").trim();
+
+// 🔥 ahora sí dividir
+const lines = content.split("\n");
+if (!lines.length) continue;
+
+// 🔥 nombre correcto
+const rawName = lines[0].trim();
+    
+const cleanName = normalize(rawName);
+
+const userEntry = Object.entries(eliteUsers)
+  .find(([id, user]) =>
+    normalize(user.name) === cleanName
+  );
+    console.log("RAW:", rawName);
+console.log("CLEAN:", cleanName);
+    
+      if (!userEntry) continue;
+
+      const [id] = userEntry;
+
+      if (!latestByUser[id]) {
+        latestByUser[id] = msg;
+      }
+    }
+
+    // 🔥 Procesar usuarios encontrados
+    for (const [id, msg] of Object.entries(latestByUser)) {
+
+      if (!trackingData[id]) {
+      trackingData[id] = {
+  name: eliteUsers[id].name,
+  xp: 0,
+  time: 0,
+  totalpacks: 0,
+  currentpacks: 0,
+  gp: 0,
+  recordInstances: 0,
+  lastHeartbeatMessageId: null
+};
+      }
+
+    
+
+      let content = msg.content.replace(/```/g, "").trim();
+
+      // =====================
+      // 📦 PACKS
+      // =====================
+      const packsMatch = content.match(/packs:\s*(\d+)/i);
+
+      if (packsMatch) {
+
+        const current = Number(packsMatch[1]);
+
+if (!trackingData[id].currentpacks) {
+  trackingData[id].currentpacks = current;
+} else {
+
+  if (current < trackingData[id].currentpacks) {
+    // 🔥 reset → sumar al total
+    trackingData[id].totalpacks += trackingData[id].currentpacks;
+    trackingData[id].currentpacks = 0;
+  } else {
+    trackingData[id].currentpacks = current;
+  }
+}
+      }
+
+      // =====================
+      // 🥇 INSTANCIAS
+      // =====================
+      const onlineMatch = content.match(/online\s*[:\-]?\s*(.+)/i);
+
+      if (onlineMatch) {
+
+        const rawOnline = onlineMatch[1];
+
+    const instances = rawOnline
+  .split(",")
+  .map(x => x.trim().toLowerCase())
+  .filter(x =>
+    x !== "" &&
+    x !== "main" &&
+    x !== "none"
+  ).length;
+        if (!liveTracker[id]) {
+  liveTracker[id] = {};
+}
+
+liveTracker[id].instances = instances;
+
+        if (instances > (trackingData[id].recordInstances || 0)) {
+          trackingData[id].recordInstances = instances;
+        }
+
+        console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
+      }
+
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
+
+  } catch (err) {
+    console.error("❌ Error escaneando heartbeat global:", err.message);
+  }
+
+}
+
 
 // =============================
 async function updatePanels() {
@@ -610,23 +859,29 @@ async function updatePanels() {
 
   for (const [id] of Object.entries(liveTracker)) {
 
+    if (
+  userPanels[id] &&
+  !liveTracker[id].sessionXP &&
+  !liveTracker[id].sessionTime
+) continue;
+
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
     if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
 
 const { file, gif } = await renderPanel(id, channel);
 
-    if (userPanels[id]) {
+ if (userPanels[id]?.messageId) {
   try {
     const msg = await channel.messages.fetch(userPanels[id].messageId);
 
     await msg.edit({ files: [file] });
 
-    continue;
+    continue; // 🔥 NO CREA NUEVO
   } catch (err) {
-    console.log(`⚠️ Mensaje perdido para ${id}, recreando panel...`);
-
-    delete userPanels[id]; // 🔥 IMPORTANTE
+    console.log(`⚠️ Panel perdido (${id}), recreando...`);
+    delete userPanels[id];
+    savePanels();
   }
 }
 
@@ -655,6 +910,7 @@ const { file, gif } = await renderPanel(id, channel);
     await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
 
     userPanels[id] = { messageId: sent.id, threadId: thread.id };
+savePanels(); // 🔥 GUARDAR
   }
 }
 
@@ -749,7 +1005,8 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
   
 });
 
-  
+
+
 
 
 // =============================
@@ -758,9 +1015,20 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
 
-  const entry = Object.entries(userPanels).find(
-    ([id, d]) => d.threadId === msg.channel.id
-  );
+  // =============================
+  // 🔥 1. TRACKING GLOBAL (SIEMPRE)
+  // =============================
+
+
+  // 📦 WEBHOOK (packs + instancias)
+ 
+ 
+  // =============================
+  // 🎨 2. PERSONALIZACIÓN (SOLO THREAD)
+  // =============================
+
+  const entry = Object.entries(userPanels)
+    .find(([_, d]) => d.threadId === msg.channel.id);
 
   if (!entry) return;
 
@@ -770,111 +1038,8 @@ client.on("messageCreate", async (msg) => {
 
   const content = msg.content.toLowerCase().trim();
 
-
-
-// =============================
-// 💎 DETECCIÓN GOD PACK
-// =============================
-for (const group of Object.values(GROUPS)) {
-
-  if (msg.channel.id === group.gpChannelId) {
-
-    const lines = msg.content.split("\n");
-    const firstLine = lines[0];
-
-    const match = firstLine.match(/@(.+?)\s+Kudos!/i);
-
-    if (!match) return;
-
-    const username = match[1].trim();
-
-    const userEntry = Object.entries(trackingData)
-      .find(([id, data]) => data.name === username);
-
-    if (userEntry) {
-
-      const [id] = userEntry;
-
-      if (!trackingData[id].gp)
-        trackingData[id].gp = 0;
-
-      trackingData[id].gp += 1;
-
-      console.log(`💎 GP sumado a ${username}`);
-    }
-  }
-}
-
-  
-// =============================
-// 📦 DETECCIÓN WEBHOOK TRACKING
-// =============================
-if (msg.webhookId) {
-
-  const content = msg.content;
-
-  const onlineMatch = content.match(/Online:\s*(.+)/i);
-  const packsMatch = content.match(/Packs:\s*(\d+)/i);
-
-if (packsMatch) {
-
-  const username = content.split("\n")[0]?.trim();
-  const currentPacks = Number(packsMatch[1]);
-
-  const userEntry = Object.entries(trackingData)
-    .find(([id, data]) => data.name === username);
-
-  if (userEntry) {
-
-    const [id] = userEntry;
-    
-if (trackingData[id].lastPacks === undefined) {
-    trackingData[id].lastPacks = currentPacks;
-}
-
-    const diff = currentPacks - trackingData[id].lastPacks;
-
-    if (diff > 0) {
-      trackingData[id].packs += diff;
-    }
-
-    trackingData[id].lastPacks = currentPacks;
-  }
-}
-
-
-  
-  if (onlineMatch) {
-
-    const username = content.split("\n")[0]?.trim(); // Zannt
-    const onlineLine = onlineMatch[1];
-
-    const instances = onlineLine
-      .split(",")
-      .map(x => x.trim())
-      .filter(x => x !== "Main" && x.toLowerCase() !== "none")
-      .length;
-
-    const userEntry = Object.entries(trackingData)
-      .find(([id, data]) => data.name === username);
-
-    if (userEntry) {
-      const [id] = userEntry;
-
-      if (!trackingData[id].recordInstances)
-        trackingData[id].recordInstances = 0;
-
-      if (instances > trackingData[id].recordInstances) {
-        trackingData[id].recordInstances = instances;
-      }
-
-
-      
-    }
-  }
-}
   // =============================
-  // 🎨 COLOR (ES + EN)
+  // 🎨 COLOR
   // =============================
   const parts = content.split(" ");
 
@@ -898,13 +1063,8 @@ red, blue, gold
 rgb(255,0,0)`);
       }
 
-      if (type === "name") {
-        userSettings[id].nameColor = color;
-      }
-
-      if (type === "text") {
-        userSettings[id].textColor = color;
-      }
+      if (type === "name") userSettings[id].nameColor = color;
+      if (type === "text") userSettings[id].textColor = color;
 
       saveSettings();
       await forceRender(id);
@@ -953,7 +1113,7 @@ if (!liveTracker[id]) {
     name: trackingData[id]?.name || "Unknown",
     packs: 0,
     gp: 0,
-    group: trackingData[id]?.role
+    group: eliteUsers[id]?.group
   };
 }
 
@@ -997,26 +1157,51 @@ trackingData[id].role = getUserRoleByGroup(s.group).name;
       s.sessionTime = 0;
     }
 
-    await updateGist(process.env.GIST_TRACKING, trackingData);
+    await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
   }, 600000);
 }
 
 // =============================
 function safeParse(data) {
-  try { return typeof data === "object" ? data : JSON.parse(data); }
-  catch { return {}; }
+  try {
+    if (!data) return {};
+
+    if (typeof data === "object") return data;
+
+    if (typeof data === "string") {
+      const parsed = JSON.parse(data);
+
+      if (typeof parsed === "object" && parsed !== null) {
+        return parsed;
+      }
+    }
+
+    return {};
+  } catch (err) {
+    console.error("❌ Error parseando JSON:", err.message);
+    return {};
+  }
 }
 
 function sanitizeTracking() {
+  if (typeof trackingData !== "object" || trackingData === null) {
+    console.error("❌ trackingData corrupto:", trackingData);
+    trackingData = {};
+    return;
+  }
+
   for (const k in trackingData) {
+    if (typeof trackingData[k] !== "object") {
+      trackingData[k] = {};
+    }
+
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
     trackingData[k].gp = Number(trackingData[k].gp) || 0;
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
-trackingData[k].packs = Number(trackingData[k].packs) || 0;
-        trackingData[k].lastPacks = Number(trackingData[k].lastPacks) || 0;
-
-//trackingData[k].gp = Number(trackingData[k].gp) || 0;
+   trackingData[k].totalpacks = Number(trackingData[k].totalpacks) || 0;
+    trackingData[k].currentpacks = Number(trackingData[k].currentpacks) || 0;
+  //  trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
   }
 }
 
