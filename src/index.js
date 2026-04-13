@@ -534,7 +534,7 @@ if (s?.group) {
 
 // 👑 DETECCIÓN CHAMPION
 try {
-  const guild = client.guilds.cache.first();
+  const guild = client.guilds.cache.get(1483615153743462571);
   const member = await guild.members.fetch(id);
 
   if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
@@ -677,9 +677,7 @@ const userEntry = Object.entries(eliteUsers)
 };
       }
 
-      if (trackingData[id].lastHeartbeatMessageId === msg.id) {
-        continue;
-      }
+    
 
       const content = msg.content;
 
@@ -736,7 +734,6 @@ liveTracker[id].instances = instances;
         console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
       }
 
-      trackingData[id].lastHeartbeatMessageId = msg.id;
     }
 
     await updateGist(process.env.GIST_TRACKING, trackingData);
@@ -1185,7 +1182,7 @@ function sanitizeTracking() {
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
    trackingData[k].totalpacks = Number(trackingData[k].totalpacks) || 0;
     trackingData[k].currentpacks = Number(trackingData[k].currentpacks) || 0;
-    trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
+  //  trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
   }
 }
 
