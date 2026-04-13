@@ -758,15 +758,7 @@ liveTracker[id].instances = instances;
   } catch (err) {
     console.error("❌ Error escaneando heartbeat global:", err.message);
   }
-   console.log("---------");
-console.log("USER LINE:", lines[0]);
-console.log("CONTENT:", content);
 
-const packsMatch = content.match(/packs:\s*(\d+)/i);
-console.log("PACKS MATCH:", packsMatch);
-
-const onlineMatch = content.match(/online:\s*(.+)/i);
-console.log("ONLINE MATCH:", onlineMatch);
 }
 
 
