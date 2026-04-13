@@ -18,7 +18,7 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 // 👉 GIST IDS
-const PROFILE_GIST = "8f3c918d57e1dbf417d068684fbfa238";
+const PROFILE_GIST = "a3211687a05d1399c59053296dcf2e98";
 
 const REGISTRY_GISTS = {
   trainer: "1c066922bc39ac136b6f234fad6d9420",
