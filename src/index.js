@@ -47,7 +47,13 @@ if (!process.env.GIST_SETTINGS) {
   throw new Error("❌ FALTA GIST_SETTINGS en Railway");
 }
 
-
+// 🔥 CARGAR IMAGEN DE BOOST
+try {
+  fireImg = await loadImageCached("./assets/fire.png");
+  console.log("🔥 fire.png cargado");
+} catch (err) {
+  console.error("❌ Error cargando fire.png:", err.message);
+}
 
 const commandMap = {
   nombre: "name",
@@ -640,13 +646,6 @@ try {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-  let fireImg = null;
-
-try {
-  fireImg = await loadImageCached("./assets/fire.png");
-} catch (err) {
-  console.error("🔥 Error cargando fire.png:", err.message);
-}
 
   let bg;
 
@@ -683,13 +682,13 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 
 ctx.fillText(gpText, 40, 330);
 
-if (s && s.boostUntil && Date.now() < s.boostUntil) {
+if (s && s.boostUntil && Date.now() < s.boostUntil && fireImg) {
   const width = ctx.measureText(gpText).width;
 
   ctx.drawImage(
     fireImg,
     40 + width + 10,
-    305, // ajusta vertical
+    305,
     30,
     30
   );
