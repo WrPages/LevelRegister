@@ -39,10 +39,13 @@ const GP_CHANNELS = [
   "1486277594629275770"
 ];
 
+const PROFILE_CHANNEL_ID = "1484015417411244082";
+
 // ================= CACHE =================
 
 let profilesCache = {};
 let lastHeartbeatMessageId = null;
+let leaderboardMessageId = null;
 
 // ================= GIST =================
 
@@ -111,7 +114,7 @@ async function getOnlineUsers() {
   return users;
 }
 
-// ================= TIEMPO + XP =================
+// ================= TIEMPO =================
 
 async function updateStats() {
   const onlineUsers = await getOnlineUsers();
@@ -132,10 +135,9 @@ async function updateStats() {
 
     const profile = profilesCache[user.discordId];
 
-    // actualizar rol si sube
     profile.role = getHighestRole(profile.role, user.role);
 
-    // tiempo
+    // +1 minuto activo
     profile.time += 1;
   }
 
@@ -223,6 +225,42 @@ client.on("messageCreate", async (message) => {
   await updateGist(PROFILE_GIST, profilesCache);
 });
 
+// ================= LEADERBOARD =================
+
+async function updateProfileChannel() {
+  const channel = await client.channels.fetch(PROFILE_CHANNEL_ID);
+  if (!channel) return;
+
+  const users = Object.values(profilesCache)
+    .sort((a, b) => b.xp - a.xp)
+    .slice(0, 20);
+
+  let content = "🏆 **Leaderboard Reroll**\n\n";
+
+  users.forEach((u, i) => {
+    content += `#${i + 1} ${u.name}\n`;
+    content += `XP: ${Math.floor(u.xp)} | Nivel: ${Math.floor(u.xp / 200)}\n`;
+    content += `Tiempo: ${u.time} min\n`;
+    content += `Packs: ${u.totalpacks}\n`;
+    content += `GP: ${u.gp}\n`;
+    content += `Instancias récord: ${u.recordInstances}\n`;
+    content += `Rol: ${u.role}\n\n`;
+  });
+
+  try {
+    if (!leaderboardMessageId) {
+      const msg = await channel.send(content);
+      leaderboardMessageId = msg.id;
+    } else {
+      const msg = await channel.messages.fetch(leaderboardMessageId);
+      await msg.edit(content);
+    }
+  } catch {
+    const msg = await channel.send(content);
+    leaderboardMessageId = msg.id;
+  }
+}
+
 // ================= INIT =================
 
 client.once("ready", async () => {
@@ -235,8 +273,9 @@ client.once("ready", async () => {
   }
 
   // loops
-  setInterval(updateStats, 60000);     // tiempo
-  setInterval(parseHeartbeat, 30000);  // stats
+  setInterval(updateStats, 60000);        // tiempo
+  setInterval(parseHeartbeat, 30000);     // stats
+  setInterval(updateProfileChannel, 60000); // leaderboard
 });
 
 // ================= LOGIN =================
