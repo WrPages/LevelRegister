@@ -1,352 +1,1201 @@
+import {
+  Client,
+  GatewayIntentBits,
+  AttachmentBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} from "discord.js";
+
 import dotenv from "dotenv";
-import { Client, GatewayIntentBits } from "discord.js";
-import axios from "axios";
+import path from "path";
+import fs from "fs";
+import fetch from "node-fetch";
+import { createCanvas, loadImage, registerFont } from "canvas";
+import { getGist, updateGist } from "./gist.js";
 
 dotenv.config();
 
+// =============================
+// 🛑 VALIDACIÓN ENV
+// =============================
+if (!process.env.GIST_SETTINGS) {
+  throw new Error("❌ FALTA GIST_SETTINGS en Railway");
+}
+
+
+
+const commandMap = {
+  nombre: "name",
+  name: "name",
+  texto: "text",
+  text: "text",
+};
+// =============================
+// 🧠 FONT
+// =============================
+const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
+if (fs.existsSync(fontPath)) {
+  registerFont(fontPath, { family: "Righteous" });
+}
+
+// =============================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers // 🔥 NECESARIO
+  ],
+});
+const CHAMPION_ROLE_ID = "1486206362332434634";
+
+const WATERMARK_CHANNEL_ID = "1484015417411244082";
+const WATERMARK_LOGO_PATH = "./assets/logo.png";
+
+const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
+// =============================
+// 📌 CANALES Y GISTS POR GRUPO
+// =============================
+const GROUPS = {
+  trainer: {
+//    heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
+    gpChannelId: "1487362022864588902",               // canal donde se cuentan GP
+   usersGistId: "1c066922bc39ac136b6f234fad6d9420",
+    onlineGistId: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c"     // Gist con usuarios online
+  },
+  gymLeader: {
+ //   heartbeatChannelId: "1491238609578360833",
+    gpChannelId: "1491238471556403281",
+    usersGistId: "a3f5f3d8a2e6ddf2378fb3481dff49f6",
+    onlineGistId: "e110c37b3e0b8de83a33a1b0a5eb64e8"
+  },
+  eliteFour: {
+ //   heartbeatChannelId: "1483616146996465735",
+    gpChannelId: "1484015417411244082",
+   // gpChannelId: "1486277594629275770",
+  usersGistId: "bb18eda2ea748723d8fe0131dd740b70",
+    onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
+  }
+};
+// =============================
+let eliteUsers = {};
+let onlineIds = [];
+let trackingData = {};
+let usersByGroup = {};
+let liveTracker = {};
+let userPanels = {};
+let userSettings = {};
+let editState = {};
+let lastManualEdit = {};
+
+let groupOnlineMap = {};  // 🔥 GLOBAL
+
+// =============================
+// ⚡ CACHE DE IMÁGENES
+// =============================
+const imageCache = new Map();
+
+async function loadImageCached(src) {
+  try {
+    if (!src) return await loadImage("./assets/card.png");
+
+    if (imageCache.has(src)) return imageCache.get(src);
+
+    let img;
+
+    if (src.startsWith("http")) {
+      const res = await fetch(src);
+      const buffer = await res.arrayBuffer();
+      img = await loadImage(Buffer.from(buffer));
+    } else {
+      img = await loadImage(src);
+    }
+
+    imageCache.set(src, img);
+
+    if (imageCache.size > 50) {
+  const firstKey = imageCache.keys().next().value;
+  imageCache.delete(firstKey);
+}
+
+    return img;
+  } catch (err) {
+    console.error("Error cargando imagen:", err.message);
+    return await loadImage("./assets/card.png");
+  }
+}
+let idMap = {};
+console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
+console.log("ONLINE IDS:", onlineIds.slice(0, 10));
+// =============================
+// 💾 SAVE SETTINGS (DEBOUNCE)
+// =============================
+let saveTimeout;
+
+function saveSettings() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    updateGist(process.env.GIST_SETTINGS, userSettings);
+  }, 2000);
+}
+
+// =============================
+const colorCategories = {
+  red: [
+    { label: "🔴 Red", value: "#ff4d4d" },
+    { label: "🔥 Crimson", value: "#dc143c" },
+    { label: "🍅 Tomato", value: "#ff6347" },
+    { label: "🩸 Dark Red", value: "#8b0000" },
+    { label: "❤️ Firebrick", value: "#b22222" },
+    { label: "🌹 Indian Red", value: "#cd5c5c" },
+    { label: "🍓 Light Coral", value: "#f08080" },
+  ],
+
+  blue: [
+    { label: "🔵 Blue", value: "#4da6ff" },
+    { label: "🌊 Dodger Blue", value: "#1e90ff" },
+    { label: "💎 Royal Blue", value: "#4169e1" },
+    { label: "🌌 Midnight Blue", value: "#191970" },
+    { label: "🌀 Steel Blue", value: "#4682b4" },
+    { label: "❄️ Light Blue", value: "#add8e6" },
+    { label: "🌫️ Sky Blue", value: "#87ceeb" },
+  ],
+
+  green: [
+    { label: "🟢 Green", value: "#4dff88" },
+    { label: "🌿 Lime", value: "#32cd32" },
+    { label: "🌲 Forest", value: "#228b22" },
+    { label: "🍃 Spring", value: "#00ff7f" },
+    { label: "🥑 Olive", value: "#808000" },
+    { label: "🌱 Sea Green", value: "#2e8b57" },
+    { label: "🌴 Dark Green", value: "#006400" },
+  ],
+
+  yellow: [
+    { label: "🟡 Yellow", value: "#ffff66" },
+    { label: "🌟 Gold", value: "#ffd700" },
+    { label: "🍋 Lemon", value: "#fff44f" },
+    { label: "🌻 Khaki", value: "#f0e68c" },
+    { label: "🧈 Light Yellow", value: "#ffffe0" },
+  ],
+
+  purple: [
+    { label: "🟣 Purple", value: "#b84dff" },
+    { label: "💜 Violet", value: "#ee82ee" },
+    { label: "🔮 Indigo", value: "#4b0082" },
+    { label: "🌌 Dark Violet", value: "#9400d3" },
+    { label: "🍇 Plum", value: "#dda0dd" },
+  ],
+
+  pink: [
+    { label: "🌸 Pink", value: "#ff66cc" },
+    { label: "💖 Hot Pink", value: "#ff69b4" },
+    { label: "🎀 Deep Pink", value: "#ff1493" },
+    { label: "🌺 Pale Violet", value: "#db7093" },
+  ],
+
+  neutral: [
+    { label: "⚪ White", value: "#ffffff" },
+    { label: "⬜ Light Gray", value: "#d3d3d3" },
+    { label: "🌑 Gray", value: "#808080" },
+    { label: "⬛ Dark Gray", value: "#404040" },
+    { label: "🖤 Black", value: "#000000" },
+  ],
+
+  special: [
+    { label: "💎 Cyan", value: "#00ffff" },
+    { label: "🧊 Aqua", value: "#7fdbff" },
+    { label: "🍊 Orange", value: "#ff944d" },
+    { label: "🔥 Dark Orange", value: "#ff8c00" },
+    { label: "🌈 Rainbow", value: "#ff00ff" },
+  ],
+
+  neon: [
+    { label: "⚡ Neon Blue", value: "#00ffff" },
+    { label: "💚 Neon Green", value: "#39ff14" },
+    { label: "💖 Neon Pink", value: "#ff10f0" },
+    { label: "🟡 Neon Yellow", value: "#ffff33" },
+    { label: "🟣 Neon Purple", value: "#bc13fe" },
   ]
+};
+function isValidColor(color) {
+  const canvas = createCanvas(10, 10);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#000";
+  ctx.fillStyle = color;
+
+  return ctx.fillStyle !== "#000" || color === "#000";
+}
+// =============================
+function getUserRoleByGroup(group) {
+
+  if (group === "eliteFour")
+    return { name: "Elite Four", color: "#800080" };
+
+  if (group === "gymLeader")
+    return { name: "Gym Leader", color: "#0099ff" };
+
+  if (group === "trainer")
+    return { name: "Trainer", color: "#00ff00" };
+
+  return { name: "Reroller", color: "#aaaaaa" };
+}
+
+// =============================
+function getPokemonData(totalXP) {
+  const stages = [
+    { name: "Huevo", min: 0, max: 400, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
+    { name: "Fase 1", min: 400, max: 800, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
+    { name: "Fase 2", min: 800, max: 1200, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif" },
+    { name: "Final", min: 1200, max: Infinity, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif" },
+  ];
+  return stages.find(s => totalXP >= s.min && totalXP < s.max);
+}
+
+// =============================
+client.once("clientReady", async () => {
+  console.log(`Bot listo como ${client.user.tag}`);
+    console.log("🔎 Escaneando heartbeats (GLOBAL)...");
+
+    client.globalHeartbeatMessages = new Map();
+
+    for (const guild of client.guilds.cache.values()) {
+
+        const globalChannel = guild.channels.cache.get(GLOBAL_HEARTBEAT_CHANNEL_ID);
+        if (!globalChannel) continue;
+
+        const messages = await globalChannel.messages.fetch({ limit: 50 });
+
+        for (const msg of messages.values()) {
+
+            if (msg.author.id !== client.user.id) continue;
+
+            const content = msg.content;
+
+            // Intentar identificar usuario desde el contenido
+            // (IMPORTANTE: necesitas incluir el nombre en el mensaje)
+            const match = content.match(/^```(.*?)\n/);
+
+            if (match) {
+                const username = match[1].trim();
+                client.globalHeartbeatMessages.set(username, msg.id);
+            }
+        }
+    }
+
+    console.log("EJEMPLO IDMAP:", [...client.globalHeartbeatMessages.entries()].slice(0, 5));
+
+  
+  // =============================
+  // 1️⃣ CARGAR USUARIOS
+  // =============================
+  eliteUsers = {};
+
+  for (const [groupName, group] of Object.entries(GROUPS)) {
+
+    const usersData = safeParse(await getGist(group.usersGistId));
+
+    for (const [id, user] of Object.entries(usersData)) {
+      eliteUsers[id] = {
+        ...user,
+        group: groupName
+      };
+    }
+  }
+
+  console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
+
+
+  // =============================
+  // 2️⃣ CREAR usersByGroup
+  // =============================
+  usersByGroup = {};
+
+  for (const [id, user] of Object.entries(eliteUsers)) {
+    if (!usersByGroup[user.group]) {
+      usersByGroup[user.group] = {};
+    }
+
+    usersByGroup[user.group][id] = user;
+  }
+
+
+  // =============================
+  // 3️⃣ CREAR ID MAP
+  // =============================
+  idMap = {};
+
+  for (const [id, user] of Object.entries(eliteUsers)) {
+    if (user.main_id)
+      idMap[String(user.main_id)] = id;
+
+    if (user.sec_id)
+      idMap[String(user.sec_id)] = id;
+  }
+
+  console.log("ID MAP creado:", Object.keys(idMap).length);
+
+
+  // =============================
+  // 4️⃣ CARGAR ONLINE IDS
+  // =============================
+  groupOnlineMap = {};
+  let combinedOnlineIds = [];
+
+  for (const [groupName, group] of Object.entries(GROUPS)) {
+    const raw = await getGist(group.onlineGistId);
+    const ids = cleanOnlineIds(raw);
+
+    groupOnlineMap[groupName] = ids;
+    combinedOnlineIds.push(...ids);
+  }
+
+  onlineIds = [...new Set(combinedOnlineIds)];
+
+
+  // =============================
+  // 5️⃣ CARGAR TRACKING Y SETTINGS
+  // =============================
+  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
+  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
+
+  sanitizeTracking();
+
+
+  // =============================
+  // 6️⃣ EJECUTAR PRIMERA ACTUALIZACIÓN
+  // =============================
+  console.log("🚀 Ejecutando actualización inicial...");
+
+  await runTrackingCycle();
+  await scanHeartbeats();
+
+  await updateGist(process.env.GIST_TRACKING, trackingData);
+
+  console.log("✅ Datos sincronizados al iniciar");
+
+
+  // =============================
+  // 7️⃣ INICIAR LOOPS
+  // =============================
+  startLoop();
+  setInterval(scanHeartbeats, 300000);
+  startBackupLoop();
 });
 
-// ================= CONFIG =================
+// ============================= end cloentonce
 
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-
-const PROFILE_GIST = "3feff906c7e01e1f9a931ba1df62c85a";
-
-const REGISTRY_GISTS = {
-  trainer: "1c066922bc39ac136b6f234fad6d9420",
-  gym: "a3f5f3d8a2e6ddf2378fb3481dff49f6",
-  elite: "bb18eda2ea748723d8fe0131dd740b70"
-};
-
-const ONLINE_GISTS = {
-  trainer: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c",
-  gym: "e110c37b3e0b8de83a33a1b0a5eb64e8",
-  elite: "d9db3a72fed74c496fd6cc830f9ca6e9"
-};
-
-const HEARTBEAT_CHANNEL_ID = "1492795826857054301";
-
-const GP_CHANNELS = [
-  "1487362022864588902",
-  "1493051743704186950",
-  "1486277594629275770"
-];
-
-const PROFILE_CHANNEL_ID = "1493051743704186950";
-
-// ================= CACHE =================
-
-let profilesCache = {};
-let isUpdatingGist = false;
-let leaderboardMessages = [];
-
-// ================= GIST =================
-
-async function getGist(gistId) {
-  const res = await axios.get(`https://api.github.com/gists/${gistId}`, {
-    headers: { Authorization: `token ${GITHUB_TOKEN}` }
-  });
-
-  const file = Object.values(res.data.files)[0];
-  const content = file.content.trim();
-
+async function runTrackingCycle() {
   try {
-    return JSON.parse(content);
-  } catch {
-    return content
-      .split("\n")
-      .map(x => x.replace(/\r/g, "").trim())
-      .filter(x => x.length > 0);
+    console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
+
+    const trackingRaw = await getGist(process.env.GIST_TRACKING);
+    trackingData = trackingRaw ? safeParse(trackingRaw) : {};
+
+    groupOnlineMap = {};
+    let combinedOnlineIds = [];
+
+    // 🔥 ONLINE
+    for (const [groupName, group] of Object.entries(GROUPS)) {
+      const raw = await getGist(group.onlineGistId);
+      const ids = cleanOnlineIds(raw);
+
+      groupOnlineMap[groupName] = ids;
+      combinedOnlineIds.push(...ids);
+    }
+
+    onlineIds = [...new Set(combinedOnlineIds)];
+
+
+///sep
+    for (const id in liveTracker) {
+
+  const isStillOnline = onlineIds.some(uid => idMap[String(uid)] === id);
+
+  if (!isStillOnline) {
+
+    if (!trackingData[id]) continue;
+
+    if (trackingData[id].currentpacks > 0) {
+      trackingData[id].totalpacks += trackingData[id].currentpacks;
+      trackingData[id].currentpacks = 0;
+
+      console.log("📦 Flush packs offline:", trackingData[id].name);
+    }
+
+    delete liveTracker[id];
   }
 }
 
-async function updateGist(gistId, content) {
-  if (isUpdatingGist) return;
 
-  if (
-    !content ||
-    typeof content !== "object" ||
-    Object.keys(content).length === 0
-  ) {
-    console.log("⛔ Evitado borrar gist");
+
+    
+    // 🔥 XP / TIEMPO
+  for (const uid of onlineIds) {
+    console.log("UID ONLINE:", uid);
+console.log("MAP RESULT:", idMap[String(uid)]);
+
+  const id = idMap[String(uid)];
+
+if (id && eliteUsers[id]) {
+  console.log("🟢 ONLINE:", eliteUsers[id].name);
+}
+    
+  if (!id) continue;
+
+  const user = eliteUsers[id];
+  if (!user) continue;
+
+  let userGroup = null;
+
+  for (const [gName, ids] of Object.entries(groupOnlineMap)) {
+    if (ids.includes(String(uid))) {
+      userGroup = gName;
+      break;
+    }
+  }
+
+  if (!userGroup) continue;
+
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: 1,
+      boostUntil: 0,
+      name: user.name,
+      packs: 0,
+      gp: 0,
+      group: userGroup
+    };
+  } else {
+    liveTracker[id].group = userGroup;
+  }
+
+  const t = liveTracker[id];
+
+  const seconds = 60;
+  t.sessionTime += seconds;
+
+  let xpPerSecond = (1 + t.instances * 0.1) / 60;
+
+  if (Date.now() < t.boostUntil)
+    xpPerSecond *= 2;
+
+  t.sessionXP += xpPerSecond * seconds;
+}
+
+    await updatePanels();
+
+  } catch (error) {
+    console.error("❌ Error en runTrackingCycle:", error);
+  }
+}
+
+
+
+
+
+// =============================
+async function renderPanel(id, channel) {
+  const s = liveTracker[id];
+  const t = trackingData[id] || {};
+
+  if (!userSettings[id]) {
+    userSettings[id] = {
+      bg: null,
+      nameColor: "#ffffff",
+      textColor: "#ffffff",
+    };
+  }
+
+  const settings = userSettings[id];
+
+  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+  const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+  const level = Math.floor(totalXP / 200);
+
+  const poke = getPokemonData(totalXP);
+
+let role;
+
+if (s?.group) {
+  role = getUserRoleByGroup(s.group);
+} else {
+  role = {
+    name: t.role || "Reroller",
+    color: "#aaaaaa"
+  };
+}
+
+// 👑 DETECCIÓN CHAMPION
+try {
+  const guild = client.guilds.cache.first();
+  const member = await guild.members.fetch(id);
+
+  if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
+    role = {
+      name: "Champion",
+      color: "#FFD700" // dorado 👑
+    };
+  }
+
+} catch (err) {
+  console.log("No se pudo verificar Champion:", err.message);
+}
+
+  const canvas = createCanvas(800, 450);
+  const ctx = canvas.getContext("2d");
+
+  let bg;
+
+if (settings.bg?.type === "base64") {
+  const buffer = Buffer.from(settings.bg.data, "base64");
+  bg = await loadImage(buffer);
+} else {
+  bg = await loadImageCached("./assets/card.png");
+}
+  ctx.drawImage(bg, 0, 0, 800, 450);
+
+  ctx.fillStyle = settings.nameColor;
+  ctx.font = "50px Righteous";
+  ctx.fillText(s.name, 40, 80);
+
+  ctx.fillStyle = role.color;
+  ctx.font = "22px Righteous";
+  ctx.fillText(role.name, 42, 110);
+
+  ctx.fillStyle = "#00ffcc";
+  ctx.font = "38px Righteous";
+  ctx.fillText(`Lv ${level}`, 620, 80);
+
+  ctx.fillStyle = settings.textColor;
+  ctx.font = "24px Righteous";
+
+  ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
+  ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
+  ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
+  const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
+ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
+  ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
+
+  return {
+    file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
+    gif: poke.gif
+  };
+}
+function createCategoryMenu(type, userId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`cat_${type}_${userId}`)
+      .setPlaceholder("Elige categoría")
+      .addOptions([
+        { label: "🔴 Rojos", value: "red" },
+        { label: "🔵 Azules", value: "blue" },
+        { label: "🟢 Verdes", value: "green" },
+        { label: "🟡 Amarillos", value: "yellow" },
+        { label: "🟣 Morados", value: "purple" },
+        { label: "🌸 Rosas", value: "pink" },
+        { label: "⚫ Neutros", value: "neutral" },
+        { label: "🌈 Especiales", value: "special" },
+        { label: "⚡ Neon", value: "neon" },
+      ])
+  );
+}
+
+function createColorMenu(type, userId, category) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`color_${type}_${userId}`)
+      .setPlaceholder("Selecciona un color")
+      .addOptions(colorCategories[category])
+  );
+}
+
+
+// =============================scanHeartbeats____scanHeartbeats
+
+ async function scanHeartbeats() {
+  console.log("🔎 Escaneando heartbeats (GLOBAL)...");
+
+  const normalize = str =>
+    str?.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  try {
+
+    // 🔥 Canal global de heartbeat
+    const channel = await client.channels.fetch(GLOBAL_HEARTBEAT_CHANNEL_ID);
+    if (!channel) return;
+
+    // 🔥 Traer más mensajes
+    const messages = await channel.messages.fetch({ limit: 50 });
+
+    const latestByUser = {};
+
+  for (const msg of messages.values()) {
+
+  // Solo aceptar mensajes de bots
+  if (!msg.author.bot) continue;
+
+      const lines = msg.content.split("\n");
+      if (!lines.length) continue;
+
+     const rawName = lines[0].trim();
+const cleanName = normalize(rawName);
+
+const userEntry = Object.entries(eliteUsers)
+  .find(([id, user]) =>
+    normalize(user.name) === cleanName
+  );
+
+      if (!userEntry) continue;
+
+      const [id] = userEntry;
+
+      if (!latestByUser[id]) {
+        latestByUser[id] = msg;
+      }
+    }
+
+    // 🔥 Procesar usuarios encontrados
+    for (const [id, msg] of Object.entries(latestByUser)) {
+
+      if (!trackingData[id]) {
+      trackingData[id] = {
+  name: eliteUsers[id].name,
+  xp: 0,
+  time: 0,
+  totalpacks: 0,
+  currentpacks: 0,
+  gp: 0,
+  recordInstances: 0,
+  lastHeartbeatMessageId: null
+};
+      }
+
+      if (trackingData[id].lastHeartbeatMessageId === msg.id) {
+        continue;
+      }
+
+      const content = msg.content;
+
+      // =====================
+      // 📦 PACKS
+      // =====================
+      const packsMatch = content.match(/packs?\s*[:\-]?\s*(\d+)/i);
+
+      if (packsMatch) {
+
+        const current = Number(packsMatch[1]);
+
+if (!trackingData[id].currentpacks) {
+  trackingData[id].currentpacks = current;
+} else {
+
+  if (current < trackingData[id].currentpacks) {
+    // 🔥 reset → sumar al total
+    trackingData[id].totalpacks += trackingData[id].currentpacks;
+    trackingData[id].currentpacks = 0;
+  } else {
+    trackingData[id].currentpacks = current;
+  }
+}
+      }
+
+      // =====================
+      // 🥇 INSTANCIAS
+      // =====================
+      const onlineMatch = content.match(/online\s*[:\-]?\s*(.+)/i);
+
+      if (onlineMatch) {
+
+        const rawOnline = onlineMatch[1];
+
+        const instances = rawOnline
+          .split(/[, ]+/)
+          .map(x => x.trim().toLowerCase())
+          .filter(x =>
+            x !== "" &&
+            x !== "main" &&
+            x !== "none"
+          ).length;
+        if (!liveTracker[id]) {
+  liveTracker[id] = {};
+}
+
+liveTracker[id].instances = instances;
+
+        if (instances > (trackingData[id].recordInstances || 0)) {
+          trackingData[id].recordInstances = instances;
+        }
+
+        console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
+      }
+
+      trackingData[id].lastHeartbeatMessageId = msg.id;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+
+  } catch (err) {
+    console.error("❌ Error escaneando heartbeat global:", err.message);
+  }
+}
+
+
+// =============================
+async function updatePanels() {
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  for (const [id] of Object.entries(liveTracker)) {
+
+    if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
+
+    if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
+
+const { file, gif } = await renderPanel(id, channel);
+
+    if (userPanels[id]) {
+  try {
+    const msg = await channel.messages.fetch(userPanels[id].messageId);
+
+    await msg.edit({ files: [file] });
+
+    continue;
+  } catch (err) {
+    console.log(`⚠️ Mensaje perdido para ${id}, recreando panel...`);
+
+    delete userPanels[id]; // 🔥 IMPORTANTE
+  }
+}
+
+    const sent = await channel.send({ files: [file] });
+
+    const thread = await sent.startThread({
+      name: "Perfil",
+      autoArchiveDuration: 1440,
+    });
+
+    const menu = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`menu_${id}`)
+        .addOptions([
+          { label: "Cambiar fondo", value: "bg" },
+          { label: "Color nombre", value: "name" },
+          { label: "Color texto", value: "text" },
+        ])
+    );
+
+    await thread.send({
+      content: "🎮 Personaliza tu panel",
+      components: [menu],
+    });
+
+    await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
+
+    userPanels[id] = { messageId: sent.id, threadId: thread.id };
+  }
+}
+
+// =============================
+// 🎮 INTERACCIONES
+// =============================
+client.on("interactionCreate", async (i) => {
+
+  // =============================
+  // 🎮 MENU PRINCIPAL
+  // =============================
+  if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
+
+    const id = i.user.id;
+    const option = i.values[0];
+
+    if (option === "bg") {
+      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
+    }
+
+   if (option === "name" || option === "text") {
+  return i.reply({
+    content: "🎨 Elige una categoría:",
+    components: [createCategoryMenu(option, id)],
+    ephemeral: true
+  });
+}
+  }
+
+  // =============================
+  // 🎨 SELECCIÓN DE COLOR
+  // =============================
+if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
+
+  const [, type, userId] = i.customId.split("_");
+
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
+  const category = i.values[0];
+
+  return i.update({
+    content: "🎨 Ahora elige un color:",
+    components: [createColorMenu(type, userId, category)]
+  });
+}
+
+
+ if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
+
+  const [, type, userId] = i.customId.split("_");
+  const color = i.values[0];
+
+  // 🔒 Seguridad: solo el dueño puede usarlo
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
+  const entry = Object.entries(userPanels)
+    .find(([_, data]) => data.threadId === i.channel.id);
+
+  if (!entry) {
+    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
+  }
+
+  const [id] = entry;
+
+  if (!userSettings[id]) userSettings[id] = {};
+
+  if (type === "name") userSettings[id].nameColor = color;
+  if (type === "text") userSettings[id].textColor = color;
+
+  saveSettings();
+
+  await i.update({
+    content: `✅ Color aplicado`,
+    components: []
+  });
+
+  await forceRender(id);
+}
+
+
+
+  
+});
+
+// =============================
+// 🖼️ WATERMARK SYSTEM
+// =============================
+client.on("messageCreate", async (msg) => {
+
+  if (msg.author.bot) return;
+
+  // Solo actuar en canal específico
+  if (msg.channel.id !== WATERMARK_CHANNEL_ID) return;
+
+  if (!msg.attachments.size) return;
+
+  const attachment = msg.attachments.first();
+
+  if (!attachment.contentType?.startsWith("image/")) return;
+
+  try {
+
+    const baseImage = await loadImageCached(attachment.url);
+    const logo = await loadImageCached(WATERMARK_LOGO_PATH);
+
+  const canvas = createCanvas(baseImage.width, baseImage.height);
+const ctx = canvas.getContext("2d");
+
+ctx.drawImage(baseImage, 0, 0, baseImage.width, baseImage.height);
+
+// Tamaño del logo (más grande)
+const logoWidth = baseImage.width * 3; // 50% del ancho
+const logoHeight = logo.height * (logoWidth / logo.width);
+
+// Centro perfecto
+const x = (baseImage.width - logoWidth) / 2;
+const y = (baseImage.height - logoHeight) / 2;
+
+ctx.globalAlpha =2;
+ctx.drawImage(logo, x, y, logoWidth, logoHeight);
+
+    const buffer = canvas.toBuffer("image/png");
+
+    const watermarked = new AttachmentBuilder(buffer, {
+      name: "watermarked.png"
+    });
+
+    await msg.channel.send({
+     // content: `${msg.author}`,
+      files: [watermarked]
+    });
+
+    await msg.delete();
+
+  } catch (err) {
+    console.error("❌ Error watermark:", err);
+  }
+
+});
+
+
+
+
+// =============================
+// 🖼️ FONDO
+// =============================
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
+
+  // =============================
+  // 🔥 1. TRACKING GLOBAL (SIEMPRE)
+  // =============================
+
+  // 💎 GP
+for (const [groupName, group] of Object.entries(GROUPS)) {
+
+  if (msg.channel.id === group.gpChannelId) {
+const normalize = str =>
+  str.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const firstLine = msg.content.split("\n")[0];
+const possibleName = firstLine.split(" ")[0].replace("@", "");
+
+const cleanName = normalize(possibleName);
+
+const userEntry = Object.entries(eliteUsers)
+  .find(([id, user]) =>
+    normalize(user.name) === cleanName
+  );
+
+if (userEntry) {
+  const [id, user] = userEntry;
+
+  if (!trackingData[id]) {
+   trackingData[id] = {
+  name: eliteUsers[id].name,
+  xp: 0,
+  time: 0,
+  totalpacks: 0,
+  currentpacks: 0,
+  gp: 0,
+  recordInstances: 0,
+  lastHeartbeatMessageId: null
+};
+  }
+
+  trackingData[id].gp += 1;
+
+  console.log("💎 GP:", user.name, groupName);
+}
+
+  }
+}
+////nose si va aqui
+
+
+  // 📦 WEBHOOK (packs + instancias)
+ 
+ 
+  // =============================
+  // 🎨 2. PERSONALIZACIÓN (SOLO THREAD)
+  // =============================
+
+  const entry = Object.entries(userPanels)
+    .find(([_, d]) => d.threadId === msg.channel.id);
+
+  if (!entry) return;
+
+  const [id] = entry;
+
+  if (!userSettings[id]) userSettings[id] = {};
+
+  const content = msg.content.toLowerCase().trim();
+
+  // =============================
+  // 🎨 COLOR
+  // =============================
+  const parts = content.split(" ");
+
+  if (parts.length >= 2) {
+
+    let type = parts[0];
+    const value = parts[1];
+
+    type = commandMap[type];
+
+    if (type) {
+
+      let color = value;
+
+      if (!isValidColor(color)) {
+        return msg.reply(`❌ Color inválido / Invalid color
+
+Ejemplos:
+red, blue, gold
+#ff0000
+rgb(255,0,0)`);
+      }
+
+      if (type === "name") userSettings[id].nameColor = color;
+      if (type === "text") userSettings[id].textColor = color;
+
+      saveSettings();
+      await forceRender(id);
+
+      return msg.reply(`✅ Color aplicado: ${color}`);
+    }
+  }
+
+  // =============================
+  // 🖼️ FONDO
+  // =============================
+  if (msg.attachments.size > 0) {
+    const file = msg.attachments.first();
+
+    if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
+
+      const res = await fetch(file.url);
+      const buffer = await res.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
+
+      userSettings[id].bg = {
+        type: "base64",
+        data: base64
+      };
+
+      saveSettings();
+      await forceRender(id);
+
+      return msg.reply("Fondo actualizado ✅");
+    }
+  }
+});
+
+// =============================
+async function forceRender(id) {
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+  lastManualEdit[id] = Date.now();
+
+if (!liveTracker[id]) {
+  liveTracker[id] = {
+    sessionXP: 0,
+    sessionTime: 0,
+    instances: 1,
+    boostUntil: 0,
+    name: trackingData[id]?.name || "Unknown",
+    packs: 0,
+    gp: 0,
+    group: eliteUsers[id]?.group
+  };
+}
+
+  const { file } = await renderPanel(id, channel);
+  const msg = await channel.messages.fetch(userPanels[id].messageId);
+
+  await msg.edit({
+  //  content: `updated_${Date.now()}`,
+  files: [file]
+  });
+}
+
+
+function startLoop() {
+
+  // Ejecuta inmediatamente
+  runTrackingCycle();
+
+  // Luego cada 1 minuto
+  setInterval(runTrackingCycle, 60000);
+}
+
+
+// =============================
+function startBackupLoop() {
+  setInterval(async () => {
+    for (const id in liveTracker) {
+      if (!trackingData[id]) {
+        trackingData[id] = { xp: 0, time: 0, name: liveTracker[id].name, packs: 0, gp: 0 };
+      }
+
+      const s = liveTracker[id];
+
+   trackingData[id].xp += s.sessionXP;
+trackingData[id].time += Math.floor(s.sessionTime / 60);
+//trackingData[id].packs = s.packs;
+trackingData[id].gp = s.gp;
+trackingData[id].role = getUserRoleByGroup(s.group).name;
+
+      s.sessionXP = 0;
+      s.sessionTime = 0;
+    }
+
+    await updateGist(process.env.GIST_TRACKING, trackingData);
+  }, 600000);
+}
+
+// =============================
+function safeParse(data) {
+  try {
+    if (!data) return {};
+
+    if (typeof data === "object") return data;
+
+    if (typeof data === "string") {
+      const parsed = JSON.parse(data);
+
+      if (typeof parsed === "object" && parsed !== null) {
+        return parsed;
+      }
+    }
+
+    return {};
+  } catch (err) {
+    console.error("❌ Error parseando JSON:", err.message);
+    return {};
+  }
+}
+
+function sanitizeTracking() {
+  if (typeof trackingData !== "object" || trackingData === null) {
+    console.error("❌ trackingData corrupto:", trackingData);
+    trackingData = {};
     return;
   }
 
-  isUpdatingGist = true;
-
-  try {
-    await axios.patch(
-      `https://api.github.com/gists/${gistId}`,
-      {
-        files: {
-          "data.json": {
-            content: JSON.stringify(content, null, 2)
-          }
-        }
-      },
-      {
-        headers: { Authorization: `token ${GITHUB_TOKEN}` }
-      }
-    );
-  } catch (err) {
-    console.error("❌ Error Gist:", err.response?.data || err.message);
-  }
-
-  isUpdatingGist = false;
-}
-
-// ================= HELPERS =================
-
-function formatRole(role) {
-  if (role === "elite") return "Elite Four";
-  if (role === "gym") return "Gym Leader";
-  return "Trainer";
-}
-
-function getHighestRole(current, incoming) {
-  const hierarchy = ["Trainer", "Gym Leader", "Elite Four"];
-  return hierarchy.indexOf(incoming) > hierarchy.indexOf(current)
-    ? incoming
-    : current;
-}
-
-// ================= LOAD USERS =================
-
-async function loadAllUsers() {
-  for (const group in REGISTRY_GISTS) {
-    const registry = await getGist(REGISTRY_GISTS[group]);
-
-    for (const discordId in registry) {
-      const user = registry[discordId];
-
-      if (!profilesCache[discordId] || !profilesCache[discordId].name) {
-        profilesCache[discordId] = {
-          xp: 0,
-          time: 0,
-          totalpacks: 0,
-          currentpacks: 0,
-          gp: 0,
-          recordInstances: 0,
-          name: user.name,
-          role: formatRole(group),
-          online: false
-        };
-      } else {
-        profilesCache[discordId].role = getHighestRole(
-          profilesCache[discordId].role,
-          formatRole(group)
-        );
-      }
+  for (const k in trackingData) {
+    if (typeof trackingData[k] !== "object") {
+      trackingData[k] = {};
     }
+
+    trackingData[k].xp = Number(trackingData[k].xp) || 0;
+    trackingData[k].time = Number(trackingData[k].time) || 0;
+    trackingData[k].gp = Number(trackingData[k].gp) || 0;
+    trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
+   trackingData[k].totalpacks = Number(trackingData[k].totalpacks) || 0;
+    trackingData[k].currentpacks = Number(trackingData[k].currentpacks) || 0;
+    trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
   }
 }
 
-// ================= ONLINE =================
+function cleanOnlineIds(raw) {
+  if (!raw) return [];
 
-async function getOnlineUsers() {
-  let users = [];
-
-  for (const group in ONLINE_GISTS) {
-    const onlineList = await getGist(ONLINE_GISTS[group]);
-    const registry = await getGist(REGISTRY_GISTS[group]);
-
-    for (const discordId in registry) {
-      const user = registry[discordId];
-
-      if (onlineList.includes(String(user.main_id).trim())) {
-        users.push({
-          discordId,
-          name: user.name,
-          role: formatRole(group)
-        });
-      }
-    }
-  }
-
-  return users;
+  return raw
+    .split(/\r?\n/)
+    .map(x => x.trim())
+    .filter(x => x.length > 0);
 }
 
-// ================= TIME =================
-
-async function updateStats() {
-  const onlineUsers = await getOnlineUsers();
-
-  for (const id in profilesCache) {
-    profilesCache[id].online = false;
-  }
-
-  for (const user of onlineUsers) {
-    const profile = profilesCache[user.discordId];
-    if (!profile) continue;
-
-    profile.online = true;
-    profile.time += 1;
-    profile.role = getHighestRole(profile.role, user.role);
-  }
-
-  await updateGist(PROFILE_GIST, profilesCache);
-}
-
-// ================= HEARTBEAT =================
-
-async function parseHeartbeat() {
-  const channel = await client.channels.fetch(HEARTBEAT_CHANNEL_ID);
-  const messages = await channel.messages.fetch({ limit: 50 });
-
-  const latestByUser = {};
-
-  for (const msg of messages.values()) {
-    const username = msg.content.split("\n")[0]?.trim();
-    if (!username) continue;
-
-    if (!latestByUser[username]) {
-      latestByUser[username] = msg;
-    }
-  }
-
-  for (const username in latestByUser) {
-    const msg = latestByUser[username];
-    const lines = msg.content.split("\n");
-
-    const onlineLine = lines.find(l => l.startsWith("Online:"));
-    const packsLine = lines.find(l => l.includes("Packs:"));
-
-    if (!onlineLine || !packsLine) continue;
-
-    const instances = onlineLine
-      .replace("Online:", "")
-      .split(",")
-      .map(x => x.trim())
-      .filter(x => x !== "Main" && x !== "none" && x !== "");
-
-    const instanceCount = instances.length;
-
-    const packsMatch = packsLine.match(/Packs:\s(\d+)/);
-    const packs = packsMatch ? parseInt(packsMatch[1]) : 0;
-
-    for (const id in profilesCache) {
-      const profile = profilesCache[id];
-
-      const cleanA = profile.name.toLowerCase().replace(/\s/g, "");
-      const cleanB = username.toLowerCase().replace(/\s/g, "");
-
-      if (profile.online && cleanA === cleanB) {
-        const multiplier = 1 + instanceCount * 0.1;
-        profile.xp += multiplier;
-
-        if (instanceCount > profile.recordInstances) {
-          profile.recordInstances = instanceCount;
-        }
-
-        if (packs === 0) {
-          profile.totalpacks += profile.currentpacks;
-          profile.currentpacks = 0;
-        } else {
-          profile.currentpacks = packs;
-        }
-      }
-    }
-  }
-}
-
-// ================= GOD PACK =================
-
-client.on("messageCreate", async (message) => {
-  if (!GP_CHANNELS.includes(message.channel.id)) return;
-
-  const username = message.content.split("\n")[0].split(" ")[0];
-
-  for (const id in profilesCache) {
-    const cleanA = profilesCache[id].name.toLowerCase().replace(/\s/g, "");
-    const cleanB = username.toLowerCase().replace(/\s/g, "");
-
-    if (cleanA === cleanB) {
-      profilesCache[id].gp += 1;
-    }
-  }
-
-  await updateGist(PROFILE_GIST, profilesCache);
-});
-
-// ================= LEADERBOARD =================
-
-async function updateProfileChannel() {
-  const channel = await client.channels.fetch(PROFILE_CHANNEL_ID);
-  if (!channel) return;
-
-  const users = Object.values(profilesCache).sort((a, b) => b.xp - a.xp);
-
-  let chunks = [];
-  let current = "🏆 **Leaderboard Reroll**\n\n";
-
-  for (let i = 0; i < users.length; i++) {
-    const u = users[i];
-    const status = u.online ? "🟢 Online" : "🔴 Offline";
-
-    const entry =
-      `#${i + 1} ${u.name} (${status})\n` +
-      `XP: ${Math.floor(u.xp)} | Nivel: ${Math.floor(u.xp / 200)}\n` +
-      `Tiempo: ${u.time} min\n` +
-      `Packs: ${u.totalpacks}\n` +
-      `GP: ${u.gp}\n` +
-      `Instancias récord: ${u.recordInstances}\n` +
-      `Rol: ${u.role}\n\n`;
-
-    if ((current + entry).length > 1900) {
-      chunks.push(current);
-      current = "";
-    }
-
-    current += entry;
-  }
-
-  if (current.length > 0) chunks.push(current);
-
-  for (let i = 0; i < chunks.length; i++) {
-    if (leaderboardMessages[i]) {
-      try {
-        const msg = await channel.messages.fetch(leaderboardMessages[i]);
-        await msg.edit(chunks[i]);
-      } catch {
-        const newMsg = await channel.send(chunks[i]);
-        leaderboardMessages[i] = newMsg.id;
-      }
-    } else {
-      const newMsg = await channel.send(chunks[i]);
-      leaderboardMessages[i] = newMsg.id;
-    }
-  }
-}
-
-// ================= INIT =================
-
-client.once("ready", async () => {
-  console.log(`✅ Bot listo como ${client.user.tag}`);
-
-  try {
-    const data = await getGist(PROFILE_GIST);
-    if (data && Object.keys(data).length > 0) {
-      profilesCache = data;
-    }
-  } catch {
-    profilesCache = {};
-  }
-
-  await loadAllUsers();
-  await updateStats();
-  await parseHeartbeat();
-  await updateProfileChannel();
-
-  setInterval(updateStats, 60000);
-  setInterval(parseHeartbeat, 60000);
-  setInterval(updateProfileChannel, 60000);
-});
-
-client.login(DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);
