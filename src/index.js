@@ -588,7 +588,7 @@ if (id && eliteUsers[id]) {
 
 
 
-
+const fireImg = await loadImageCached("./assets/fire.png");
 
 // =============================
 async function renderPanel(id, channel) {
@@ -672,22 +672,23 @@ if (settings.bg?.type === "base64") {
   const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
 ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
   
-  const gpText = `GP: ${t.gp || 0}`;
+ const gpText = `GP: ${t.gp || 0}`;
 
-// 🔥 Dibujar GP
 ctx.fillText(gpText, 40, 330);
 
-// 🔥 SI TIENE BOOST → dibujar fuego
 if (s && s.boostUntil && Date.now() < s.boostUntil) {
-  ctx.font = "28px Righteous";
-  ctx.fillText("🔥", 40 + ctx.measureText(gpText).width + 10, 330);
+  const width = ctx.measureText(gpText).width;
+
+  ctx.drawImage(
+    fireImg,
+    40 + width + 10,
+    305, // ajusta vertical
+    30,
+    30
+  );
 }
 
-  return {
-    file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
-    gif: poke.gif
-  };
-}
+  
 function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
