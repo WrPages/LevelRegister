@@ -48,7 +48,7 @@ const PROFILE_CHANNEL_ID = "1493051743704186950";
 let profilesCache = {};
 let lastHeartbeatMessageId = null;
 let leaderboardMessageId = null;
-
+let isUpdatingGist = false;
 // ================= GIST =================
 
 async function getGist(gistId) {
