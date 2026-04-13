@@ -267,34 +267,44 @@ async function updateProfileChannel() {
   if (!channel) return;
 
   const users = Object.values(profilesCache)
-    .sort((a, b) => b.xp - a.xp)
-    .slice(0, 20);
+    .sort((a, b) => b.xp - a.xp);
 
-  let content = "🏆 **Leaderboard Reroll**\n\n";
+  let messages = [];
+  let currentChunk = "🏆 **Leaderboard Reroll**\n\n";
 
-  users.forEach((u, i) => {
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i];
     const status = u.online ? "🟢 Online" : "🔴 Offline";
 
-    content += `#${i + 1} ${u.name} (${status})\n`;
-    content += `XP: ${Math.floor(u.xp)} | Nivel: ${Math.floor(u.xp / 200)}\n`;
-    content += `Tiempo: ${u.time} min\n`;
-    content += `Packs: ${u.totalpacks}\n`;
-    content += `GP: ${u.gp}\n`;
-    content += `Instancias récord: ${u.recordInstances}\n`;
-    content += `Rol: ${u.role}\n\n`;
-  });
+    let entry =
+      `#${i + 1} ${u.name} (${status})\n` +
+      `XP: ${Math.floor(u.xp)} | Nivel: ${Math.floor(u.xp / 200)}\n` +
+      `Tiempo: ${u.time} min\n` +
+      `Packs: ${u.totalpacks}\n` +
+      `GP: ${u.gp}\n` +
+      `Instancias récord: ${u.recordInstances}\n` +
+      `Rol: ${u.role}\n\n`;
 
-  try {
-    if (!leaderboardMessageId) {
-      const msg = await channel.send(content);
-      leaderboardMessageId = msg.id;
-    } else {
-      const msg = await channel.messages.fetch(leaderboardMessageId);
-      await msg.edit(content);
+    // si se pasa de 2000 → nuevo mensaje
+    if ((currentChunk + entry).length > 1900) {
+      messages.push(currentChunk);
+      currentChunk = "";
     }
-  } catch {
-    const msg = await channel.send(content);
-    leaderboardMessageId = msg.id;
+
+    currentChunk += entry;
+  }
+
+  if (currentChunk.length > 0) {
+    messages.push(currentChunk);
+  }
+
+  // borrar mensajes anteriores (solo recientes)
+  const oldMessages = await channel.messages.fetch({ limit: 10 });
+  await channel.bulkDelete(oldMessages).catch(() => {});
+
+  // enviar nuevos
+  for (const msg of messages) {
+    await channel.send(msg);
   }
 }
 
