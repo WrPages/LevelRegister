@@ -678,24 +678,26 @@ ctx.fillText(gpText, 40, 330);
 
 if (s && s.boostUntil && Date.now() < s.boostUntil) {
 
-  try {
-    const fire = await loadImageCached("./assets/fire.png");
+  const width = ctx.measureText(gpText).width;
 
-    const width = ctx.measureText(gpText).width;
+  // 🔴 rojo bonito
+  ctx.fillStyle = "#ff3b3b";
 
-    ctx.drawImage(
-      fire,
-      40 + width + 10,
-      305,
-      28,
-      28
-    );
+  // opcional: glow
+  ctx.shadowColor = "#ff0000";
+  ctx.shadowBlur = 10;
 
-  } catch (err) {
-    console.log("🔥 error cargando fuego:", err.message);
-  }
+  ctx.font = "20px Righteous";
+  ctx.fillText("BOOST", 40 + width + 15, 330);
+
+  // reset shadow (IMPORTANTE)
+  ctx.shadowBlur = 0;
 }
+
+
+  
 }
+
 function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
