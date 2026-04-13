@@ -57,7 +57,18 @@ async function getGist(gistId) {
   });
 
   const file = Object.values(res.data.files)[0];
-  return JSON.parse(file.content);
+  const content = file.content.trim();
+
+  try {
+    // 👉 intenta como JSON (registros)
+    return JSON.parse(content);
+  } catch {
+    // 👉 si falla, es TXT (usuarios online)
+    return content
+      .split("\n")
+      .map(x => x.replace(/\r/g, "").trim())
+      .filter(x => x.length > 0);
+  }
 }
 
 async function updateGist(gistId, content) {
@@ -134,7 +145,7 @@ async function getOnlineUsers() {
     for (const discordId in registry) {
       const user = registry[discordId];
 
-      if (onlineList.includes(user.main_id)) {
+      if (onlineList.includes(String(user.main_id).trim())){
         users.push({
           discordId,
           name: user.name,
