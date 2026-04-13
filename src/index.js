@@ -588,7 +588,6 @@ if (id && eliteUsers[id]) {
 
 
 
-const fireImg = await loadImageCached("./assets/fire.png");
 
 // =============================
 async function renderPanel(id, channel) {
@@ -640,6 +639,14 @@ try {
 
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
+
+  let fireImg = null;
+
+try {
+  fireImg = await loadImageCached("./assets/fire.png");
+} catch (err) {
+  console.error("🔥 Error cargando fire.png:", err.message);
+}
 
   let bg;
 
