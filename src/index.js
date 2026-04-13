@@ -37,7 +37,7 @@ const HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 
 const GP_CHANNELS = [
   "1487362022864588902",
-  "1484015417411244082",//pruebas
+  "1484015417411244082",
   "1486277594629275770"
 ];
 
@@ -91,6 +91,37 @@ function getHighestRole(current, incoming) {
     : current;
 }
 
+// ================= NUEVO: CARGAR TODOS LOS USUARIOS =================
+
+async function loadAllUsers() {
+  for (const group in REGISTRY_GISTS) {
+    const registry = await getGist(REGISTRY_GISTS[group]);
+
+    for (const discordId in registry) {
+      const user = registry[discordId];
+
+      if (!profilesCache[discordId]) {
+        profilesCache[discordId] = {
+          xp: 0,
+          time: 0,
+          totalpacks: 0,
+          currentpacks: 0,
+          gp: 0,
+          recordInstances: 0,
+          name: user.name,
+          role: formatRole(group),
+          online: false
+        };
+      } else {
+        profilesCache[discordId].role = getHighestRole(
+          profilesCache[discordId].role,
+          formatRole(group)
+        );
+      }
+    }
+  }
+}
+
 // ================= ONLINE USERS =================
 
 async function getOnlineUsers() {
@@ -121,48 +152,48 @@ async function getOnlineUsers() {
 async function updateStats() {
   const onlineUsers = await getOnlineUsers();
 
+  // todos offline primero
+  for (const id in profilesCache) {
+    profilesCache[id].online = false;
+  }
+
   for (const user of onlineUsers) {
-    if (!profilesCache[user.discordId]) {
-      profilesCache[user.discordId] = {
-        xp: 0,
-        time: 0,
-        totalpacks: 0,
-        currentpacks: 0,
-        gp: 0,
-        recordInstances: 0,
-        name: user.name,
-        role: user.role
-      };
-    }
-
     const profile = profilesCache[user.discordId];
+    if (!profile) continue;
 
-    profile.role = getHighestRole(profile.role, user.role);
-
-    // +1 minuto activo
+    profile.online = true;
     profile.time += 1;
+    profile.role = getHighestRole(profile.role, user.role);
   }
 
   await updateGist(PROFILE_GIST, profilesCache);
 }
 
-// ================= HEARTBEAT =================
+// ================= HEARTBEAT (MODIFICADO PRO) =================
 
 async function parseHeartbeat() {
   const channel = await client.channels.fetch(HEARTBEAT_CHANNEL_ID);
-  const messages = await channel.messages.fetch({ limit: 20 });
+  const messages = await channel.messages.fetch({ limit: 50 });
+
+  const latestByUser = {};
 
   for (const msg of messages.values()) {
+    const username = msg.content.split("\n")[0]?.trim();
+    if (!username) continue;
 
-    if (msg.id === lastHeartbeatMessageId) break;
+    if (!latestByUser[username]) {
+      latestByUser[username] = msg;
+    }
+  }
 
+  for (const username in latestByUser) {
+    const msg = latestByUser[username];
     const lines = msg.content.split("\n");
 
-    const username = lines[0]?.trim();
     const onlineLine = lines.find(l => l.startsWith("Online:"));
     const packsLine = lines.find(l => l.includes("Packs:"));
 
-    if (!username || !onlineLine || !packsLine) continue;
+    if (!onlineLine || !packsLine) continue;
 
     const instances = onlineLine
       .replace("Online:", "")
@@ -178,21 +209,16 @@ async function parseHeartbeat() {
     for (const id in profilesCache) {
       const profile = profilesCache[id];
 
-      if (profile.name === username) {
-
-        // XP
+      if (profile.name === username && profile.online) {
         const multiplier = 1 + (instanceCount * 0.1);
         profile.xp += multiplier;
 
-        // Nivel
         profile.level = Math.floor(profile.xp / 200);
 
-        // Record instancias
         if (instanceCount > profile.recordInstances) {
           profile.recordInstances = instanceCount;
         }
 
-        // Packs
         if (packs === 0) {
           profile.totalpacks += profile.currentpacks;
           profile.currentpacks = 0;
@@ -201,10 +227,6 @@ async function parseHeartbeat() {
         }
       }
     }
-  }
-
-  if (messages.first()) {
-    lastHeartbeatMessageId = messages.first().id;
   }
 
   await updateGist(PROFILE_GIST, profilesCache);
@@ -240,7 +262,9 @@ async function updateProfileChannel() {
   let content = "🏆 **Leaderboard Reroll**\n\n";
 
   users.forEach((u, i) => {
-    content += `#${i + 1} ${u.name}\n`;
+    const status = u.online ? "🟢 Online" : "🔴 Offline";
+
+    content += `#${i + 1} ${u.name} (${status})\n`;
     content += `XP: ${Math.floor(u.xp)} | Nivel: ${Math.floor(u.xp / 200)}\n`;
     content += `Tiempo: ${u.time} min\n`;
     content += `Packs: ${u.totalpacks}\n`;
@@ -274,10 +298,16 @@ client.once("ready", async () => {
     profilesCache = {};
   }
 
+  // 🔥 NUEVO FLUJO
+  await loadAllUsers();
+  await updateStats();
+  await parseHeartbeat();
+  await updateProfileChannel();
+
   // loops
-  setInterval(updateStats, 60000);        // tiempo
-  setInterval(parseHeartbeat, 30000);     // stats
-  setInterval(updateProfileChannel, 60000); // leaderboard
+  setInterval(updateStats, 60000);
+  setInterval(parseHeartbeat, 30000);
+  setInterval(updateProfileChannel, 60000);
 });
 
 // ================= LOGIN =================
