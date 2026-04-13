@@ -17,7 +17,7 @@ const client = new Client({
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-const PROFILE_GIST = "afc4a0621846348b2b06daccff610f9c";
+const PROFILE_GIST = "3feff906c7e01e1f9a931ba1df62c85a";
 
 const REGISTRY_GISTS = {
   trainer: "1c066922bc39ac136b6f234fad6d9420",
@@ -70,9 +70,12 @@ async function getGist(gistId) {
 async function updateGist(gistId, content) {
   if (isUpdatingGist) return;
 
-  // 🔥 PROTECCIÓN ANTI BORRADO
-  if (!content || Object.keys(content).length === 0) {
-    console.log("⚠️ Gist NO actualizado (vacío)");
+  if (
+    !content ||
+    typeof content !== "object" ||
+    Object.keys(content).length === 0
+  ) {
+    console.log("⛔ Evitado borrar gist");
     return;
   }
 
@@ -123,7 +126,7 @@ async function loadAllUsers() {
     for (const discordId in registry) {
       const user = registry[discordId];
 
-      if (!profilesCache[discordId]) {
+      if (!profilesCache[discordId] || !profilesCache[discordId].name) {
         profilesCache[discordId] = {
           xp: 0,
           time: 0,
@@ -231,10 +234,10 @@ async function parseHeartbeat() {
     for (const id in profilesCache) {
       const profile = profilesCache[id];
 
-      if (
-        profile.online &&
-        profile.name.toLowerCase().trim() === username.toLowerCase().trim()
-      ) {
+      const cleanA = profile.name.toLowerCase().replace(/\s/g, "");
+      const cleanB = username.toLowerCase().replace(/\s/g, "");
+
+      if (profile.online && cleanA === cleanB) {
         const multiplier = 1 + instanceCount * 0.1;
         profile.xp += multiplier;
 
@@ -261,10 +264,10 @@ client.on("messageCreate", async (message) => {
   const username = message.content.split("\n")[0].split(" ")[0];
 
   for (const id in profilesCache) {
-    if (
-      profilesCache[id].name.toLowerCase().trim() ===
-      username.toLowerCase().trim()
-    ) {
+    const cleanA = profilesCache[id].name.toLowerCase().replace(/\s/g, "");
+    const cleanB = username.toLowerCase().replace(/\s/g, "");
+
+    if (cleanA === cleanB) {
       profilesCache[id].gp += 1;
     }
   }
@@ -329,7 +332,6 @@ client.once("ready", async () => {
 
   try {
     const data = await getGist(PROFILE_GIST);
-
     if (data && Object.keys(data).length > 0) {
       profilesCache = data;
     }
