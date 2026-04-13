@@ -988,7 +988,7 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
 //console.log("📩 MENSAJE EN CANAL:", msg.channel.id);
 //console.log("🎯 ESPERANDO:", group.gpChannelId);
   if (msg.channel.id !== group.gpChannelId) continue;
-
+console.log("📩 MENSAJE GP:", msg.content);
   const normalize = str =>
     str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
