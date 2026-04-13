@@ -919,7 +919,7 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 // =============================
 client.on("messageCreate", async (msg) => {
 
-  if (msg.author.bot) return;
+ // if (msg.author.bot) return;
 
   // Solo actuar en canal específico
   if (msg.channel.id !== WATERMARK_CHANNEL_ID) return;
