@@ -5,7 +5,7 @@ const BASE = "https://api.github.com/gists";
 // =============================
 // 📥 LEER GIST
 // =============================
-export async function getGist(gistId, fileName = "data.json") {
+export async function getGist(gistId, fileName = null) {
   try {
     const res = await axios.get(`${BASE}/${gistId}`, {
       headers: {
@@ -13,11 +13,19 @@ export async function getGist(gistId, fileName = "data.json") {
       }
     });
 
-    const file = res.data.files[fileName];
+    let file;
 
-    if (!file) {
-      console.warn(`⚠️ Archivo ${fileName} no existe en el gist`);
-      return "{}";
+    if (fileName) {
+      file = res.data.files[fileName];
+
+      if (!file) {
+        console.warn(`⚠️ Archivo ${fileName} no existe en el gist`);
+        return "{}";
+      }
+
+    } else {
+      const firstFile = Object.keys(res.data.files)[0];
+      file = res.data.files[firstFile];
     }
 
     return file.content;
