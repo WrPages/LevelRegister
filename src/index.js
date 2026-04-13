@@ -986,41 +986,64 @@ client.on("messageCreate", async (msg) => {
   // 💎 GP
 for (const [groupName, group] of Object.entries(GROUPS)) {
 
-  if (msg.channel.id === group.gpChannelId) {
-const normalize = str =>
-  str.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (msg.channel.id !== group.gpChannelId) continue;
 
-const firstLine = msg.content.split("\n")[0];
-const possibleName = firstLine.split(" ")[0].replace("@", "");
+  const normalize = str =>
+    str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const cleanName = normalize(possibleName);
+  let userEntry = null;
 
-const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) =>
-    normalize(user.name) === cleanName
-  );
+  // ✅ 1. Intentar por mención (MEJOR MÉTODO)
+  const mentionedUser = msg.mentions.users.first();
 
-if (userEntry) {
-  const [id, user] = userEntry;
+  if (mentionedUser) {
+    const discordId = mentionedUser.id;
 
-  if (!trackingData[id]) {
-   trackingData[id] = {
-  name: eliteUsers[id].name,
-  xp: 0,
-  time: 0,
-  totalpacks: 0,
-  currentpacks: 0,
-  gp: 0,
-  recordInstances: 0,
-  lastHeartbeatMessageId: null
-};
+    if (eliteUsers[discordId]) {
+      userEntry = [discordId, eliteUsers[discordId]];
+    }
   }
 
-  trackingData[id].gp += 1;
+  // ⚠️ 2. Fallback por nombre (más robusto)
+  if (!userEntry) {
 
-  console.log("💎 GP:", user.name, groupName);
-}
+    const firstLine = msg.content.split("\n")[0];
 
+    // 🔥 limpia TODO lo raro
+    const cleanText = firstLine
+      .replace(/<@!?\d+>/g, "") // menciones tipo <@123>
+      .replace(/[@!]/g, "")     // @ y !
+      .trim();
+
+    const cleanName = normalize(cleanText);
+
+    userEntry = Object.entries(eliteUsers)
+      .find(([id, user]) =>
+        normalize(user.name) === cleanName
+      );
+  }
+
+  if (userEntry) {
+    const [id, user] = userEntry;
+
+    if (!trackingData[id]) {
+      trackingData[id] = {
+        name: user.name,
+        xp: 0,
+        time: 0,
+        totalpacks: 0,
+        currentpacks: 0,
+        gp: 0,
+        recordInstances: 0,
+        lastHeartbeatMessageId: null
+      };
+    }
+
+    trackingData[id].gp += 1;
+
+    console.log("💎 GP:", user.name, groupName);
+  } else {
+    console.log("❌ No se pudo detectar usuario en GP:", msg.content);
   }
 }
 ////nose si va aqui
