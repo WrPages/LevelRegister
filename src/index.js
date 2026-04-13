@@ -249,7 +249,7 @@ async function parseHeartbeat() {
     }
   }
 
-  await updateGist(PROFILE_GIST, profilesCache);
+ // await updateGist(PROFILE_GIST, profilesCache);
 }
 
 // ================= GOD PACKS =================
@@ -354,8 +354,8 @@ client.once("ready", async () => {
   await updateProfileChannel();
 
   // loops
-  setInterval(updateStats, 60000);
-  setInterval(parseHeartbeat, 30000);
+ setInterval(updateStats, 60000);      // OK
+setInterval(parseHeartbeat, 60000);   // 🔥 igualar
   setInterval(updateProfileChannel, 60000);
 });
 
