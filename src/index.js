@@ -641,11 +641,16 @@ function createColorMenu(type, userId, category) {
   // Solo aceptar mensajes de bots
   if (!msg.author.bot) continue;
 
-      const lines = msg.content.split("\n");
-      if (!lines.length) continue;
+// 🔥 LIMPIAR mensaje primero
+let content = msg.content.replace(/```/g, "").trim();
 
-   const rawName = lines[0].trim();
+// 🔥 ahora sí dividir
+const lines = content.split("\n");
+if (!lines.length) continue;
 
+// 🔥 nombre correcto
+const rawName = lines[0].trim();
+    
 const cleanName = normalize(rawName);
 
 const userEntry = Object.entries(eliteUsers)
@@ -682,7 +687,7 @@ console.log("CLEAN:", cleanName);
 
     
 
-      const content = msg.content;
+      let content = msg.content.replace(/```/g, "").trim();
 
       // =====================
       // 📦 PACKS
