@@ -138,7 +138,7 @@ let saveTimeout;
 function saveSettings() {
   clearTimeout(saveTimeout);
   saveTimeout = setTimeout(() => {
-    updateGist(process.env.GIST_SETTINGS, userSettings);
+    updateGist(process.env.GIST_SETTINGS, userSettings, "settings.json");
   }, 2000);
 }
 
@@ -360,8 +360,8 @@ client.once("clientReady", async () => {
   // =============================
   // 5️⃣ CARGAR TRACKING Y SETTINGS
   // =============================
-  trackingData = safeParse(await getGist(process.env.GIST_TRACKING));
-  userSettings = safeParse(await getGist(process.env.GIST_SETTINGS));
+trackingData = safeParse(await getGist(process.env.GIST_TRACKING, "tracking.json"));
+userSettings = safeParse(await getGist(process.env.GIST_SETTINGS, "settings.json"));
 
   sanitizeTracking();
 
@@ -374,7 +374,7 @@ client.once("clientReady", async () => {
   await runTrackingCycle();
   await scanHeartbeats();
 
-  await updateGist(process.env.GIST_TRACKING, trackingData);
+  await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
 
   console.log("✅ Datos sincronizados al iniciar");
 
@@ -393,7 +393,7 @@ async function runTrackingCycle() {
   try {
     console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
 
-    const trackingRaw = await getGist(process.env.GIST_TRACKING);
+    const trackingRaw = await getGist(process.env.GIST_TRACKING, "tracking.json");
     trackingData = trackingRaw ? safeParse(trackingRaw) : {};
 
     groupOnlineMap = {};
@@ -744,7 +744,7 @@ liveTracker[id].instances = instances;
 
     }
 
-    await updateGist(process.env.GIST_TRACKING, trackingData);
+    await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
 
   } catch (err) {
     console.error("❌ Error escaneando heartbeat global:", err.message);
@@ -1155,7 +1155,7 @@ trackingData[id].role = getUserRoleByGroup(s.group).name;
       s.sessionTime = 0;
     }
 
-    await updateGist(process.env.GIST_TRACKING, trackingData);
+    await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
   }, 600000);
 }
 
