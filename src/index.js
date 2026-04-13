@@ -16,8 +16,30 @@ import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
+
 dotenv.config();
 
+
+async function loadUserGPs() {
+  try {
+    const res = await fetch(`https://api.github.com/gists/${USERS_GP_GIST_ID}?t=${Date.now()}`, {
+      headers: {
+        Authorization: `token ${process.env.GITHUB_TOKEN}`
+      }
+    });
+
+    const data = await res.json();
+
+    const fileKey = Object.keys(data.files || {})[0];
+    if (!fileKey) return {};
+
+    return JSON.parse(data.files[fileKey].content);
+
+  } catch (err) {
+    console.error("❌ ERROR cargando users_gp:", err);
+    return {};
+  }
+}
 // =============================
 // 🛑 VALIDACIÓN ENV
 // =============================
@@ -53,7 +75,7 @@ const client = new Client({
 const CHAMPION_ROLE_ID = "1486206362332434634";
 
 
-
+const USERS_GP_GIST_ID = "5131a73fcee46b4a5c7b7faeea16efe9"; // 🔥 users_gp.json
 const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
@@ -439,7 +461,26 @@ async function runTrackingCycle() {
   }
 }
 
+// 🔥 CARGAR GP DESDE GIST
+const gpData = await loadUserGPs();
 
+for (const [id, data] of Object.entries(gpData)) {
+
+  if (!trackingData[id]) {
+    trackingData[id] = {
+      name: data.username || "Unknown",
+      xp: 0,
+      time: 0,
+      totalpacks: 0,
+      currentpacks: 0,
+      gp: 0,
+      recordInstances: 0
+    };
+  }
+
+  // 🔥 AQUÍ SE SINCRONIZA
+  trackingData[id].gp = data.gp || 0;
+}
 
     
     // 🔥 XP / TIEMPO
@@ -926,72 +967,6 @@ client.on("messageCreate", async (msg) => {
   // =============================
   // 🔥 1. TRACKING GLOBAL (SIEMPRE)
   // =============================
-
-  // 💎 GP
-for (const [groupName, group] of Object.entries(GROUPS)) {
-//console.log("📩 MENSAJE EN CANAL:", msg.channel.id);
-//console.log("🎯 ESPERANDO:", group.gpChannelId);
-  if (msg.channel.id !== group.gpChannelId) continue;
-console.log("📩 MENSAJE GP:", msg.content);
-  const normalize = str =>
-    str.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-  let userEntry = null;
-
-  // ✅ 1. Intentar por mención (MEJOR MÉTODO)
-  const mentionedUser = msg.mentions.users.first();
-
-  if (mentionedUser) {
-    const discordId = mentionedUser.id;
-
-    if (eliteUsers[discordId]) {
-      userEntry = [discordId, eliteUsers[discordId]];
-    }
-  }
-
-  // ⚠️ 2. Fallback por nombre (más robusto)
-  if (!userEntry) {
-
-    const firstLine = msg.content.split("\n")[0];
-
-    // 🔥 limpia TODO lo raro
-    const cleanText = firstLine
-      .replace(/<@!?\d+>/g, "") // menciones tipo <@123>
-      .replace(/[@!]/g, "")     // @ y !
-      .trim();
-
-    const cleanName = normalize(cleanText);
-
-    userEntry = Object.entries(eliteUsers)
-      .find(([id, user]) =>
-        normalize(user.name) === cleanName
-      );
-  }
-
-  if (userEntry) {
-    const [id, user] = userEntry;
-
-    if (!trackingData[id]) {
-      trackingData[id] = {
-        name: user.name,
-        xp: 0,
-        time: 0,
-        totalpacks: 0,
-        currentpacks: 0,
-        gp: 0,
-        recordInstances: 0,
-        lastHeartbeatMessageId: null
-      };
-    }
-
-    trackingData[id].gp += 1;
-
-    console.log("💎 GP:", user.name, groupName);
-  } else {
-    console.log("❌ No se pudo detectar usuario en GP:", msg.content);
-  }
-}
-////nose si va aqui
 
 
   // 📦 WEBHOOK (packs + instancias)
