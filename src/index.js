@@ -37,11 +37,11 @@ const HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 
 const GP_CHANNELS = [
   "1487362022864588902",
-  "1484015417411244082",
+  "1493051743704186950",
   "1486277594629275770"
 ];
 
-const PROFILE_CHANNEL_ID = "1484015417411244082";
+const PROFILE_CHANNEL_ID = "1493051743704186950";
 
 // ================= CACHE =================
 
@@ -262,6 +262,8 @@ client.on("messageCreate", async (message) => {
 
 // ================= LEADERBOARD =================
 
+let leaderboardMessages = [];
+
 async function updateProfileChannel() {
   const channel = await client.channels.fetch(PROFILE_CHANNEL_ID);
   if (!channel) return;
@@ -269,14 +271,14 @@ async function updateProfileChannel() {
   const users = Object.values(profilesCache)
     .sort((a, b) => b.xp - a.xp);
 
-  let messages = [];
+  let chunks = [];
   let currentChunk = "🏆 **Leaderboard Reroll**\n\n";
 
   for (let i = 0; i < users.length; i++) {
     const u = users[i];
     const status = u.online ? "🟢 Online" : "🔴 Offline";
 
-    let entry =
+    const entry =
       `#${i + 1} ${u.name} (${status})\n` +
       `XP: ${Math.floor(u.xp)} | Nivel: ${Math.floor(u.xp / 200)}\n` +
       `Tiempo: ${u.time} min\n` +
@@ -285,9 +287,8 @@ async function updateProfileChannel() {
       `Instancias récord: ${u.recordInstances}\n` +
       `Rol: ${u.role}\n\n`;
 
-    // si se pasa de 2000 → nuevo mensaje
     if ((currentChunk + entry).length > 1900) {
-      messages.push(currentChunk);
+      chunks.push(currentChunk);
       currentChunk = "";
     }
 
@@ -295,16 +296,34 @@ async function updateProfileChannel() {
   }
 
   if (currentChunk.length > 0) {
-    messages.push(currentChunk);
+    chunks.push(currentChunk);
   }
 
-  // borrar mensajes anteriores (solo recientes)
-  const oldMessages = await channel.messages.fetch({ limit: 10 });
-  await channel.bulkDelete(oldMessages).catch(() => {});
+  // 🔥 editar o crear mensajes
+  for (let i = 0; i < chunks.length; i++) {
+    if (leaderboardMessages[i]) {
+      try {
+        const msg = await channel.messages.fetch(leaderboardMessages[i]);
+        await msg.edit(chunks[i]);
+      } catch {
+        const newMsg = await channel.send(chunks[i]);
+        leaderboardMessages[i] = newMsg.id;
+      }
+    } else {
+      const newMsg = await channel.send(chunks[i]);
+      leaderboardMessages[i] = newMsg.id;
+    }
+  }
 
-  // enviar nuevos
-  for (const msg of messages) {
-    await channel.send(msg);
+  // 🔥 borrar sobrantes si hay menos chunks que antes
+  if (leaderboardMessages.length > chunks.length) {
+    for (let i = chunks.length; i < leaderboardMessages.length; i++) {
+      try {
+        const msg = await channel.messages.fetch(leaderboardMessages[i]);
+        await msg.delete();
+      } catch {}
+    }
+    leaderboardMessages = leaderboardMessages.slice(0, chunks.length);
   }
 }
 
