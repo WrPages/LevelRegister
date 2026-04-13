@@ -72,21 +72,30 @@ async function getGist(gistId) {
 }
 
 async function updateGist(gistId, content) {
-  await axios.patch(
-    `https://api.github.com/gists/${gistId}`,
-    {
-      files: {
-        "data.json": {
-          content: JSON.stringify(content, null, 2)
-        }
-      }
-    },
-    {
-      headers: { Authorization: `token ${GITHUB_TOKEN}` }
-    }
-  );
-}
+  if (isUpdatingGist) return; // 🔥 evita spam
 
+  isUpdatingGist = true;
+
+  try {
+    await axios.patch(
+      `https://api.github.com/gists/${gistId}`,
+      {
+        files: {
+          "data.json": {
+            content: JSON.stringify(content, null, 2)
+          }
+        }
+      },
+      {
+        headers: { Authorization: `token ${GITHUB_TOKEN}` }
+      }
+    );
+  } catch (err) {
+    console.error("❌ Error actualizando Gist:", err.response?.data || err.message);
+  }
+
+  isUpdatingGist = false;
+}
 // ================= HELPERS =================
 
 function formatRole(role) {
