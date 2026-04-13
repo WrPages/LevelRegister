@@ -17,8 +17,7 @@ const client = new Client({
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-// 👉 GIST IDS
-const PROFILE_GIST = "a3211687a05d1399c59053296dcf2e98";
+const PROFILE_GIST = "afc4a0621846348b2b06daccff610f9c";
 
 const REGISTRY_GISTS = {
   trainer: "1c066922bc39ac136b6f234fad6d9420",
@@ -32,7 +31,6 @@ const ONLINE_GISTS = {
   elite: "d9db3a72fed74c496fd6cc830f9ca6e9"
 };
 
-// 👉 CANALES
 const HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 
 const GP_CHANNELS = [
@@ -46,9 +44,9 @@ const PROFILE_CHANNEL_ID = "1493051743704186950";
 // ================= CACHE =================
 
 let profilesCache = {};
-let lastHeartbeatMessageId = null;
-let leaderboardMessageId = null;
 let isUpdatingGist = false;
+let leaderboardMessages = [];
+
 // ================= GIST =================
 
 async function getGist(gistId) {
@@ -60,10 +58,8 @@ async function getGist(gistId) {
   const content = file.content.trim();
 
   try {
-    // 👉 intenta como JSON (registros)
     return JSON.parse(content);
   } catch {
-    // 👉 si falla, es TXT (usuarios online)
     return content
       .split("\n")
       .map(x => x.replace(/\r/g, "").trim())
@@ -72,7 +68,13 @@ async function getGist(gistId) {
 }
 
 async function updateGist(gistId, content) {
-  if (isUpdatingGist) return; // 🔥 evita spam
+  if (isUpdatingGist) return;
+
+  // 🔥 PROTECCIÓN ANTI BORRADO
+  if (!content || Object.keys(content).length === 0) {
+    console.log("⚠️ Gist NO actualizado (vacío)");
+    return;
+  }
 
   isUpdatingGist = true;
 
@@ -91,11 +93,12 @@ async function updateGist(gistId, content) {
       }
     );
   } catch (err) {
-    console.error("❌ Error actualizando Gist:", err.response?.data || err.message);
+    console.error("❌ Error Gist:", err.response?.data || err.message);
   }
 
   isUpdatingGist = false;
 }
+
 // ================= HELPERS =================
 
 function formatRole(role) {
@@ -111,7 +114,7 @@ function getHighestRole(current, incoming) {
     : current;
 }
 
-// ================= NUEVO: CARGAR TODOS LOS USUARIOS =================
+// ================= LOAD USERS =================
 
 async function loadAllUsers() {
   for (const group in REGISTRY_GISTS) {
@@ -142,7 +145,7 @@ async function loadAllUsers() {
   }
 }
 
-// ================= ONLINE USERS =================
+// ================= ONLINE =================
 
 async function getOnlineUsers() {
   let users = [];
@@ -154,7 +157,7 @@ async function getOnlineUsers() {
     for (const discordId in registry) {
       const user = registry[discordId];
 
-      if (onlineList.includes(String(user.main_id).trim())){
+      if (onlineList.includes(String(user.main_id).trim())) {
         users.push({
           discordId,
           name: user.name,
@@ -167,12 +170,11 @@ async function getOnlineUsers() {
   return users;
 }
 
-// ================= TIEMPO =================
+// ================= TIME =================
 
 async function updateStats() {
   const onlineUsers = await getOnlineUsers();
 
-  // todos offline primero
   for (const id in profilesCache) {
     profilesCache[id].online = false;
   }
@@ -189,7 +191,7 @@ async function updateStats() {
   await updateGist(PROFILE_GIST, profilesCache);
 }
 
-// ================= HEARTBEAT (MODIFICADO PRO) =================
+// ================= HEARTBEAT =================
 
 async function parseHeartbeat() {
   const channel = await client.channels.fetch(HEARTBEAT_CHANNEL_ID);
@@ -229,11 +231,12 @@ async function parseHeartbeat() {
     for (const id in profilesCache) {
       const profile = profilesCache[id];
 
-      if (profile.name === username && profile.online) {
-        const multiplier = 1 + (instanceCount * 0.1);
+      if (
+        profile.online &&
+        profile.name.toLowerCase().trim() === username.toLowerCase().trim()
+      ) {
+        const multiplier = 1 + instanceCount * 0.1;
         profile.xp += multiplier;
-
-        profile.level = Math.floor(profile.xp / 200);
 
         if (instanceCount > profile.recordInstances) {
           profile.recordInstances = instanceCount;
@@ -248,20 +251,20 @@ async function parseHeartbeat() {
       }
     }
   }
-
- // await updateGist(PROFILE_GIST, profilesCache);
 }
 
-// ================= GOD PACKS =================
+// ================= GOD PACK =================
 
 client.on("messageCreate", async (message) => {
   if (!GP_CHANNELS.includes(message.channel.id)) return;
 
-  const firstLine = message.content.split("\n")[0];
-  const username = firstLine.split(" ")[0];
+  const username = message.content.split("\n")[0].split(" ")[0];
 
   for (const id in profilesCache) {
-    if (profilesCache[id].name === username) {
+    if (
+      profilesCache[id].name.toLowerCase().trim() ===
+      username.toLowerCase().trim()
+    ) {
       profilesCache[id].gp += 1;
     }
   }
@@ -271,17 +274,14 @@ client.on("messageCreate", async (message) => {
 
 // ================= LEADERBOARD =================
 
-let leaderboardMessages = [];
-
 async function updateProfileChannel() {
   const channel = await client.channels.fetch(PROFILE_CHANNEL_ID);
   if (!channel) return;
 
-  const users = Object.values(profilesCache)
-    .sort((a, b) => b.xp - a.xp);
+  const users = Object.values(profilesCache).sort((a, b) => b.xp - a.xp);
 
   let chunks = [];
-  let currentChunk = "🏆 **Leaderboard Reroll**\n\n";
+  let current = "🏆 **Leaderboard Reroll**\n\n";
 
   for (let i = 0; i < users.length; i++) {
     const u = users[i];
@@ -296,19 +296,16 @@ async function updateProfileChannel() {
       `Instancias récord: ${u.recordInstances}\n` +
       `Rol: ${u.role}\n\n`;
 
-    if ((currentChunk + entry).length > 1900) {
-      chunks.push(currentChunk);
-      currentChunk = "";
+    if ((current + entry).length > 1900) {
+      chunks.push(current);
+      current = "";
     }
 
-    currentChunk += entry;
+    current += entry;
   }
 
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
-  }
+  if (current.length > 0) chunks.push(current);
 
-  // 🔥 editar o crear mensajes
   for (let i = 0; i < chunks.length; i++) {
     if (leaderboardMessages[i]) {
       try {
@@ -323,17 +320,6 @@ async function updateProfileChannel() {
       leaderboardMessages[i] = newMsg.id;
     }
   }
-
-  // 🔥 borrar sobrantes si hay menos chunks que antes
-  if (leaderboardMessages.length > chunks.length) {
-    for (let i = chunks.length; i < leaderboardMessages.length; i++) {
-      try {
-        const msg = await channel.messages.fetch(leaderboardMessages[i]);
-        await msg.delete();
-      } catch {}
-    }
-    leaderboardMessages = leaderboardMessages.slice(0, chunks.length);
-  }
 }
 
 // ================= INIT =================
@@ -342,23 +328,23 @@ client.once("ready", async () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 
   try {
-    profilesCache = await getGist(PROFILE_GIST);
+    const data = await getGist(PROFILE_GIST);
+
+    if (data && Object.keys(data).length > 0) {
+      profilesCache = data;
+    }
   } catch {
     profilesCache = {};
   }
 
-  // 🔥 NUEVO FLUJO
   await loadAllUsers();
   await updateStats();
   await parseHeartbeat();
   await updateProfileChannel();
 
-  // loops
- setInterval(updateStats, 60000);      // OK
-setInterval(parseHeartbeat, 60000);   // 🔥 igualar
+  setInterval(updateStats, 60000);
+  setInterval(parseHeartbeat, 60000);
   setInterval(updateProfileChannel, 60000);
 });
-
-// ================= LOGIN =================
 
 client.login(DISCORD_TOKEN);
