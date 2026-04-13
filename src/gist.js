@@ -5,7 +5,7 @@ const BASE = "https://api.github.com/gists";
 // =============================
 // 📥 LEER GIST
 // =============================
-export async function getGist(gistId) {
+export async function getGist(gistId, fileName = "data.json") {
   try {
     const res = await axios.get(`${BASE}/${gistId}`, {
       headers: {
@@ -13,9 +13,12 @@ export async function getGist(gistId) {
       }
     });
 
-    // Obtener nombre real del archivo
-    const fileName = Object.keys(res.data.files)[0];
     const file = res.data.files[fileName];
+
+    if (!file) {
+      console.warn(`⚠️ Archivo ${fileName} no existe en el gist`);
+      return "{}";
+    }
 
     return file.content;
 
@@ -28,17 +31,8 @@ export async function getGist(gistId) {
 // =============================
 // 💾 ACTUALIZAR GIST
 // =============================
-export async function updateGist(gistId, content) {
+export async function updateGist(gistId, content, fileName = "data.json") {
   try {
-    // Primero obtenemos el nombre real del archivo
-    const res = await axios.get(`${BASE}/${gistId}`, {
-      headers: {
-        Authorization: `token ${process.env.GIST_TOKEN}`
-      }
-    });
-
-    const fileName = Object.keys(res.data.files)[0];
-
     await axios.patch(`${BASE}/${gistId}`, {
       files: {
         [fileName]: {
