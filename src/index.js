@@ -985,8 +985,8 @@ client.on("messageCreate", async (msg) => {
 
   // 💎 GP
 for (const [groupName, group] of Object.entries(GROUPS)) {
-console.log("📩 MENSAJE EN CANAL:", msg.channel.id);
-console.log("🎯 ESPERANDO:", group.gpChannelId);
+//console.log("📩 MENSAJE EN CANAL:", msg.channel.id);
+//console.log("🎯 ESPERANDO:", group.gpChannelId);
   if (msg.channel.id !== group.gpChannelId) continue;
 
   const normalize = str =>
