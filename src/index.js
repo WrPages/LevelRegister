@@ -93,6 +93,14 @@ let lastManualEdit = {};
 
 let groupOnlineMap = {};  // 🔥 GLOBAL
 
+let panelSaveTimeout;
+
+function savePanels() {
+  clearTimeout(panelSaveTimeout);
+  panelSaveTimeout = setTimeout(() => {
+    updateGist(process.env.GIST_PANELS, userPanels);
+  }, 2000);
+}
 // =============================
 // ⚡ CACHE DE IMÁGENES
 // =============================
@@ -360,6 +368,7 @@ client.once("clientReady", async () => {
   // =============================
   // 5️⃣ CARGAR TRACKING Y SETTINGS
   // =============================
+  userPanels = safeParse(await getGist(process.env.GIST_PANELS));
 trackingData = safeParse(await getGist(process.env.GIST_TRACKING, "tracking.json"));
 userSettings = safeParse(await getGist(process.env.GIST_SETTINGS, "settings.json"));
 
@@ -767,23 +776,29 @@ async function updatePanels() {
 
   for (const [id] of Object.entries(liveTracker)) {
 
+    if (
+  userPanels[id] &&
+  !liveTracker[id].sessionXP &&
+  !liveTracker[id].sessionTime
+) continue;
+
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
     if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
 
 const { file, gif } = await renderPanel(id, channel);
 
-    if (userPanels[id]) {
+ if (userPanels[id]?.messageId) {
   try {
     const msg = await channel.messages.fetch(userPanels[id].messageId);
 
     await msg.edit({ files: [file] });
 
-    continue;
+    continue; // 🔥 NO CREA NUEVO
   } catch (err) {
-    console.log(`⚠️ Mensaje perdido para ${id}, recreando panel...`);
-
-    delete userPanels[id]; // 🔥 IMPORTANTE
+    console.log(`⚠️ Panel perdido (${id}), recreando...`);
+    delete userPanels[id];
+    savePanels();
   }
 }
 
@@ -812,6 +827,7 @@ const { file, gif } = await renderPanel(id, channel);
     await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
 
     userPanels[id] = { messageId: sent.id, threadId: thread.id };
+savePanels(); // 🔥 GUARDAR
   }
 }
 
