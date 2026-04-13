@@ -52,8 +52,7 @@ const client = new Client({
 });
 const CHAMPION_ROLE_ID = "1486206362332434634";
 
-const WATERMARK_CHANNEL_ID = "1484015417411244082";
-const WATERMARK_LOGO_PATH = "./assets/logo.png";
+
 
 const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 // =============================
@@ -914,61 +913,6 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
   
 });
 
-// =============================
-// 🖼️ WATERMARK SYSTEM
-// =============================
-client.on("messageCreate", async (msg) => {
-
- // if (msg.author.bot) return;
-
-  // Solo actuar en canal específico
-  if (msg.channel.id !== WATERMARK_CHANNEL_ID) return;
-
-  if (!msg.attachments.size) return;
-
-  const attachment = msg.attachments.first();
-
-  if (!attachment.contentType?.startsWith("image/")) return;
-
-  try {
-
-    const baseImage = await loadImageCached(attachment.url);
-    const logo = await loadImageCached(WATERMARK_LOGO_PATH);
-
-  const canvas = createCanvas(baseImage.width, baseImage.height);
-const ctx = canvas.getContext("2d");
-
-ctx.drawImage(baseImage, 0, 0, baseImage.width, baseImage.height);
-
-// Tamaño del logo (más grande)
-const logoWidth = baseImage.width * 3; // 50% del ancho
-const logoHeight = logo.height * (logoWidth / logo.width);
-
-// Centro perfecto
-const x = (baseImage.width - logoWidth) / 2;
-const y = (baseImage.height - logoHeight) / 2;
-
-ctx.globalAlpha =2;
-ctx.drawImage(logo, x, y, logoWidth, logoHeight);
-
-    const buffer = canvas.toBuffer("image/png");
-
-    const watermarked = new AttachmentBuilder(buffer, {
-      name: "watermarked.png"
-    });
-
-    await msg.channel.send({
-     // content: `${msg.author}`,
-      files: [watermarked]
-    });
-
-    await msg.delete();
-
-  } catch (err) {
-    console.error("❌ Error watermark:", err);
-  }
-
-});
 
 
 
