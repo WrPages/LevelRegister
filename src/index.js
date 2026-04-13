@@ -644,14 +644,17 @@ function createColorMenu(type, userId, category) {
       const lines = msg.content.split("\n");
       if (!lines.length) continue;
 
-     const rawName = lines[0].trim();
+   const rawName = lines[0].trim();
+
 const cleanName = normalize(rawName);
 
 const userEntry = Object.entries(eliteUsers)
   .find(([id, user]) =>
     normalize(user.name) === cleanName
   );
-
+    console.log("RAW:", rawName);
+console.log("CLEAN:", cleanName);
+    
       if (!userEntry) continue;
 
       const [id] = userEntry;
@@ -684,7 +687,7 @@ const userEntry = Object.entries(eliteUsers)
       // =====================
       // 📦 PACKS
       // =====================
-      const packsMatch = content.match(/packs?\s*[:\-]?\s*(\d+)/i);
+      const packsMatch = content.match(/packs:\s*(\d+)/i);
 
       if (packsMatch) {
 
@@ -713,14 +716,14 @@ if (!trackingData[id].currentpacks) {
 
         const rawOnline = onlineMatch[1];
 
-        const instances = rawOnline
-          .split(/[, ]+/)
-          .map(x => x.trim().toLowerCase())
-          .filter(x =>
-            x !== "" &&
-            x !== "main" &&
-            x !== "none"
-          ).length;
+    const instances = rawOnline
+  .split(",")
+  .map(x => x.trim().toLowerCase())
+  .filter(x =>
+    x !== "" &&
+    x !== "main" &&
+    x !== "none"
+  ).length;
         if (!liveTracker[id]) {
   liveTracker[id] = {};
 }
@@ -741,6 +744,15 @@ liveTracker[id].instances = instances;
   } catch (err) {
     console.error("❌ Error escaneando heartbeat global:", err.message);
   }
+   console.log("---------");
+console.log("USER LINE:", lines[0]);
+console.log("CONTENT:", content);
+
+const packsMatch = content.match(/packs:\s*(\d+)/i);
+console.log("PACKS MATCH:", packsMatch);
+
+const onlineMatch = content.match(/online:\s*(.+)/i);
+console.log("ONLINE MATCH:", onlineMatch);
 }
 
 
