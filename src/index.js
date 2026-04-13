@@ -695,7 +695,7 @@ if (s && s.boostUntil && Date.now() < s.boostUntil) {
     console.log("🔥 error cargando fuego:", err.message);
   }
 }
-  
+}
 function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
