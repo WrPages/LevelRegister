@@ -111,6 +111,7 @@ let userPanels = {};
 let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
+let lastGPMap = {};
 
 let groupOnlineMap = {};  // 🔥 GLOBAL
 
@@ -466,6 +467,32 @@ const gpData = await loadUserGPs();
 
 for (const [id, data] of Object.entries(gpData)) {
 
+  const newGP = data.gp || 0;
+  const oldGP = lastGPMap[id] || 0;
+
+  // 🔥 DETECTAR NUEVO GP
+  if (newGP > oldGP) {
+
+    console.log(`🚀 BOOST ACTIVADO para ${data.username}`);
+
+    if (!liveTracker[id]) {
+      liveTracker[id] = {
+        sessionXP: 0,
+        sessionTime: 0,
+        instances: 1,
+        boostUntil: 0,
+        name: data.username,
+        packs: 0,
+        gp: 0,
+        group: eliteUsers[id]?.group
+      };
+    }
+
+    // 💥 BOOST 1 HORA
+    liveTracker[id].boostUntil = Date.now() + (60 * 60 * 1000);
+  }
+
+  // 🔥 ACTUALIZAR TRACKING
   if (!trackingData[id]) {
     trackingData[id] = {
       name: data.username || "Unknown",
@@ -478,8 +505,10 @@ for (const [id, data] of Object.entries(gpData)) {
     };
   }
 
-  // 🔥 AQUÍ SE SINCRONIZA
-  trackingData[id].gp = data.gp || 0;
+  trackingData[id].gp = newGP;
+
+  // 🔥 GUARDAR ESTADO
+  lastGPMap[id] = newGP;
 }
 
     
@@ -630,7 +659,21 @@ if (settings.bg?.type === "base64") {
   ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
   const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
 ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
-  ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
+  
+  const gpText = `GP: ${t.gp || 0}`;
+
+// 🔥 Dibujar GP
+ctx.fillText(gpText, 40, 330);
+
+// 🔥 SI TIENE BOOST → dibujar fuego
+if (s && Date.now() < s.boostUntil) {
+
+  ctx.font = "28px Righteous"; // tamaño del emoji
+
+ const fire = Date.now() % 1000 < 500 ? "🔥" : "⚡";
+
+ctx.fillText(fire, 40 + ctx.measureText(gpText).width + 10, 330);
+}
 
   return {
     file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
