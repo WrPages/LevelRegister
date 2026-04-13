@@ -16,30 +16,8 @@ import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
 
-
 dotenv.config();
 
-
-async function loadUserGPs() {
-  try {
-    const res = await fetch(`https://api.github.com/gists/${USERS_GP_GIST_ID}?t=${Date.now()}`, {
-      headers: {
-        Authorization: `token ${process.env.GITHUB_TOKEN}`
-      }
-    });
-
-    const data = await res.json();
-
-    const fileKey = Object.keys(data.files || {})[0];
-    if (!fileKey) return {};
-
-    return JSON.parse(data.files[fileKey].content);
-
-  } catch (err) {
-    console.error("❌ ERROR cargando users_gp:", err);
-    return {};
-  }
-}
 // =============================
 // 🛑 VALIDACIÓN ENV
 // =============================
@@ -75,7 +53,7 @@ const client = new Client({
 const CHAMPION_ROLE_ID = "1486206362332434634";
 
 
-const USERS_GP_GIST_ID = "5131a73fcee46b4a5c7b7faeea16efe9"; // 🔥 users_gp.json
+
 const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
@@ -111,7 +89,6 @@ let userPanels = {};
 let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
-let lastGPMap = {};
 
 let groupOnlineMap = {};  // 🔥 GLOBAL
 
@@ -462,66 +439,7 @@ async function runTrackingCycle() {
   }
 }
 
-// 🔥 CARGAR GP DESDE GIST
-const gpData = await loadUserGPs();
 
-for (const [id, data] of Object.entries(gpData)) {
-
-  const newGP = Number(data.gp) || 0;
-  const oldGP = Number(lastGPMap[id]) || 0;
-
-  // 🔥 ASEGURAR NOMBRE SIEMPRE
-  const username =
-    data.username ||
-    data.name ||
-    eliteUsers[id]?.name ||
-    "Unknown";
-
-  // 🔥 CREAR TRACKER SI NO EXISTE
-  if (!liveTracker[id]) {
-    liveTracker[id] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: 1,
-      boostUntil: 0,
-      name: username,
-      packs: 0,
-      gp: newGP,
-      group: eliteUsers[id]?.group
-    };
-  } else {
-    // 🔥 mantener nombre actualizado
-    liveTracker[id].name = username;
-  }
-
-  // 🔥 DETECTAR NUEVO GP
-  if (newGP > oldGP) {
-
-    console.log(`🚀 BOOST ACTIVADO para ${username}`);
-
-    // 💥 BOOST 1 HORA
-    liveTracker[id].boostUntil = Date.now() + (60 * 60 * 1000);
-  }
-
-  // 🔥 ASEGURAR TRACKING DATA
-  if (!trackingData[id]) {
-    trackingData[id] = {
-      name: username,
-      xp: 0,
-      time: 0,
-      totalpacks: 0,
-      currentpacks: 0,
-      gp: 0,
-      recordInstances: 0
-    };
-  }
-
-  // 🔥 SINCRONIZAR GP
-  trackingData[id].gp = newGP;
-
-  // 🔥 GUARDAR ESTADO
-  lastGPMap[id] = newGP;
-}
 
     
     // 🔥 XP / TIEMPO
@@ -589,6 +507,7 @@ if (id && eliteUsers[id]) {
 
 
 
+
 // =============================
 async function renderPanel(id, channel) {
   const s = liveTracker[id];
@@ -640,7 +559,6 @@ try {
   const canvas = createCanvas(800, 450);
   const ctx = canvas.getContext("2d");
 
-
   let bg;
 
 if (settings.bg?.type === "base64") {
@@ -671,33 +589,13 @@ if (settings.bg?.type === "base64") {
   ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
   const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
 ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
-  
- const gpText = `GP: ${t.gp || 0}`;
+  ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
-ctx.fillText(gpText, 40, 330);
-
-if (s && s.boostUntil && Date.now() < s.boostUntil) {
-
-  const width = ctx.measureText(gpText).width;
-
-  // 🔴 rojo bonito
-  ctx.fillStyle = "#ff3b3b";
-
-  // opcional: glow
-  ctx.shadowColor = "#ff0000";
-  ctx.shadowBlur = 10;
-
-  ctx.font = "20px Righteous";
-  ctx.fillText("BOOST", 40 + width + 15, 330);
-
-  // reset shadow (IMPORTANTE)
-  ctx.shadowBlur = 0;
+  return {
+    file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
+    gif: poke.gif
+  };
 }
-
-
-  
-}
-
 function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -1028,6 +926,72 @@ client.on("messageCreate", async (msg) => {
   // =============================
   // 🔥 1. TRACKING GLOBAL (SIEMPRE)
   // =============================
+
+  // 💎 GP
+for (const [groupName, group] of Object.entries(GROUPS)) {
+//console.log("📩 MENSAJE EN CANAL:", msg.channel.id);
+//console.log("🎯 ESPERANDO:", group.gpChannelId);
+  if (msg.channel.id !== group.gpChannelId) continue;
+console.log("📩 MENSAJE GP:", msg.content);
+  const normalize = str =>
+    str.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  let userEntry = null;
+
+  // ✅ 1. Intentar por mención (MEJOR MÉTODO)
+  const mentionedUser = msg.mentions.users.first();
+
+  if (mentionedUser) {
+    const discordId = mentionedUser.id;
+
+    if (eliteUsers[discordId]) {
+      userEntry = [discordId, eliteUsers[discordId]];
+    }
+  }
+
+  // ⚠️ 2. Fallback por nombre (más robusto)
+  if (!userEntry) {
+
+    const firstLine = msg.content.split("\n")[0];
+
+    // 🔥 limpia TODO lo raro
+    const cleanText = firstLine
+      .replace(/<@!?\d+>/g, "") // menciones tipo <@123>
+      .replace(/[@!]/g, "")     // @ y !
+      .trim();
+
+    const cleanName = normalize(cleanText);
+
+    userEntry = Object.entries(eliteUsers)
+      .find(([id, user]) =>
+        normalize(user.name) === cleanName
+      );
+  }
+
+  if (userEntry) {
+    const [id, user] = userEntry;
+
+    if (!trackingData[id]) {
+      trackingData[id] = {
+        name: user.name,
+        xp: 0,
+        time: 0,
+        totalpacks: 0,
+        currentpacks: 0,
+        gp: 0,
+        recordInstances: 0,
+        lastHeartbeatMessageId: null
+      };
+    }
+
+    trackingData[id].gp += 1;
+
+    console.log("💎 GP:", user.name, groupName);
+  } else {
+    console.log("❌ No se pudo detectar usuario en GP:", msg.content);
+  }
+}
+////nose si va aqui
 
 
   // 📦 WEBHOOK (packs + instancias)
