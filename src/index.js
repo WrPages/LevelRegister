@@ -62,13 +62,13 @@ const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 const GROUPS = {
   trainer: {
 //    heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
-    gpChannelId: "1487362022864588902",               // canal donde se cuentan GP
+    gpChannelId: "1484015417411244082",               // canal donde se cuentan GP
    usersGistId: "1c066922bc39ac136b6f234fad6d9420",
     onlineGistId: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c"     // Gist con usuarios online
   },
   gymLeader: {
  //   heartbeatChannelId: "1491238609578360833",
-    gpChannelId: "1491238471556403281",
+    gpChannelId: "1484015417411244082",
     usersGistId: "a3f5f3d8a2e6ddf2378fb3481dff49f6",
     onlineGistId: "e110c37b3e0b8de83a33a1b0a5eb64e8"
   },
@@ -98,7 +98,7 @@ let panelSaveTimeout;
 function savePanels() {
   clearTimeout(panelSaveTimeout);
   panelSaveTimeout = setTimeout(() => {
-    updateGist(process.env.GIST_PANELS, userPanels);
+    updateGist(process.env.GIST_PANELS, userPanels, "panels.json");
   }, 2000);
 }
 // =============================
@@ -368,7 +368,7 @@ client.once("clientReady", async () => {
   // =============================
   // 5️⃣ CARGAR TRACKING Y SETTINGS
   // =============================
-  userPanels = safeParse(await getGist(process.env.GIST_PANELS));
+  userPanels = safeParse(await getGist(process.env.GIST_PANELS, "panels.json"));
 trackingData = safeParse(await getGist(process.env.GIST_TRACKING, "tracking.json"));
 userSettings = safeParse(await getGist(process.env.GIST_SETTINGS, "settings.json"));
 
