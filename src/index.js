@@ -47,13 +47,7 @@ if (!process.env.GIST_SETTINGS) {
   throw new Error("❌ FALTA GIST_SETTINGS en Railway");
 }
 
-// 🔥 CARGAR IMAGEN DE BOOST
-try {
-  fireImg = await loadImageCached("./assets/fire.png");
-  console.log("🔥 fire.png cargado");
-} catch (err) {
-  console.error("❌ Error cargando fire.png:", err.message);
-}
+
 
 const commandMap = {
   nombre: "name",
@@ -682,18 +676,25 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 
 ctx.fillText(gpText, 40, 330);
 
-if (s && s.boostUntil && Date.now() < s.boostUntil && fireImg) {
-  const width = ctx.measureText(gpText).width;
+if (s && s.boostUntil && Date.now() < s.boostUntil) {
 
-  ctx.drawImage(
-    fireImg,
-    40 + width + 10,
-    305,
-    30,
-    30
-  );
+  try {
+    const fire = await loadImageCached("./assets/fire.png");
+
+    const width = ctx.measureText(gpText).width;
+
+    ctx.drawImage(
+      fire,
+      40 + width + 10,
+      305,
+      28,
+      28
+    );
+
+  } catch (err) {
+    console.log("🔥 error cargando fuego:", err.message);
+  }
 }
-
   
 function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
