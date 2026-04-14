@@ -112,6 +112,7 @@ let userPanels = {};
 let userSettings = {};
 let editState = {};
 let lastManualEdit = {};
+let lastRun = Date.now();
 
 let groupOnlineMap = {};  // 🔥 GLOBAL
 
@@ -423,9 +424,12 @@ userSettings = safeParse(await getGist(process.env.GIST_SETTINGS, "settings.json
 async function runTrackingCycle() {
   try {
     console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
+if (!lastRun) lastRun = Date.now();
+    const now = Date.now();
+const seconds = (now - lastRun) / 1000;
+lastRun = now;
 
-    const trackingRaw = await getGist(process.env.GIST_TRACKING, "tracking.json");
-    trackingData = trackingRaw ? safeParse(trackingRaw) : {};
+   
 
     groupOnlineMap = {};
     let combinedOnlineIds = [];
@@ -528,7 +532,7 @@ if (id && eliteUsers[id]) {
 
   const t = liveTracker[id];
 
-  const seconds = 60;
+ // const seconds = 60;
   t.sessionTime += seconds;
 
   let xpPerSecond = (1 + t.instances * 0.1) / 60;
@@ -1082,8 +1086,8 @@ function startLoop() {
   // Ejecuta inmediatamente
   runTrackingCycle();
 
-  // Luego cada 1 minuto
-  setInterval(runTrackingCycle, 60000);
+  // Luego cada 5 minutos
+  setInterval(runTrackingCycle, 300000); // 5 minutos
 }
 
 
