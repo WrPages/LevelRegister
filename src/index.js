@@ -62,9 +62,9 @@ async function loadUserGPsCached() {
 // 🛑 VALIDACIÓN ENV
 // =============================
 if (!process.env.GIST_SETTINGS) {
-  console.error("❌ FALTA GIST_SETTINGS en Railway");
-  process.exit(1);
+  throw new Error("❌ FALTA GIST_SETTINGS en Railway");
 }
+
 
 
 const commandMap = {
@@ -176,8 +176,8 @@ async function loadImageCached(src) {
   }
 }
 let idMap = {};
-//console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
-//console.log("ONLINE IDS:", onlineIds.slice(0, 10));
+console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
+console.log("ONLINE IDS:", onlineIds.slice(0, 10));
 // =============================
 // 💾 SAVE SETTINGS (DEBOUNCE)
 // =============================
@@ -717,8 +717,8 @@ const userEntry = Object.entries(eliteUsers)
   .find(([id, user]) =>
     normalize(user.name) === cleanName
   );
-   // console.log("RAW:", rawName);
-//console.log("CLEAN:", cleanName);
+    console.log("RAW:", rawName);
+console.log("CLEAN:", cleanName);
     
       if (!userEntry) continue;
 
@@ -845,22 +845,7 @@ const { file, gif } = await renderPanel(id, channel);
   }
 }
 
-    const buttons = new ActionRowBuilder().addComponents(
-  new ButtonBuilder()
-    .setCustomId(`config_${id}`)
-    .setLabel("🎨 Personalizar")
-    .setStyle(ButtonStyle.Primary),
-
-  new ButtonBuilder()
-    .setCustomId(`gif_${id}`)
-    .setLabel("🖼️ Ver GIF")
-    .setStyle(ButtonStyle.Secondary)
-);
-
-const sent = await channel.send({ 
-  files: [file],
-  components: [buttons] // 👈 AQUÍ
-});
+    const sent = await channel.send({ files: [file] });
 
     const thread = await sent.startThread({
       name: "Perfil",
@@ -877,7 +862,10 @@ const sent = await channel.send({
         ])
     );
 
-   
+    await thread.send({
+      content: "🎮 Personaliza tu panel",
+      components: [menu],
+    });
 
     await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
 
@@ -889,174 +877,92 @@ savePanels(); // 🔥 GUARDAR
 // =============================
 // 🎮 INTERACCIONES
 // =============================
-
 client.on("interactionCreate", async (i) => {
 
-  try {
+  // =============================
+  // 🎮 MENU PRINCIPAL
+  // =============================
+  if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
 
-    // =============================
-    // 🔘 BOTONES
-    // =============================
-    if (i.isButton()) {
+    const id = i.user.id;
+    const option = i.values[0];
 
-      const [action, userId] = i.customId.split("_");
-
-      // 🔒 SOLO EL DUEÑO
-      if (i.user.id !== userId) {
-        return i.reply({
-          content: "❌ No puedes usar este panel",
-          ephemeral: true
-        });
-      }
-
-      // 🎨 CONFIG
-      if (action === "config") {
-        return i.reply({
-          content: "🎨 Configuración del panel:",
-          components: [
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder()
-                .setCustomId(`set_name_${userId}`)
-                .setLabel("Color nombre")
-                .setStyle(ButtonStyle.Primary),
-
-              new ButtonBuilder()
-                .setCustomId(`set_text_${userId}`)
-                .setLabel("Color texto")
-                .setStyle(ButtonStyle.Secondary),
-
-              new ButtonBuilder()
-                .setCustomId(`set_bg_${userId}`)
-                .setLabel("Cambiar fondo")
-                .setStyle(ButtonStyle.Success)
-            )
-          ],
-          ephemeral: true
-        });
-      }
-
-      // 🖼️ GIF
-      if (action === "gif") {
-        const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
-        const { gif } = await renderPanel(userId, channel);
-
-        return i.reply({
-          embeds: [new EmbedBuilder().setImage(gif)],
-          ephemeral: true
-        });
-      }
-
-      // 🎨 SET (nombre/text/bg)
-      if (i.customId.startsWith("set_")) {
-
-        const [, type, userId] = i.customId.split("_");
-
-        return i.reply({
-          content: "🎨 Elige categoría:",
-          components: [createCategoryMenu(type, userId)],
-          ephemeral: true
-        });
-      }
+    if (option === "bg") {
+      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
     }
 
-    // =============================
-    // 📂 MENU PRINCIPAL
-    // =============================
-    if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
-
-      const id = i.user.id;
-      const option = i.values[0];
-
-      if (option === "bg") {
-        return i.reply({
-          content: "🖼️ Sube una imagen",
-          ephemeral: true
-        });
-      }
-
-      if (option === "name" || option === "text") {
-        return i.reply({
-          content: "🎨 Elige una categoría:",
-          components: [createCategoryMenu(option, id)],
-          ephemeral: true
-        });
-      }
-    }
-
-    // =============================
-    // 🎨 CATEGORÍA
-    // =============================
-    if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
-
-      const [, type, userId] = i.customId.split("_");
-
-      if (i.user.id !== userId) {
-        return i.reply({
-          content: "❌ No puedes editar este panel",
-          ephemeral: true
-        });
-      }
-
-      const category = i.values[0];
-
-      return i.update({
-        content: "🎨 Ahora elige un color:",
-        components: [createColorMenu(type, userId, category)]
-      });
-    }
-
-    // =============================
-    // 🎨 COLOR FINAL
-    // =============================
-    if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
-
-      const [, type, userId] = i.customId.split("_");
-      const color = i.values[0];
-
-      if (i.user.id !== userId) {
-        return i.reply({
-          content: "❌ No puedes editar este panel",
-          ephemeral: true
-        });
-      }
-
-      const entry = Object.entries(userPanels)
-        .find(([_, data]) => data.threadId === i.channel.id);
-
-      if (!entry) {
-        return i.reply({
-          content: "Error: panel no encontrado.",
-          ephemeral: true
-        });
-      }
-
-      const [id] = entry;
-
-      if (!userSettings[id]) userSettings[id] = {};
-
-      if (type === "name") userSettings[id].nameColor = color;
-      if (type === "text") userSettings[id].textColor = color;
-
-      saveSettings();
-
-      await i.update({
-        content: `✅ Color aplicado`,
-        components: []
-      });
-
-      await forceRender(id);
-    }
-
-  } catch (err) {
-    console.error("❌ Error en interactionCreate:", err);
-
-    if (!i.replied && !i.deferred) {
-      i.reply({
-        content: "❌ Error interno",
-        ephemeral: true
-      });
-    }
+   if (option === "name" || option === "text") {
+  return i.reply({
+    content: "🎨 Elige una categoría:",
+    components: [createCategoryMenu(option, id)],
+    ephemeral: true
+  });
+}
   }
+
+  // =============================
+  // 🎨 SELECCIÓN DE COLOR
+  // =============================
+if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
+
+  const [, type, userId] = i.customId.split("_");
+
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
+  const category = i.values[0];
+
+  return i.update({
+    content: "🎨 Ahora elige un color:",
+    components: [createColorMenu(type, userId, category)]
+  });
+}
+
+
+ if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
+
+  const [, type, userId] = i.customId.split("_");
+  const color = i.values[0];
+
+  // 🔒 Seguridad: solo el dueño puede usarlo
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
+  const entry = Object.entries(userPanels)
+    .find(([_, data]) => data.threadId === i.channel.id);
+
+  if (!entry) {
+    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
+  }
+
+  const [id] = entry;
+
+  if (!userSettings[id]) userSettings[id] = {};
+
+  if (type === "name") userSettings[id].nameColor = color;
+  if (type === "text") userSettings[id].textColor = color;
+
+  saveSettings();
+
+  await i.update({
+    content: `✅ Color aplicado`,
+    components: []
+  });
+
+  await forceRender(id);
+}
+
+
+
+  
 });
 
 
