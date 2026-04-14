@@ -831,13 +831,29 @@ async function updatePanels() {
 
 const { file, gif } = await renderPanel(id, channel);
 
- if (userPanels[id]?.messageId) {
+if (userPanels[id]?.messageId) {
   try {
     const msg = await channel.messages.fetch(userPanels[id].messageId);
 
     await msg.edit({ files: [file] });
 
-    continue; // 🔥 NO CREA NUEVO
+    // 🧹 LIMPIAR THREAD
+    const thread = await client.channels.fetch(userPanels[id].threadId);
+
+    if (thread) {
+      const msgs = await thread.messages.fetch({ limit: 50 });
+
+      for (const m of msgs.values()) {
+        if (m.embeds.length > 0) continue;
+        if (m.system) continue;
+
+        await m.delete().catch(() => {});
+      }
+    }
+
+    continue;
+    // 🔥 NO CREA NUEVO
+    
   } catch (err) {
     console.log(`⚠️ Panel perdido (${id}), recreando...`);
     delete userPanels[id];
@@ -847,10 +863,28 @@ const { file, gif } = await renderPanel(id, channel);
 
     const sent = await channel.send({ files: [file] });
 
-    const thread = await sent.startThread({
-      name: "Perfil",
-      autoArchiveDuration: 1440,
-    });
+const thread = await sent.startThread({
+  name: "Perfil",
+  autoArchiveDuration: 1440,
+});
+
+// 🧹 LIMPIAR MENSAJES (excepto GIF)
+try {
+  const msgs = await thread.messages.fetch({ limit: 50 });
+
+  for (const m of msgs.values()) {
+    // mantener SOLO mensajes con embed (GIF)
+    if (m.embeds.length > 0) continue;
+
+    // no borrar mensajes del sistema
+    if (m.system) continue;
+
+    await m.delete().catch(() => {});
+  }
+
+} catch (err) {
+  console.log("Error limpiando thread:", err.message);
+}
 
     const menu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
