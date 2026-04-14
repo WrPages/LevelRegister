@@ -841,14 +841,22 @@ if (userPanels[id]?.messageId) {
     const thread = await client.channels.fetch(userPanels[id].threadId);
 
     if (thread) {
-      const msgs = await thread.messages.fetch({ limit: 50 });
+    const msgs = await thread.messages.fetch({ limit: 50 });
 
-      for (const m of msgs.values()) {
-        if (m.embeds.length > 0) continue;
-        if (m.system) continue;
+for (const m of msgs.values()) {
 
-        await m.delete().catch(() => {});
-      }
+  // 🖼️ NO borrar GIF
+  if (m.embeds.length > 0) continue;
+
+  // 🎮 NO borrar menú (select / botones)
+  if (m.components.length > 0) continue;
+
+  // ⚠️ NO borrar mensajes del sistema
+  if (m.system) continue;
+
+  // 🧹 borrar basura
+  await m.delete().catch(() => {});
+}
     }
 
     continue;
@@ -870,16 +878,22 @@ const thread = await sent.startThread({
 
 // 🧹 LIMPIAR MENSAJES (excepto GIF)
 try {
-  const msgs = await thread.messages.fetch({ limit: 50 });
+const msgs = await thread.messages.fetch({ limit: 50 });
 
-  for (const m of msgs.values()) {
-    // mantener SOLO mensajes con embed (GIF)
-    if (m.embeds.length > 0) continue;
+for (const m of msgs.values()) {
 
-    // no borrar mensajes del sistema
-    if (m.system) continue;
+  // 🖼️ NO borrar GIF
+  if (m.embeds.length > 0) continue;
 
-    await m.delete().catch(() => {});
+  // 🎮 NO borrar menú (select / botones)
+  if (m.components.length > 0) continue;
+
+  // ⚠️ NO borrar mensajes del sistema
+  if (m.system) continue;
+
+  // 🧹 borrar basura
+  await m.delete().catch(() => {});
+}
   }
 
 } catch (err) {
