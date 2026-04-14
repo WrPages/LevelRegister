@@ -590,13 +590,15 @@ if (s?.group) {
 
 // 👑 DETECCIÓN CHAMPION
 try {
-  const guild = client.guilds.cache.get(1483615153743462571);
-  const member = await getMember(guild, id);
+  const guild = client.guilds.cache.get("1483615153743462571");
+  if (!guild) return;
 
-  if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
+  const member = await guild.members.fetch(id).catch(() => null);
+
+  if (member && member.roles.cache.has(CHAMPION_ROLE_ID)) {
     role = {
       name: "Champion",
-      color: "#FFD700" // dorado 👑
+      color: "#FFD700"
     };
   }
 
