@@ -62,9 +62,9 @@ async function loadUserGPsCached() {
 // 🛑 VALIDACIÓN ENV
 // =============================
 if (!process.env.GIST_SETTINGS) {
-  throw new Error("❌ FALTA GIST_SETTINGS en Railway");
+  console.error("❌ FALTA GIST_SETTINGS en Railway");
+  process.exit(1);
 }
-
 
 
 const commandMap = {
@@ -176,8 +176,8 @@ async function loadImageCached(src) {
   }
 }
 let idMap = {};
-console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
-console.log("ONLINE IDS:", onlineIds.slice(0, 10));
+//console.log("EJEMPLO IDMAP:", Object.entries(idMap).slice(0, 10));
+//console.log("ONLINE IDS:", onlineIds.slice(0, 10));
 // =============================
 // 💾 SAVE SETTINGS (DEBOUNCE)
 // =============================
@@ -717,8 +717,8 @@ const userEntry = Object.entries(eliteUsers)
   .find(([id, user]) =>
     normalize(user.name) === cleanName
   );
-    console.log("RAW:", rawName);
-console.log("CLEAN:", cleanName);
+   // console.log("RAW:", rawName);
+//console.log("CLEAN:", cleanName);
     
       if (!userEntry) continue;
 
@@ -845,7 +845,22 @@ const { file, gif } = await renderPanel(id, channel);
   }
 }
 
-    const sent = await channel.send({ files: [file] });
+    const buttons = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId(`config_${id}`)
+    .setLabel("🎨 Personalizar")
+    .setStyle(ButtonStyle.Primary),
+
+  new ButtonBuilder()
+    .setCustomId(`gif_${id}`)
+    .setLabel("🖼️ Ver GIF")
+    .setStyle(ButtonStyle.Secondary)
+);
+
+const sent = await channel.send({ 
+  files: [file],
+  components: [buttons] // 👈 AQUÍ
+});
 
     const thread = await sent.startThread({
       name: "Perfil",
@@ -862,10 +877,7 @@ const { file, gif } = await renderPanel(id, channel);
         ])
     );
 
-    await thread.send({
-      content: "🎮 Personaliza tu panel",
-      components: [menu],
-    });
+   
 
     await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
 
@@ -879,6 +891,74 @@ savePanels(); // 🔥 GUARDAR
 // =============================
 client.on("interactionCreate", async (i) => {
 
+
+  if (i.isButton()) {
+
+  const [action, userId] = i.customId.split("_");
+
+  // 🔒 SOLO EL DUEÑO
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes usar este panel",
+      ephemeral: true
+    });
+  }
+
+  // 🎨 BOTÓN CONFIG
+  if (action === "config") {
+
+    return i.reply({
+      content: "🎨 Configuración del panel:",
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`set_name_${userId}`)
+            .setLabel("Color nombre")
+            .setStyle(ButtonStyle.Primary),
+
+          new ButtonBuilder()
+            .setCustomId(`set_text_${userId}`)
+            .setLabel("Color texto")
+            .setStyle(ButtonStyle.Secondary),
+
+          new ButtonBuilder()
+            .setCustomId(`set_bg_${userId}`)
+            .setLabel("Cambiar fondo")
+            .setStyle(ButtonStyle.Success)
+        )
+      ],
+      ephemeral: true
+    });
+  }
+
+  // 🖼️ BOTÓN GIF
+ if (action === "gif") {
+
+  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+  const { gif } = await renderPanel(userId, channel);
+
+  return i.reply({
+    embeds: [new EmbedBuilder().setImage(gif)],
+    ephemeral: true
+  });
+}
+  if (i.isButton() && i.customId.startsWith("set_")) {
+
+  const [, type, userId] = i.customId.split("_");
+
+  if (i.user.id !== userId) {
+    return i.reply({
+      content: "❌ No puedes editar este panel",
+      ephemeral: true
+    });
+  }
+
+  return i.reply({
+    content: "🎨 Elige categoría:",
+    components: [createCategoryMenu(type, userId)],
+    ephemeral: true
+  });
+}
   // =============================
   // 🎮 MENU PRINCIPAL
   // =============================
