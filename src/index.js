@@ -41,6 +41,23 @@ async function loadUserGPs() {
     return {};
   }
 }
+
+
+let gpCache = null;
+let gpLastFetch = 0;
+
+async function loadUserGPsCached() {
+  const now = Date.now();
+
+  if (gpCache && (now - gpLastFetch < 60000)) {
+    return gpCache;
+  }
+
+  gpCache = await loadUserGPs();
+  gpLastFetch = now;
+
+  return gpCache;
+}
 // =============================
 // 🛑 VALIDACIÓN ENV
 // =============================
@@ -328,7 +345,7 @@ client.once("clientReady", async () => {
 
   for (const [groupName, group] of Object.entries(GROUPS)) {
 
-    const usersData = safeParse(await getGist(group.usersGistId));
+    const usersData = await getParsedGist(group.usersGistId);
 
     for (const [id, user] of Object.entries(usersData)) {
       eliteUsers[id] = {
@@ -374,26 +391,17 @@ client.once("clientReady", async () => {
   // =============================
   // 4️⃣ CARGAR ONLINE IDS
   // =============================
-  groupOnlineMap = {};
-  let combinedOnlineIds = [];
-
-  for (const [groupName, group] of Object.entries(GROUPS)) {
-    const raw = await getGist(group.onlineGistId);
-    const ids = cleanOnlineIds(raw);
-
-    groupOnlineMap[groupName] = ids;
-    combinedOnlineIds.push(...ids);
-  }
-
-  onlineIds = [...new Set(combinedOnlineIds)];
+ const onlineData = await loadOnlineData();
+groupOnlineMap = onlineData.groupOnlineMap;
+onlineIds = onlineData.onlineIds;
 
 
   // =============================
   // 5️⃣ CARGAR TRACKING Y SETTINGS
   // =============================
-  userPanels = safeParse(await getGist(process.env.GIST_PANELS, "panels.json"));
-trackingData = safeParse(await getGist(process.env.GIST_TRACKING, "tracking.json"));
-userSettings = safeParse(await getGist(process.env.GIST_SETTINGS, "settings.json"));
+userPanels = await getParsedGist(process.env.GIST_PANELS, "panels.json");
+trackingData = await getParsedGist(process.env.GIST_TRACKING, "tracking.json");
+userSettings = await getParsedGist(process.env.GIST_SETTINGS, "settings.json");
 
   sanitizeTracking();
 
@@ -430,26 +438,20 @@ const seconds = (now - lastRun) / 1000;
 lastRun = now;
 
    
-
-    groupOnlineMap = {};
-    let combinedOnlineIds = [];
-
-    // 🔥 ONLINE
-    for (const [groupName, group] of Object.entries(GROUPS)) {
-      const raw = await getGist(group.onlineGistId);
-      const ids = cleanOnlineIds(raw);
-
-      groupOnlineMap[groupName] = ids;
-      combinedOnlineIds.push(...ids);
-    }
-
-    onlineIds = [...new Set(combinedOnlineIds)];
+//online
+const onlineData = await loadOnlineData();
+groupOnlineMap = onlineData.groupOnlineMap;
+onlineIds = onlineData.onlineIds;
 
 
 ///sep
-    for (const id in liveTracker) {
+   const onlineSet = new Set(
+  onlineIds.map(uid => idMap[String(uid)])
+);
 
-  const isStillOnline = onlineIds.some(uid => idMap[String(uid)] === id);
+for (const id in liveTracker) {
+
+  const isStillOnline = onlineSet.has(id);
 
   if (!isStillOnline) {
 
@@ -467,7 +469,7 @@ lastRun = now;
 }
 
 // 🔥 CARGAR GP DESDE GIST
-const gpData = await loadUserGPs();
+const gpData = await loadUserGPsCached();
 
 for (const [id, data] of Object.entries(gpData)) {
 
@@ -589,7 +591,7 @@ if (s?.group) {
 // 👑 DETECCIÓN CHAMPION
 try {
   const guild = client.guilds.cache.get(1483615153743462571);
-  const member = await guild.members.fetch(id);
+  const member = await getMember(guild, id);
 
   if (member.roles.cache.has(CHAMPION_ROLE_ID)) {
     role = {
@@ -1137,6 +1139,11 @@ function safeParse(data) {
   }
 }
 
+async function getParsedGist(id, file) {
+  const raw = await getGist(id, file);
+  return safeParse(raw);
+}
+
 function sanitizeTracking() {
   if (typeof trackingData !== "object" || trackingData === null) {
     console.error("❌ trackingData corrupto:", trackingData);
@@ -1160,12 +1167,37 @@ function sanitizeTracking() {
 }
 
 function cleanOnlineIds(raw) {
-  if (!raw) return [];
+  if (!raw || typeof raw !== "string") return [];
 
   return raw
     .split(/\r?\n/)
     .map(x => x.trim())
     .filter(x => x.length > 0);
+}
+async function loadOnlineData() {
+  const entries = Object.entries(GROUPS);
+
+  const results = await Promise.all(
+    entries.map(([groupName, group]) =>
+      getGist(group.onlineGistId).then(raw => ({
+        groupName,
+        ids: cleanOnlineIds(raw)
+      }))
+    )
+  );
+
+  const map = {};
+  let all = [];
+
+  for (const r of results) {
+    map[r.groupName] = r.ids;
+    all.push(...r.ids);
+  }
+
+  return {
+    groupOnlineMap: map,
+    onlineIds: [...new Set(all)]
+  };
 }
 
 client.login(process.env.DISCORD_TOKEN);
