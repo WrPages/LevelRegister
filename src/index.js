@@ -820,85 +820,80 @@ async function updatePanels() {
   for (const [id] of Object.entries(liveTracker)) {
 
     if (
-  userPanels[id] &&
-  !liveTracker[id].sessionXP &&
-  !liveTracker[id].sessionTime
-) continue;
+      userPanels[id] &&
+      !liveTracker[id].sessionXP &&
+      !liveTracker[id].sessionTime
+    ) continue;
 
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
     if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
 
-const { file, gif } = await renderPanel(id, channel);
+    const { file, gif } = await renderPanel(id, channel);
 
-if (userPanels[id]?.messageId) {
-  try {
-    const msg = await channel.messages.fetch(userPanels[id].messageId);
+    // =============================
+    // 🔁 PANEL YA EXISTE
+    // =============================
+    if (userPanels[id]?.messageId) {
+      try {
+        const msg = await channel.messages.fetch(userPanels[id].messageId);
 
-    await msg.edit({ files: [file] });
+        await msg.edit({ files: [file] });
 
-    // 🧹 LIMPIAR THREAD
-    const thread = await client.channels.fetch(userPanels[id].threadId);
+        // 🧹 LIMPIAR THREAD
+        const thread = await client.channels.fetch(userPanels[id].threadId);
 
-    if (thread) {
-    const msgs = await thread.messages.fetch({ limit: 50 });
+        if (thread) {
+          try {
+            const msgs = await thread.messages.fetch({ limit: 50 });
 
-for (const m of msgs.values()) {
+            for (const m of msgs.values()) {
+              if (m.embeds.length > 0) continue;      // GIF
+              if (m.components.length > 0) continue;  // MENÚ
+              if (m.system) continue;
 
-  // 🖼️ NO borrar GIF
-  if (m.embeds.length > 0) continue;
+              await m.delete().catch(() => {});
+            }
 
-  // 🎮 NO borrar menú (select / botones)
-  if (m.components.length > 0) continue;
+          } catch (err) {
+            console.log("Error limpiando thread:", err.message);
+          }
+        }
 
-  // ⚠️ NO borrar mensajes del sistema
-  if (m.system) continue;
+        continue;
 
-  // 🧹 borrar basura
-  await m.delete().catch(() => {});
-}
+      } catch (err) {
+        console.log(`⚠️ Panel perdido (${id}), recreando...`);
+        delete userPanels[id];
+        savePanels();
+      }
     }
 
-    continue;
-    // 🔥 NO CREA NUEVO
-    
-  } catch (err) {
-    console.log(`⚠️ Panel perdido (${id}), recreando...`);
-    delete userPanels[id];
-    savePanels();
-  }
-}
-
+    // =============================
+    // 🆕 CREAR PANEL NUEVO
+    // =============================
     const sent = await channel.send({ files: [file] });
 
-const thread = await sent.startThread({
-  name: "Perfil",
-  autoArchiveDuration: 1440,
-});
+    const thread = await sent.startThread({
+      name: "Perfil",
+      autoArchiveDuration: 1440,
+    });
 
-// 🧹 LIMPIAR MENSAJES (excepto GIF)
-try {
-const msgs = await thread.messages.fetch({ limit: 50 });
+    // 🧹 LIMPIAR THREAD NUEVO (por seguridad)
+    try {
+      const msgs = await thread.messages.fetch({ limit: 50 });
 
-for (const m of msgs.values()) {
+      for (const m of msgs.values()) {
+        if (m.embeds.length > 0) continue;
+        if (m.components.length > 0) continue;
+        if (m.system) continue;
 
-  // 🖼️ NO borrar GIF
-  if (m.embeds.length > 0) continue;
+        await m.delete().catch(() => {});
+      }
 
-  // 🎮 NO borrar menú (select / botones)
-  if (m.components.length > 0) continue;
-
-  // ⚠️ NO borrar mensajes del sistema
-  if (m.system) continue;
-
-  // 🧹 borrar basura
-  await m.delete().catch(() => {});
-}
-  }
-
-} catch (err) {
-  console.log("Error limpiando thread:", err.message);
-}
+    } catch (err) {
+      console.log("Error limpiando thread:", err.message);
+    }
 
     const menu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
@@ -915,10 +910,12 @@ for (const m of msgs.values()) {
       components: [menu],
     });
 
-    await thread.send({ embeds: [new EmbedBuilder().setImage(gif)] });
+    await thread.send({
+      embeds: [new EmbedBuilder().setImage(gif)]
+    });
 
     userPanels[id] = { messageId: sent.id, threadId: thread.id };
-savePanels(); // 🔥 GUARDAR
+    savePanels();
   }
 }
 
