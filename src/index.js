@@ -492,8 +492,10 @@ for (const [id, data] of Object.entries(gpData)) {
     
     // 🔥 XP / TIEMPO
   for (const uid of onlineIds) {
-    console.log("UID ONLINE:", uid);
-console.log("MAP RESULT:", idMap[String(uid)]);
+    
+    if (!idMap[String(uid)]) {
+  console.log("⚠️ UID SIN MAP:", uid);
+}
 
   const id = idMap[String(uid)];
 
