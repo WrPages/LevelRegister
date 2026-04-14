@@ -942,23 +942,17 @@ client.on("interactionCreate", async (i) => {
     ephemeral: true
   });
 }
-  if (i.isButton() && i.customId.startsWith("set_")) {
+ if (i.customId.startsWith("set_")) {
 
-  const [, type, userId] = i.customId.split("_");
+      const [, type, userId] = i.customId.split("_");
 
-  if (i.user.id !== userId) {
-    return i.reply({
-      content: "❌ No puedes editar este panel",
-      ephemeral: true
-    });
+      return i.reply({
+        content: "🎨 Elige categoría:",
+        components: [createCategoryMenu(type, userId)],
+        ephemeral: true
+      });
+    }
   }
-
-  return i.reply({
-    content: "🎨 Elige categoría:",
-    components: [createCategoryMenu(type, userId)],
-    ephemeral: true
-  });
-}
   // =============================
   // 🎮 MENU PRINCIPAL
   // =============================
