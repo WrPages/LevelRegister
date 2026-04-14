@@ -889,154 +889,174 @@ savePanels(); // 🔥 GUARDAR
 // =============================
 // 🎮 INTERACCIONES
 // =============================
+
 client.on("interactionCreate", async (i) => {
 
+  try {
 
-  if (i.isButton()) {
+    // =============================
+    // 🔘 BOTONES
+    // =============================
+    if (i.isButton()) {
 
-  const [action, userId] = i.customId.split("_");
+      const [action, userId] = i.customId.split("_");
 
-  // 🔒 SOLO EL DUEÑO
-  if (i.user.id !== userId) {
-    return i.reply({
-      content: "❌ No puedes usar este panel",
-      ephemeral: true
-    });
-  }
+      // 🔒 SOLO EL DUEÑO
+      if (i.user.id !== userId) {
+        return i.reply({
+          content: "❌ No puedes usar este panel",
+          ephemeral: true
+        });
+      }
 
-  // 🎨 BOTÓN CONFIG
-  if (action === "config") {
+      // 🎨 CONFIG
+      if (action === "config") {
+        return i.reply({
+          content: "🎨 Configuración del panel:",
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`set_name_${userId}`)
+                .setLabel("Color nombre")
+                .setStyle(ButtonStyle.Primary),
 
-    return i.reply({
-      content: "🎨 Configuración del panel:",
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`set_name_${userId}`)
-            .setLabel("Color nombre")
-            .setStyle(ButtonStyle.Primary),
+              new ButtonBuilder()
+                .setCustomId(`set_text_${userId}`)
+                .setLabel("Color texto")
+                .setStyle(ButtonStyle.Secondary),
 
-          new ButtonBuilder()
-            .setCustomId(`set_text_${userId}`)
-            .setLabel("Color texto")
-            .setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder()
+                .setCustomId(`set_bg_${userId}`)
+                .setLabel("Cambiar fondo")
+                .setStyle(ButtonStyle.Success)
+            )
+          ],
+          ephemeral: true
+        });
+      }
 
-          new ButtonBuilder()
-            .setCustomId(`set_bg_${userId}`)
-            .setLabel("Cambiar fondo")
-            .setStyle(ButtonStyle.Success)
-        )
-      ],
-      ephemeral: true
-    });
-  }
+      // 🖼️ GIF
+      if (action === "gif") {
+        const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+        const { gif } = await renderPanel(userId, channel);
 
-  // 🖼️ BOTÓN GIF
- if (action === "gif") {
+        return i.reply({
+          embeds: [new EmbedBuilder().setImage(gif)],
+          ephemeral: true
+        });
+      }
 
-  const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
-  const { gif } = await renderPanel(userId, channel);
+      // 🎨 SET (nombre/text/bg)
+      if (i.customId.startsWith("set_")) {
 
-  return i.reply({
-    embeds: [new EmbedBuilder().setImage(gif)],
-    ephemeral: true
-  });
-}
- if (i.customId.startsWith("set_")) {
+        const [, type, userId] = i.customId.split("_");
+
+        return i.reply({
+          content: "🎨 Elige categoría:",
+          components: [createCategoryMenu(type, userId)],
+          ephemeral: true
+        });
+      }
+    }
+
+    // =============================
+    // 📂 MENU PRINCIPAL
+    // =============================
+    if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
+
+      const id = i.user.id;
+      const option = i.values[0];
+
+      if (option === "bg") {
+        return i.reply({
+          content: "🖼️ Sube una imagen",
+          ephemeral: true
+        });
+      }
+
+      if (option === "name" || option === "text") {
+        return i.reply({
+          content: "🎨 Elige una categoría:",
+          components: [createCategoryMenu(option, id)],
+          ephemeral: true
+        });
+      }
+    }
+
+    // =============================
+    // 🎨 CATEGORÍA
+    // =============================
+    if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 
       const [, type, userId] = i.customId.split("_");
 
-      return i.reply({
-        content: "🎨 Elige categoría:",
-        components: [createCategoryMenu(type, userId)],
+      if (i.user.id !== userId) {
+        return i.reply({
+          content: "❌ No puedes editar este panel",
+          ephemeral: true
+        });
+      }
+
+      const category = i.values[0];
+
+      return i.update({
+        content: "🎨 Ahora elige un color:",
+        components: [createColorMenu(type, userId, category)]
+      });
+    }
+
+    // =============================
+    // 🎨 COLOR FINAL
+    // =============================
+    if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
+
+      const [, type, userId] = i.customId.split("_");
+      const color = i.values[0];
+
+      if (i.user.id !== userId) {
+        return i.reply({
+          content: "❌ No puedes editar este panel",
+          ephemeral: true
+        });
+      }
+
+      const entry = Object.entries(userPanels)
+        .find(([_, data]) => data.threadId === i.channel.id);
+
+      if (!entry) {
+        return i.reply({
+          content: "Error: panel no encontrado.",
+          ephemeral: true
+        });
+      }
+
+      const [id] = entry;
+
+      if (!userSettings[id]) userSettings[id] = {};
+
+      if (type === "name") userSettings[id].nameColor = color;
+      if (type === "text") userSettings[id].textColor = color;
+
+      saveSettings();
+
+      await i.update({
+        content: `✅ Color aplicado`,
+        components: []
+      });
+
+      await forceRender(id);
+    }
+
+  } catch (err) {
+    console.error("❌ Error en interactionCreate:", err);
+
+    if (!i.replied && !i.deferred) {
+      i.reply({
+        content: "❌ Error interno",
         ephemeral: true
       });
     }
   }
-  // =============================
-  // 🎮 MENU PRINCIPAL
-  // =============================
-  if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
-
-    const id = i.user.id;
-    const option = i.values[0];
-
-    if (option === "bg") {
-      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
-    }
-
-   if (option === "name" || option === "text") {
-  return i.reply({
-    content: "🎨 Elige una categoría:",
-    components: [createCategoryMenu(option, id)],
-    ephemeral: true
-  });
-}
-  }
-
-  // =============================
-  // 🎨 SELECCIÓN DE COLOR
-  // =============================
-if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
-
-  const [, type, userId] = i.customId.split("_");
-
-  if (i.user.id !== userId) {
-    return i.reply({
-      content: "❌ No puedes editar este panel",
-      ephemeral: true
-    });
-  }
-
-  const category = i.values[0];
-
-  return i.update({
-    content: "🎨 Ahora elige un color:",
-    components: [createColorMenu(type, userId, category)]
-  });
-}
-
-
- if (i.isStringSelectMenu() && i.customId.startsWith("color_")) {
-
-  const [, type, userId] = i.customId.split("_");
-  const color = i.values[0];
-
-  // 🔒 Seguridad: solo el dueño puede usarlo
-  if (i.user.id !== userId) {
-    return i.reply({
-      content: "❌ No puedes editar este panel",
-      ephemeral: true
-    });
-  }
-
-  const entry = Object.entries(userPanels)
-    .find(([_, data]) => data.threadId === i.channel.id);
-
-  if (!entry) {
-    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
-  }
-
-  const [id] = entry;
-
-  if (!userSettings[id]) userSettings[id] = {};
-
-  if (type === "name") userSettings[id].nameColor = color;
-  if (type === "text") userSettings[id].textColor = color;
-
-  saveSettings();
-
-  await i.update({
-    content: `✅ Color aplicado`,
-    components: []
-  });
-
-  await forceRender(id);
-}
-
-
-
-  
 });
 
 
