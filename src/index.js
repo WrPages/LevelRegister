@@ -584,6 +584,12 @@ if (id && eliteUsers[id]) {
     xpPerSecond *= 2;
 
   t.sessionXP += xpPerSecond * seconds;
+    // 🔥 XP independiente para Pokémon
+if (!trackingData[id].pokemonXP) {
+  trackingData[id].pokemonXP = 0;
+}
+
+trackingData[id].pokemonXP += xpPerSecond * seconds;
 }
 
     await updatePanels();
@@ -614,11 +620,22 @@ async function renderPanel(id, channel) {
 
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
   const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-  const level = Math.floor(totalXP / 20);
+  
+ const userLevel = Math.floor(totalXP / 20);
+
+// 🔥 Nivel del Pokémon separado
+if (!trackingData[id].pokemonXP) {
+  trackingData[id].pokemonXP = 0;
+}
+
+const pokemonLevel = Math.floor(trackingData[id].pokemonXP / 20);
+///  ctx.fillStyle = "#ffffff";
+//ctx.font = "28px sans-serif";
+//ctx.fillText(`Nivel: ${level}`, 50, 80);
 
   assignPokemonIfNeeded(id);
 
-updatePokemonEvolution(id, level);
+updatePokemonEvolution(id, pokemonLevel);
 
 const line = pokemonDataset.evolution_lines
   .find(l => l.id === trackingData[id].pokemonLineId);
@@ -706,11 +723,15 @@ ctx.fillText(displayName, 40, 80);
 
   ctx.fillStyle = "#00ffcc";
   ctx.font = "38px Righteous";
-  ctx.fillText(`Lv ${level}`, 620, 80);
+ ctx.fillText(`Lv ${pokemonLevel}`, 620, 80); // Pokémon
+ctx.fillText(`Entrenador Lv ${userLevel}`, 40, 130); // Usuario
   
   ctx.fillStyle = "#ffffff";
 ctx.font = "20px Righteous";
 ctx.fillText(currentPokemon.toUpperCase(), 600, 120);
+
+//  ctx.font = "24px sans-serif";
+//ctx.fillText(`Nivel: ${level}`, 50, 90);
 
   ctx.fillStyle = settings.textColor;
   ctx.font = "24px Righteous";
@@ -931,20 +952,46 @@ async function updatePanels() {
 
         await msg.edit({ files: [file] });
 
-        const threadChannel = await client.channels.fetch(userPanels[id].threadId);
+ const thread = await client.channels.fetch(userPanels[id].threadId);
 
-if (threadChannel) {
-  await threadChannel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setTitle("Tu Pokémon")
-        .setImage(gif)
-    ]
-  });
+if (thread) {
+
+  let gifMsg = null;
+
+  if (userPanels[id].gifMessageId) {
+    try {
+      gifMsg = await thread.messages.fetch(userPanels[id].gifMessageId);
+    } catch {
+      gifMsg = null;
+    }
+  }
+
+  if (gifMsg) {
+    // 🔁 Editar si ya existe
+    await gifMsg.edit({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Tu Pokémon")
+          .setImage(gif)
+      ]
+    });
+  } else {
+    // 🆕 Crear si no existe
+    const newGifMsg = await thread.send({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Tu Pokémon")
+          .setImage(gif)
+      ]
+    });
+
+    userPanels[id].gifMessageId = newGifMsg.id;
+    savePanels();
+  }
 }
 
         // 🧹 LIMPIAR THREAD
-        const thread = await client.channels.fetch(userPanels[id].threadId);
+       // const thread = await client.channels.fetch(userPanels[id].threadId);
 
         if (thread) {
           try {
@@ -1343,6 +1390,7 @@ function sanitizeTracking() {
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
    trackingData[k].totalpacks = Number(trackingData[k].totalpacks) || 0;
     trackingData[k].currentpacks = Number(trackingData[k].currentpacks) || 0;
+    trackingData[k].pokemonXP = Number(trackingData[k].pokemonXP) || 0;
     trackingData[k].lastHeartbeatPacks =
   Number(trackingData[k].lastHeartbeatPacks) || 0;
   //  trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
