@@ -779,27 +779,29 @@ console.log("CLEAN:", cleanName);
       // =====================
       // 📦 PACKS
       // =====================
-      const packsMatch = content.match(/packs:\s*(\d+)/i);
+      // =====================
+// 📦 PACKS
+// =====================
+const packsMatch = content.match(/packs:\s*(\d+)/i);
 
-      if (packsMatch) {
+if (packsMatch) {
 
-const current = Number(packsMatch[1]);
+  const current = Number(packsMatch[1]);
 
-if (trackingData[id].lastHeartbeatPacks === undefined) {
+  if (trackingData[id].lastHeartbeatPacks === undefined) {
+    trackingData[id].lastHeartbeatPacks = current;
+  }
+
+  if (current < trackingData[id].lastHeartbeatPacks) {
+    trackingData[id].totalpacks += trackingData[id].currentpacks;
+    trackingData[id].currentpacks = current;
+  } else {
+    trackingData[id].currentpacks = current;
+  }
+
   trackingData[id].lastHeartbeatPacks = current;
 }
-
-if (current < trackingData[id].lastHeartbeatPacks) {
-  // Reset real detectado
-  trackingData[id].totalpacks += trackingData[id].currentpacks;
-  trackingData[id].currentpacks = current;
-} else {
-  trackingData[id].currentpacks = current;
-}
-
-trackingData[id].lastHeartbeatPacks = current;
-}
-      }
+      
 
       // =====================
       // 🥇 INSTANCIAS
