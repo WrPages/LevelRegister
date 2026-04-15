@@ -613,6 +613,26 @@ try {
 
   let bg;
 
+  let displayName = "Unknown";
+
+try {
+  const guild = client.guilds.cache.get("1483615153743462571");
+  const member = await guild.members.fetch(id).catch(() => null);
+
+  if (member) {
+    displayName = member.displayName; // nombre actual del server
+  }
+} catch {}
+
+if (!displayName || displayName === "Unknown") {
+  displayName =
+    s?.name ||
+    trackingData[id]?.name ||
+    eliteUsers[id]?.name ||
+    "Unknown";
+}
+  
+
 if (settings.bg?.type === "base64") {
   const buffer = Buffer.from(settings.bg.data, "base64");
   bg = await loadImage(buffer);
@@ -623,7 +643,8 @@ if (settings.bg?.type === "base64") {
 
   ctx.fillStyle = settings.nameColor;
   ctx.font = "50px Righteous";
-  ctx.fillText(s.name, 40, 80);
+
+ctx.fillText(displayName, 40, 80);
 
   ctx.fillStyle = role.color;
   ctx.font = "22px Righteous";
@@ -682,8 +703,12 @@ function createColorMenu(type, userId, category) {
  async function scanHeartbeats() {
   console.log("🔎 Escaneando heartbeats (GLOBAL)...");
 
-  const normalize = str =>
-    str?.toLowerCase().replace(/[^a-z0-9]/g, "");
+const normalize = str =>
+  str
+    ?.toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // quita acentos
+    .replace(/[^\w]/g, "");
 
   try {
 
@@ -715,7 +740,8 @@ const cleanName = normalize(rawName);
 
 const userEntry = Object.entries(eliteUsers)
   .find(([id, user]) =>
-    normalize(user.name) === cleanName
+    normalize(user.name) === cleanName ||
+    normalize(user.name).includes(cleanName)
   );
     console.log("RAW:", rawName);
 console.log("CLEAN:", cleanName);
@@ -739,6 +765,7 @@ console.log("CLEAN:", cleanName);
   time: 0,
   totalpacks: 0,
   currentpacks: 0,
+  lastHeartbeatPacks: 0, 
   gp: 0,
   recordInstances: 0,
   lastHeartbeatMessageId: null
@@ -756,19 +783,21 @@ console.log("CLEAN:", cleanName);
 
       if (packsMatch) {
 
-        const current = Number(packsMatch[1]);
+const current = Number(packsMatch[1]);
 
-if (!trackingData[id].currentpacks) {
+if (trackingData[id].lastHeartbeatPacks === undefined) {
+  trackingData[id].lastHeartbeatPacks = current;
+}
+
+if (current < trackingData[id].lastHeartbeatPacks) {
+  // Reset real detectado
+  trackingData[id].totalpacks += trackingData[id].currentpacks;
   trackingData[id].currentpacks = current;
 } else {
+  trackingData[id].currentpacks = current;
+}
 
-  if (current < trackingData[id].currentpacks) {
-    // 🔥 reset → sumar al total
-    trackingData[id].totalpacks += trackingData[id].currentpacks;
-    trackingData[id].currentpacks = 0;
-  } else {
-    trackingData[id].currentpacks = current;
-  }
+trackingData[id].lastHeartbeatPacks = current;
 }
       }
 
@@ -1155,7 +1184,9 @@ function startBackupLoop() {
    trackingData[id].xp += s.sessionXP;
 trackingData[id].time += Math.floor(s.sessionTime / 60);
 //trackingData[id].packs = s.packs;
-trackingData[id].gp = s.gp;
+if (typeof s.gp === "number") {
+  trackingData[id].gp = s.gp;
+}
 trackingData[id].role = getUserRoleByGroup(s.group).name;
 
       s.sessionXP = 0;
@@ -1211,6 +1242,8 @@ function sanitizeTracking() {
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
    trackingData[k].totalpacks = Number(trackingData[k].totalpacks) || 0;
     trackingData[k].currentpacks = Number(trackingData[k].currentpacks) || 0;
+    trackingData[k].lastHeartbeatPacks =
+  Number(trackingData[k].lastHeartbeatPacks) || 0;
   //  trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
   }
 }
