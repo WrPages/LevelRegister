@@ -721,14 +721,10 @@ ctx.fillText(displayName, 40, 80);
   ctx.font = "22px Righteous";
   ctx.fillText(role.name, 42, 110);
 
-  ctx.fillStyle = "#00ffcc";
-  ctx.font = "38px Righteous";
- ctx.fillText(`Lv ${pokemonLevel}`, 620, 80); // Pokémon
-ctx.fillText(`Entrenador Lv ${userLevel}`, 40, 130); // Usuario
-  
-  ctx.fillStyle = "#ffffff";
-ctx.font = "20px Righteous";
-ctx.fillText(currentPokemon.toUpperCase(), 600, 120);
+ctx.fillStyle = "#00ffcc";
+ctx.font = "38px Righteous";
+ctx.fillText(`Lv ${userLevel}`, 620, 80); // SOLO nivel usuario
+
 
 //  ctx.font = "24px sans-serif";
 //ctx.fillText(`Nivel: ${level}`, 50, 90);
@@ -746,7 +742,9 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 return {
   file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
   gif,
-  pokemonName: currentPokemon
+  pokemonName: currentPokemon,
+  pokemonLevel,
+  isShiny: trackingData[id].pokemonShiny
 };
 }
 function createCategoryMenu(type, userId) {
@@ -941,7 +939,8 @@ async function updatePanels() {
 
     if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
 
-    const { file, gif } = await renderPanel(id, channel);
+    const { file, gif, pokemonName, pokemonLevel, isShiny } =
+  await renderPanel(id, channel);
 
     // =============================
     // 🔁 PANEL YA EXISTE
@@ -970,18 +969,28 @@ if (thread) {
     // 🔁 Editar si ya existe
     await gifMsg.edit({
       embeds: [
-        new EmbedBuilder()
-          .setTitle("Tu Pokémon")
-          .setImage(gif)
+       new EmbedBuilder()
+  .setTitle(
+    `${pokemonName.toUpperCase()} ${
+      isShiny ? "⭐" : ""
+    }`
+  )
+  .setDescription(`Nivel: ${pokemonLevel}`)
+  .setImage(gif)
       ]
     });
   } else {
     // 🆕 Crear si no existe
     const newGifMsg = await thread.send({
       embeds: [
-        new EmbedBuilder()
-          .setTitle("Tu Pokémon")
-          .setImage(gif)
+      new EmbedBuilder()
+  .setTitle(
+    `${pokemonName.toUpperCase()} ${
+      isShiny ? "⭐" : ""
+    }`
+  )
+  .setDescription(`Nivel: ${pokemonLevel}`)
+  .setImage(gif)
       ]
     });
 
@@ -1062,9 +1071,14 @@ if (thread) {
 
  await thread.send({
   embeds: [
-    new EmbedBuilder()
-      .setTitle("Tu Pokémon")
-      .setImage(gif)
+   new EmbedBuilder()
+  .setTitle(
+    `${pokemonName.toUpperCase()} ${
+      isShiny ? "⭐" : ""
+    }`
+  )
+  .setDescription(`Nivel: ${pokemonLevel}`)
+  .setImage(gif)
   ]
 });
 
