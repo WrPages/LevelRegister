@@ -16,6 +16,9 @@ import fs from "fs";
 import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
+const pokemonDataset = JSON.parse(
+  fs.readFileSync("./pokemon_dataset.json", "utf8")
+);
 
 
 dotenv.config();
@@ -119,6 +122,8 @@ const GROUPS = {
     onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
   }
 };
+const POKEMON_BASE_URL = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
+
 // =============================
 let eliteUsers = {};
 let onlineIds = [];
@@ -293,18 +298,52 @@ function getUserRoleByGroup(group) {
   return { name: "Reroller", color: "#aaaaaa" };
 }
 
-// =============================
-function getPokemonData(totalXP) {
-  const stages = [
-    { name: "Huevo", min: 0, max: 400, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
-    { name: "Fase 1", min: 400, max: 800, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832654227374131/bulbasaur.gif" },
-    { name: "Fase 2", min: 800, max: 1200, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832678525243554/ivysaur.gif" },
-    { name: "Final", min: 1200, max: Infinity, gif: "https://cdn.discordapp.com/attachments/1489832190530425014/1489832694924836944/venusaur.gif" },
-  ];
-  return stages.find(s => totalXP >= s.min && totalXP < s.max);
+// =============================pokepokepoke
+function getPokemonGif(pokemonName, generation, isShiny = false) {
+
+  const folder = isShiny ? "Shiny" : "Normal";
+  const prefix = isShiny ? "s_" : "";
+
+  return `${POKEMON_BASE_URL}Gen${generation}/${folder}/${prefix}${pokemonName}.gif`;
+}
+function assignPokemonIfNeeded(userId) {
+
+  if (!trackingData[userId]) return;
+
+  if (trackingData[userId].pokemonLineId) return;
+
+  const lines = pokemonDataset.evolution_lines;
+
+  const randomLine = lines[Math.floor(Math.random() * lines.length)];
+
+  trackingData[userId].pokemonLineId = randomLine.id;
+  trackingData[userId].pokemonStage = 0;
+  trackingData[userId].pokemonShiny = Math.random() < 0.03; // 3% shiny
+}
+function updatePokemonEvolution(userId, level) {
+
+  const data = trackingData[userId];
+  if (!data?.pokemonLineId) return;
+
+  const line = pokemonDataset.evolution_lines
+    .find(l => l.id === data.pokemonLineId);
+
+  if (!line) return;
+
+  let stage = 0;
+
+  if (level >= 16 && line.stages.length >= 2) stage = 1;
+  if (level >= 32 && line.stages.length >= 3) stage = 2;
+
+  if (stage >= line.stages.length)
+    stage = line.stages.length - 1;
+
+  data.pokemonStage = stage;
 }
 
-// =============================
+
+
+// =============================fin poke finfin
 client.once("clientReady", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
     console.log("🔎 Escaneando heartbeats (GLOBAL)...");
@@ -575,9 +614,24 @@ async function renderPanel(id, channel) {
 
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
   const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-  const level = Math.floor(totalXP / 200);
+  const level = Math.floor(totalXP / 20);
 
-  const poke = getPokemonData(totalXP);
+  assignPokemonIfNeeded(id);
+
+updatePokemonEvolution(id, level);
+
+const line = pokemonDataset.evolution_lines
+  .find(l => l.id === trackingData[id].pokemonLineId);
+
+const currentPokemon =
+  line.stages[trackingData[id].pokemonStage];
+
+const gif = getPokemonGif(
+  currentPokemon,
+  line.generation,
+  trackingData[id].pokemonShiny
+);
+
 
 let role;
 
@@ -653,6 +707,10 @@ ctx.fillText(displayName, 40, 80);
   ctx.fillStyle = "#00ffcc";
   ctx.font = "38px Righteous";
   ctx.fillText(`Lv ${level}`, 620, 80);
+  
+  ctx.fillStyle = "#ffffff";
+ctx.font = "20px Righteous";
+ctx.fillText(currentPokemon.toUpperCase(), 600, 120);
 
   ctx.fillStyle = settings.textColor;
   ctx.font = "24px Righteous";
@@ -965,9 +1023,13 @@ if (!userPanels[id]) {
       components: [menu],
     });
 
-    await thread.send({
-      embeds: [new EmbedBuilder().setImage(gif)]
-    });
+ await thread.send({
+  embeds: [
+    new EmbedBuilder()
+      .setTitle("Tu Pokémon")
+      .setImage(gif)
+  ]
+});
 
     userPanels[id] = { messageId: sent.id, threadId: thread.id };
     savePanels();
