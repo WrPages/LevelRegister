@@ -18,28 +18,23 @@ const thresholds = {
 // =============================
 
 async function getGist() {
-  const res = await axios.get(
-    `https://api.github.com/gists/${POKEMON_GIST_ID}`,
-    { headers: { Authorization: `token ${GITHUB_TOKEN}` } }
-  );
+  try {
+    const res = await axios.get(
+      `https://api.github.com/gists/${POKEMON_GIST_ID}`,
+      { headers: { Authorization: `token ${GITHUB_TOKEN}` } }
+    );
 
-  return JSON.parse(res.data.files["pokemon_tracking.json"].content);
+    const file = res.data.files["pokemon_tracking.json"];
+
+    if (!file || !file.content) return {};
+
+    return JSON.parse(file.content);
+
+  } catch (err) {
+    console.error("Error leyendo Gist Pokémon:", err.message);
+    return {};
+  }
 }
-
-async function updateGist(data) {
-  await axios.patch(
-    `https://api.github.com/gists/${POKEMON_GIST_ID}`,
-    {
-      files: {
-        "pokemon_tracking.json": {
-          content: JSON.stringify(data, null, 2)
-        }
-      }
-    },
-    { headers: { Authorization: `token ${GITHUB_TOKEN}` } }
-  );
-}
-
 // =============================
 // 🧠 LEVEL CALC
 // =============================
