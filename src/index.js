@@ -981,24 +981,22 @@ if (thread) {
     });
   } else {
     // 🆕 Crear si no existe
-    const newGifMsg = await thread.send({
-      embeds: [
-      new EmbedBuilder()
-  .setTitle(
-    `${pokemonName.toUpperCase()} ${
-      isShiny ? "⭐" : ""
-    }`
-  )
-  .setDescription(`Nivel: ${pokemonLevel}`)
-  .setImage(gif)
-      ]
-    });
+    const gifMessage = await thread.send({
+  embeds: [
+    new EmbedBuilder()
+      .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
+      .setDescription(`Nivel: ${pokemonLevel}`)
+      .setImage(gif)
+  ]
+});
 
-    userPanels[id].gifMessageId = newGifMsg.id;
-    savePanels();
-  }
-}
+userPanels[id] = {
+  messageId: sent.id,
+  threadId: thread.id,
+  gifMessageId: gifMessage.id
+};
 
+savePanels();
         // 🧹 LIMPIAR THREAD
        // const thread = await client.channels.fetch(userPanels[id].threadId);
 
@@ -1300,6 +1298,24 @@ if (!liveTracker[id]) {
 }
 
 
+  //////resetpokemon
+  function resetPokemon(userId) {
+  if (!trackingData[userId]) return;
+
+  trackingData[userId].pokemonXP = 0;
+  trackingData[userId].pokemonLineId = null;
+  trackingData[userId].pokemonStage = 0;
+  trackingData[userId].pokemonShiny = false;
+}
+function resetAllPokemon() {
+  for (const id in trackingData) {
+    resetPokemon(id);
+  }
+}
+
+
+
+  
 function startLoop() {
 
   // Ejecuta inmediatamente
