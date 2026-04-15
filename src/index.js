@@ -931,10 +931,10 @@ async function updatePanels() {
 
         await msg.edit({ files: [file] });
 
-        const thread = await client.channels.fetch(userPanels[id].threadId);
+        const threadChannel = await client.channels.fetch(userPanels[id].threadId);
 
-if (thread) {
-  await thread.send({
+if (threadChannel) {
+  await threadChannel.send({
     embeds: [
       new EmbedBuilder()
         .setTitle("Tu Pokémon")
