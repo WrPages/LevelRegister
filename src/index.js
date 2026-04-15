@@ -832,6 +832,7 @@ liveTracker[id].instances = instances;
       }
 
     }
+ }
 
     await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
 
