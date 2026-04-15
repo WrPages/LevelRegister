@@ -35,6 +35,37 @@ async function getGist() {
     return {};
   }
 }
+
+//update
+// =============================
+// 💾 UPDATE GIST
+// =============================
+
+async function updateGist(data) {
+  try {
+    await axios.patch(
+      `https://api.github.com/gists/${POKEMON_GIST_ID}`,
+      {
+        files: {
+          "pokemon_tracking.json": {
+            content: JSON.stringify(data, null, 2)
+          }
+        }
+      },
+      {
+        headers: {
+          Authorization: `token ${GITHUB_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("✅ Gist Pokémon actualizado correctamente");
+
+  } catch (err) {
+    console.error("❌ Error actualizando Gist Pokémon:", err.response?.data || err.message);
+  }
+}
 // =============================
 // 🧠 LEVEL CALC
 // =============================
