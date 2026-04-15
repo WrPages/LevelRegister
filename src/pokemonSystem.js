@@ -16,7 +16,8 @@ const thresholds = {
 // =============================
 // 📥 GIST HELPERS
 // =============================
-
+console.log("GIST_POKEMON:", POKEMON_GIST_ID);
+console.log("TOKEN EXISTS:", !!GITHUB_TOKEN);
 async function getGist() {
   try {
     const res = await axios.get(
@@ -60,10 +61,11 @@ async function updateGist(data) {
       }
     );
 
-    console.log("✅ Gist Pokémon actualizado correctamente");
+    console.log("✅ Pokemon Gist actualizado");
 
   } catch (err) {
-    console.error("❌ Error actualizando Gist Pokémon:", err.response?.data || err.message);
+    console.error("❌ Error actualizando Pokemon Gist:");
+    console.error(err.response?.data || err.message);
   }
 }
 // =============================
