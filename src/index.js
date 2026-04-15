@@ -724,7 +724,7 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 
   return {
     file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
-    gif: poke.gif
+   // gif: poke.gif
   };
 }
 function createCategoryMenu(type, userId) {
