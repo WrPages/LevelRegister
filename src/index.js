@@ -722,10 +722,11 @@ ctx.fillText(currentPokemon.toUpperCase(), 600, 120);
 ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
-  return {
-    file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
-   // gif: poke.gif
-  };
+return {
+  file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
+  gif,
+  pokemonName: currentPokemon
+};
 }
 function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
@@ -929,6 +930,18 @@ async function updatePanels() {
         const msg = await channel.messages.fetch(userPanels[id].messageId);
 
         await msg.edit({ files: [file] });
+
+        const thread = await client.channels.fetch(userPanels[id].threadId);
+
+if (thread) {
+  await thread.send({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("Tu Pokémon")
+        .setImage(gif)
+    ]
+  });
+}
 
         // 🧹 LIMPIAR THREAD
         const thread = await client.channels.fetch(userPanels[id].threadId);
