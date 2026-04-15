@@ -1019,29 +1019,6 @@ if (thread) {
       }
     }
 
-    // 🔍 BUSCAR SI YA EXISTE UN PANEL DE ESTE USUARIO EN EL CANAL
-if (!userPanels[id]) {
-
-  const messages = await channel.messages.fetch({ limit: 100 });
-
-  const existing = messages.find(m =>
-    m.author.id === client.user.id &&
-    m.attachments.size > 0 &&
-    m.thread
-  );
-
-  if (existing) {
-    userPanels[id] = {
-      messageId: existing.id,
-      threadId: existing.thread.id
-    };
-
-    savePanels();
-
-    await existing.edit({ files: [file] });
-    continue; // 🚫 NO CREAR NUEVO
-  }
-}
     // =============================
     // 🆕 CREAR PANEL NUEVO
     // =============================
