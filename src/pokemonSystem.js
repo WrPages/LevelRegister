@@ -256,3 +256,4 @@ async function handleXpUpdate(userId, xpGained, db, thread) {
   await updateGist(data);
 
 }
+export { handleXpUpdate };
