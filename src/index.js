@@ -922,7 +922,7 @@ liveTracker[id].instances = instances;
 
 }
 
-
+//let updatingPanels = false;
 // =============================
 async function updatePanels() {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
@@ -937,20 +937,33 @@ async function updatePanels() {
 
     if (lastManualEdit[id] && Date.now() - lastManualEdit[id] < 4000) continue;
 
-    if (!liveTracker[id].sessionXP && !liveTracker[id].sessionTime) continue;
+    if (!liveTracker[id]) continue;
 
     const { file, gif, pokemonName, pokemonLevel, isShiny } =
   await renderPanel(id, channel);
 
+  
     // =============================
-    // 🔁 PANEL YA EXISTE
-    // =============================
-
+// 🔁 PANEL YA EXISTE
+// =============================
 if (userPanels[id]?.messageId) {
-  try {
-    const msg = await channel.messages.fetch(userPanels[id].messageId);
 
-    // 🔁 Editar panel (NO reenviar)
+  let msg = null;
+
+  try {
+    msg = await channel.messages.fetch({
+      message: userPanels[id].messageId,
+      force: true
+    });
+  } catch {}
+
+  if (!msg) {
+    console.log(`⚠️ Mensaje no encontrado (${id}), recreando...`);
+    delete userPanels[id];
+    savePanels();
+  } else {
+
+    // 🔁 Editar panel
     await msg.edit({ files: [file] });
 
     const thread = await client.channels.fetch(userPanels[id].threadId);
@@ -958,17 +971,13 @@ if (userPanels[id]?.messageId) {
     if (thread) {
       let gifMsg = null;
 
-      // 🔎 Intentar obtener mensaje del GIF
       if (userPanels[id].gifMessageId) {
         try {
           gifMsg = await thread.messages.fetch(userPanels[id].gifMessageId);
-        } catch {
-          gifMsg = null;
-        }
+        } catch {}
       }
 
       if (gifMsg) {
-        // 🔁 Editar GIF existente
         await gifMsg.edit({
           embeds: [
             new EmbedBuilder()
@@ -977,9 +986,8 @@ if (userPanels[id]?.messageId) {
               .setImage(gif)
           ]
         });
-
       } else {
-        // 🆕 Crear GIF SOLO si no existe
+        // 🆕 crear si no existe
         const gifMessage = await thread.send({
           embeds: [
             new EmbedBuilder()
@@ -994,15 +1002,9 @@ if (userPanels[id]?.messageId) {
       }
     }
 
-    continue; // 🔥 CRÍTICO: evita crear panel nuevo
-
-  } catch (err) {
-    console.log(`⚠️ Panel perdido (${id}), recreando...`);
-    delete userPanels[id];
-    savePanels();
+    continue; // 🔥 IMPORTANTE
   }
 }
-    
 
     // =============================
     // 🆕 CREAR PANEL NUEVO
