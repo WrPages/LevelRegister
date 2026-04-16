@@ -1,4 +1,4 @@
-const axios = require("axios");
+import axios from "axios";
 
 const POKEMON_GIST_ID = process.env.GIST_POKEMON;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -310,6 +310,4 @@ Shiny: ${active.shiny ? "✨ Sí" : "No"}`,
   }
 }
 
-module.exports = {
-  handleXpUpdate
-};
+export { handleXpUpdate };
