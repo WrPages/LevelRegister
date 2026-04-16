@@ -9,7 +9,7 @@ import {
   ButtonBuilder,
   ButtonStyle
 } from "discord.js";
-   import { handleXpUpdate } from "./pokemon system.js"; // arriba del archivo
+   import { handleXpUpdate } from "./pokemonSystem.js"; // arriba del archivo
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
