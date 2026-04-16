@@ -1,4 +1,3 @@
-
 import {
   Client,
   GatewayIntentBits,
@@ -549,7 +548,7 @@ if (id && eliteUsers[id]) {
 
 // ...
 
-const xpGained = xpPerSecond * seconds*10;
+const xpGained = xpPerSecond * seconds;
 
 // ⚡ ACTUALIZAR SISTEMA POKÉMON
 const threadId = userPanels[id]?.threadId;
@@ -616,21 +615,27 @@ async function renderPanel(id, channel) {
 // 🔥 Cargar estado real desde pokemonSystem (gist)
 const pokemonData = await getGist(process.env.GIST_POKEMON);
 
-const userPoke = pokemonData?.[id]?.active;
+const userPoke = pokemonData[id];
 
-let gif = "https://raw.githubusercontent.com/WrPages/gif_database/main/egg.gif";
+let pokemonName = "egg";
+let pokemonLevel = 0;
+let gif = null;
+let isShiny = false;
 
 if (userPoke) {
-  const name = userPoke.name;
-  const shiny = userPoke.shiny;
+  pokemonName = userPoke.active.name;
+ // pokemonLevel = Math.floor(userPoke.active.xp);
+  isShiny = userPoke.active.shiny;
+
+  // misma lógica que pokemonSystem
   const base = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
 
-  if (userPoke.stageIndex === -1) {
-    gif = shiny ? `${base}s_egg.gif` : `${base}egg.gif`;
-  } else if (userPoke.legendary) {
-    gif = `${base}Legendary/${shiny ? "Shiny" : "Normal"}/${shiny ? "s_" : ""}${name}.gif`;
+  if (userPoke.active.stageIndex === -1) {
+    gif = isShiny ? `${base}s_egg.gif` : `${base}egg.gif`;
+  } else if (userPoke.active.legendary) {
+    gif = `${base}Legendary/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
   } else {
-    gif = `${base}Gen${userPoke.generation}/${shiny ? "Shiny" : "Normal"}/${shiny ? "s_" : ""}${name}.gif`;
+    gif = `${base}Gen${userPoke.active.generation}/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
   }
 }
 
@@ -650,7 +655,7 @@ if (s?.group) {
 // 👑 DETECCIÓN CHAMPION
 try {
   const guild = client.guilds.cache.get("1483615153743462571");
-  if (!guild) continue;
+  if (!guild) return;
 
   const member = await guild.members.fetch(id).catch(() => null);
 
@@ -727,7 +732,10 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 
 return {
   file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
-  gif
+  gif,
+  pokemonName,
+  pokemonLevel,
+  isShiny
 };
 }
 function createCategoryMenu(type, userId) {
