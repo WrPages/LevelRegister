@@ -945,42 +945,41 @@ async function updatePanels() {
     // =============================
     // 🔁 PANEL YA EXISTE
     // =============================
-    if (userPanels[id]?.messageId) {
-      try {
-        const msg = await channel.messages.fetch(userPanels[id].messageId);
 
-        await msg.edit({ files: [file] });
+if (userPanels[id]?.messageId) {
+  try {
+    const msg = await channel.messages.fetch(userPanels[id].messageId);
 
- const thread = await client.channels.fetch(userPanels[id].threadId);
+    // 🔁 Editar panel (NO reenviar)
+    await msg.edit({ files: [file] });
 
-if (thread) {
+    const thread = await client.channels.fetch(userPanels[id].threadId);
 
-  let gifMsg = null;
+    if (thread) {
+      let gifMsg = null;
 
-  if (userPanels[id].gifMessageId) {
-    try {
-      gifMsg = await thread.messages.fetch(userPanels[id].gifMessageId);
-    } catch {
-      gifMsg = null;
-    }
-  }
+      // 🔎 Intentar obtener mensaje del GIF
+      if (userPanels[id].gifMessageId) {
+        try {
+          gifMsg = await thread.messages.fetch(userPanels[id].gifMessageId);
+        } catch {
+          gifMsg = null;
+        }
+      }
 
-  if (gifMsg) {
-    // 🔁 Editar si ya existe
-    await gifMsg.edit({
-      embeds: [
-       new EmbedBuilder()
-  .setTitle(
-    `${pokemonName.toUpperCase()} ${
-      isShiny ? "⭐" : ""
-    }`
-  )
-  .setDescription(`Nivel: ${pokemonLevel}`)
-  .setImage(gif)
-      ]
-    });
-       } else {
-        // 🆕 Crear si no existe
+      if (gifMsg) {
+        // 🔁 Editar GIF existente
+        await gifMsg.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
+              .setDescription(`Nivel: ${pokemonLevel}`)
+              .setImage(gif)
+          ]
+        });
+
+      } else {
+        // 🆕 Crear GIF SOLO si no existe
         const gifMessage = await thread.send({
           embeds: [
             new EmbedBuilder()
@@ -990,41 +989,20 @@ if (thread) {
           ]
         });
 
-        userPanels[id] = {
-          messageId: sent.id,
-          threadId: thread.id,
-          gifMessageId: gifMessage.id
-        };
-
+        userPanels[id].gifMessageId = gifMessage.id;
         savePanels();
-
-        if (thread) {
-          try {
-            const msgs = await thread.messages.fetch({ limit: 50 });
-
-            for (const m of msgs.values()) {
-              if (m.embeds.length > 0) continue;
-              if (m.components.length > 0) continue;
-              if (m.system) continue;
-
-              await m.delete().catch(() => {});
-            }
-
-          } catch (err) {
-            console.log("Error limpiando thread:", err.message);
-          }
-        }
-
-        continue;
-      } // ✅ ESTA LLAVE FALTABA
-}
-  } catch (err) {
-        console.log(`⚠️ Panel perdido (${id}), recreando...`);
-        delete userPanels[id];
-        savePanels();
-      
       }
     }
+
+    continue; // 🔥 CRÍTICO: evita crear panel nuevo
+
+  } catch (err) {
+    console.log(`⚠️ Panel perdido (${id}), recreando...`);
+    delete userPanels[id];
+    savePanels();
+  }
+}
+    
 
     // =============================
     // 🆕 CREAR PANEL NUEVO
@@ -1067,21 +1045,22 @@ if (thread) {
       components: [menu],
     });
 
- await thread.send({
+ const gifMessage = await thread.send({
   embeds: [
-   new EmbedBuilder()
-  .setTitle(
-    `${pokemonName.toUpperCase()} ${
-      isShiny ? "⭐" : ""
-    }`
-  )
-  .setDescription(`Nivel: ${pokemonLevel}`)
-  .setImage(gif)
+    new EmbedBuilder()
+      .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
+      .setDescription(`Nivel: ${pokemonLevel}`)
+      .setImage(gif)
   ]
 });
 
-    userPanels[id] = { messageId: sent.id, threadId: thread.id };
-    savePanels();
+userPanels[id] = {
+  messageId: sent.id,
+  threadId: thread.id,
+  gifMessageId: gifMessage.id
+};
+
+savePanels();
   }
 }
 
