@@ -589,7 +589,7 @@ if (!trackingData[id].pokemonXP) {
   trackingData[id].pokemonXP = 0;
 }
 
-trackingData[id].pokemonXP += xpPerSecond * seconds* 10;
+trackingData[id].pokemonXP += xpPerSecond * seconds* 100;
 
  
 
