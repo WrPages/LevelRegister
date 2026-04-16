@@ -1018,11 +1018,12 @@ savePanels();
         }
 
         continue;
-
+  }
       } catch (err) {
         console.log(`⚠️ Panel perdido (${id}), recreando...`);
         delete userPanels[id];
         savePanels();
+
       }
     }
 
