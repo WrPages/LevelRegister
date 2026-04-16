@@ -1017,7 +1017,7 @@ if (thread) {
 
         continue;
       } // ✅ ESTA LLAVE FALTABA
-
+}
   } catch (err) {
         console.log(`⚠️ Panel perdido (${id}), recreando...`);
         delete userPanels[id];
