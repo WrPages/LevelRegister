@@ -616,27 +616,21 @@ async function renderPanel(id, channel) {
 // 🔥 Cargar estado real desde pokemonSystem (gist)
 const pokemonData = await getGist(process.env.GIST_POKEMON);
 
-const userPoke = pokemonData[id];
+const userPoke = pokemonData?.[id]?.active;
 
-let pokemonName = "egg";
-let pokemonLevel = 0;
-let gif = null;
-let isShiny = false;
+let gif = "https://raw.githubusercontent.com/WrPages/gif_database/main/egg.gif";
 
 if (userPoke) {
-  pokemonName = userPoke.active.name;
- // pokemonLevel = Math.floor(userPoke.active.xp);
-  isShiny = userPoke.active.shiny;
-
-  // misma lógica que pokemonSystem
+  const name = userPoke.name;
+  const shiny = userPoke.shiny;
   const base = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
 
-  if (userPoke.active.stageIndex === -1) {
-    gif = isShiny ? `${base}s_egg.gif` : `${base}egg.gif`;
-  } else if (userPoke.active.legendary) {
-    gif = `${base}Legendary/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
+  if (userPoke.stageIndex === -1) {
+    gif = shiny ? `${base}s_egg.gif` : `${base}egg.gif`;
+  } else if (userPoke.legendary) {
+    gif = `${base}Legendary/${shiny ? "Shiny" : "Normal"}/${shiny ? "s_" : ""}${name}.gif`;
   } else {
-    gif = `${base}Gen${userPoke.active.generation}/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
+    gif = `${base}Gen${userPoke.generation}/${shiny ? "Shiny" : "Normal"}/${shiny ? "s_" : ""}${name}.gif`;
   }
 }
 
@@ -656,7 +650,7 @@ if (s?.group) {
 // 👑 DETECCIÓN CHAMPION
 try {
   const guild = client.guilds.cache.get("1483615153743462571");
-  if (!guild) return;
+  if (!guild) continue;
 
   const member = await guild.members.fetch(id).catch(() => null);
 
@@ -733,10 +727,7 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 
 return {
   file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
-  gif,
-  pokemonName,
-  pokemonLevel,
-  isShiny
+  gif
 };
 }
 function createCategoryMenu(type, userId) {
