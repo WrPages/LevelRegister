@@ -1,3 +1,4 @@
+
 import {
   Client,
   GatewayIntentBits,
@@ -548,7 +549,7 @@ if (id && eliteUsers[id]) {
 
 // ...
 
-const xpGained = xpPerSecond * seconds;
+const xpGained = xpPerSecond * seconds*10;
 
 // ⚡ ACTUALIZAR SISTEMA POKÉMON
 const threadId = userPanels[id]?.threadId;
