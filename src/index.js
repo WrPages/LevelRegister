@@ -1028,7 +1028,7 @@ if (userPanels[id]?.messageId) {
     }
 
     continue; // 🔥 IMPORTANTE
-  }
+  
 }
 
     // =============================
