@@ -994,35 +994,35 @@ if (userPanels[id]?.messageId) {
     const thread = await client.channels.fetch(userPanels[id].threadId);
 
     if (thread) {
-      let gifMsg = null;
+    //  let gifMsg = null;
 
-      if (userPanels[id].gifMessageId) {
-        try {
-          gifMsg = await thread.messages.fetch(userPanels[id].gifMessageId);
-        } catch {}
-      }
+    //  if (userPanels[id].gifMessageId) {
+    //    try {
+    //      gifMsg = await thread.messages.fetch(userPanels[id].gifMessageId);
+      //  } catch {}
+     // }
 
-      if (gifMsg) {
-        await gifMsg.edit({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
-              .setDescription(`Nivel: ${pokemonLevel}`)
-              .setImage(gif)
-          ]
-        });
-      } else {
+    //  if (gifMsg) {
+    //    await gifMsg.edit({
+      //    embeds: [
+         //   new EmbedBuilder()
+            //  .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
+           //   .setDescription(`Nivel: ${pokemonLevel}`)
+            //  .setImage(gif)
+         // ]
+       // });
+    //  } else {
         // 🆕 crear si no existe
-        const gifMessage = await thread.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
-              .setDescription(`Nivel: ${pokemonLevel}`)
-              .setImage(gif)
-          ]
-        });
+     //   const gifMessage = await thread.send({
+     //     embeds: [
+      //      new EmbedBuilder()
+      //        .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
+       //       .setDescription(`Nivel: ${pokemonLevel}`)
+      //        .setImage(gif)
+       //   ]
+      //  });
 
-        userPanels[id].gifMessageId = gifMessage.id;
+       // userPanels[id].gifMessageId = gifMessage.id;
         savePanels();
       }
     }
@@ -1084,7 +1084,7 @@ if (userPanels[id]?.messageId) {
 userPanels[id] = {
   messageId: sent.id,
   threadId: thread.id,
-  gifMessageId: gifMessage.id
+//  gifMessageId: gifMessage.id
 };
 
 savePanels();
