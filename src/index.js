@@ -590,6 +590,31 @@ if (!trackingData[id].pokemonXP) {
 }
 
 trackingData[id].pokemonXP += xpPerSecond * seconds;
+
+    import { handleXpUpdate } from "./pokemon system.js"; // arriba del archivo
+
+// ...
+
+const xpGained = xpPerSecond * seconds;
+
+// ⚡ ACTUALIZAR SISTEMA POKÉMON
+const threadId = userPanels[id]?.threadId;
+
+if (threadId) {
+  try {
+    const thread = await client.channels.fetch(threadId);
+
+    await handleXpUpdate(
+      id,
+      xpGained,
+      pokemonDataset,
+      thread
+    );
+
+  } catch (err) {
+    console.log("❌ Error en sistema Pokémon:", err.message);
+  }
+}
 }
 
     await updatePanels();
