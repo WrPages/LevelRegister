@@ -9,7 +9,7 @@ import {
   ButtonBuilder,
   ButtonStyle
 } from "discord.js";
-
+   import { handleXpUpdate } from "./pokemon system.js"; // arriba del archivo
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -591,7 +591,7 @@ if (!trackingData[id].pokemonXP) {
 
 trackingData[id].pokemonXP += xpPerSecond * seconds;
 
-    import { handleXpUpdate } from "./pokemon system.js"; // arriba del archivo
+ 
 
 // ...
 
