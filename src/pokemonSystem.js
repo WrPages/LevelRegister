@@ -260,7 +260,7 @@ for (const msg of messages.values()) {
   if (msg.author.id !== client.user.id) continue;
 
   await msg.delete().catch(() => {});
-}
+
 
   // 🎯 ACTIVE
   await thread.send({
@@ -296,6 +296,6 @@ Shiny: ${active.shiny ? "✨ Sí" : "No"}`,
       files: [url]
     });
   }
-
+}
 
 export { handleXpUpdate };
