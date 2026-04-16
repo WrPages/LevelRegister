@@ -443,22 +443,24 @@ async function runTrackingCycle() {
 
 
 ///sep
-    for (const id in liveTracker) {
+ for (const id in liveTracker) {
 
   const isStillOnline = onlineIds.some(uid => idMap[String(uid)] === id);
 
   if (!isStillOnline) {
 
-    if (!trackingData[id]) continue;
+    if (trackingData[id]) {
+      if (trackingData[id].currentpacks > 0) {
+        trackingData[id].totalpacks += trackingData[id].currentpacks;
+        trackingData[id].currentpacks = 0;
 
-    if (trackingData[id].currentpacks > 0) {
-      trackingData[id].totalpacks += trackingData[id].currentpacks;
-      trackingData[id].currentpacks = 0;
+        console.log("📦 Flush packs offline:", trackingData[id].name);
+      }
 
-      console.log("📦 Flush packs offline:", trackingData[id].name);
+      delete liveTracker[id];
     }
 
-    delete liveTracker[id];
+    continue; // ✅ SIEMPRE dentro del for, no dentro del if problemático
   }
 }
 
