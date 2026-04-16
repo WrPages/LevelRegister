@@ -287,36 +287,41 @@ function getPokemonData(totalXP) {
 }
 
 // =============================
-client.once("clientReady", async () => {
+client.once("ready", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
     console.log("🔎 Escaneando heartbeats (GLOBAL)...");
 
     client.globalHeartbeatMessages = new Map();
 
-    for (const guild of client.guilds.cache.values()) {
+    const guilds = [...client.guilds.cache.values()];
 
-        const globalChannel = guild.channels.cache.get(GLOBAL_HEARTBEAT_CHANNEL_ID);
-        if (!globalChannel) continue;
+for (const guild of guilds) {
+  if (!guild) continue;
 
-        const messages = await globalChannel.messages.fetch({ limit: 50 });
+  const globalChannel = guild.channels.cache.get(GLOBAL_HEARTBEAT_CHANNEL_ID);
+  if (!globalChannel) continue;
 
-        for (const msg of messages.values()) {
+  let messages;
+  try {
+    messages = await globalChannel.messages.fetch({ limit: 50 });
+  } catch (err) {
+    console.log("Error fetching messages:", err.message);
+    continue;
+  }
 
-            if (msg.author.id !== client.user.id) continue;
+  for (const msg of messages.values()) {
+    if (msg.author.id !== client.user.id) continue;
 
-            const content = msg.content;
+    const content = msg.content;
 
-            // Intentar identificar usuario desde el contenido
-            // (IMPORTANTE: necesitas incluir el nombre en el mensaje)
-            const match = content.match(/^```(.*?)\n/);
+    const match = content.match(/^```(.*?)\n/);
 
-            if (match) {
-                const username = match[1].trim();
-                client.globalHeartbeatMessages.set(username, msg.id);
-            }
-        }
+    if (match) {
+      const username = match[1].trim();
+      client.globalHeartbeatMessages.set(username, msg.id);
     }
-
+  }
+}
     console.log("EJEMPLO IDMAP:", [...client.globalHeartbeatMessages.entries()].slice(0, 5));
 
   
