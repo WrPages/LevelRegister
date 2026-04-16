@@ -238,64 +238,21 @@ function updatePokemon(user, xpGained, db) {
     user.active = createNewEgg();
   }
 }
+async function handleXpUpdate(userId, xpGained, db, thread) {
 
-// =============================
-// 🚀 MAIN FUNCTION
-// =============================
+  const data = await getGist();
 
-const messages = await thread.messages.fetch({ limit: 20 });
-
-for (const msg of messages.values()) {
-
-  // mantener menú
-  if (msg.components?.length > 0) continue;
-
-  // mantener embed (GIF)
-  if (msg.embeds?.length > 0) continue;
-
-  // mantener sistema
-  if (msg.system) continue;
-
-  // solo borrar mensajes del bot
-  if (msg.author.id !== client.user.id) continue;
-
-  await msg.delete().catch(() => {});
-
-
-  // 🎯 ACTIVE
-  await thread.send({
-    content: `🌟 **Pokémon Activo**
-Nombre: ${active.name}
-Nivel: ${level}/100
-XP: ${active.xp}/${thresholds.max}
-Shiny: ${active.shiny ? "✨ Sí" : "No"}`,
-    files: [getGifUrl(active)]
-  });
-
-  // 🏆 MAXED
-  for (const p of userData.maxed) {
-
-    const fileName = p.shiny
-      ? `s_${p.name}.gif`
-      : `${p.name}.gif`;
-
-    let url;
-
-    if (p.legendary) {
-      url = `${GIF_BASE_URL}Legendary/${
-        p.shiny ? "Shiny" : "Normal"
-      }/${fileName}`;
-    } else {
-      url = `${GIF_BASE_URL}Gen${p.generation}/${
-        p.shiny ? "Shiny" : "Normal"
-      }/${fileName}`;
-    }
-
-    await thread.send({
-      content: `🏆 ${p.name} (Nivel Máximo) ${p.shiny ? "✨" : ""}`,
-      files: [url]
-    });
+  if (!data[userId]) {
+    data[userId] = {
+      active: createNewEgg(),
+      maxed: []
+    };
   }
-}
 
-export { handleXpUpdate };
+  const user = data[userId];
+
+  updatePokemon(user, xpGained, db);
+
+  await updateGist(data);
+
+}
