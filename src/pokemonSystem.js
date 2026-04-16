@@ -265,14 +265,25 @@ async function handleXpUpdate(userId, xpGained, pokemonDb, thread) {
   const level = calculateLevel(active.xp);
 
   // 🧹 CLEAN BOT MESSAGES
-  const messages = await thread.messages.fetch({ limit: 20 });
-  const botMessages = messages.filter(
-    m => m.author.id === thread.client.user.id
-  );
+ const messages = await thread.messages.fetch({ limit: 20 });
 
-  for (const msg of botMessages.values()) {
-    await msg.delete().catch(() => {});
-  }
+for (const msg of messages.values()) {
+
+  // ❌ NO borrar menú (tiene components)
+  if (msg.components?.length > 0) continue;
+
+  // ❌ NO borrar embeds (tu GIF del sistema Pokémon)
+  if (msg.embeds?.length > 0) continue;
+
+  // ❌ NO borrar mensajes del sistema
+  if (msg.system) continue;
+
+  // ❌ opcional: no borrar mensajes de usuarios
+  if (msg.author.id !== thread.client.user.id) continue;
+
+  // 🧹 borrar el resto
+  await msg.delete().catch(() => {});
+}
 
   // 🎯 ACTIVE
   await thread.send({
