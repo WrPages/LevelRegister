@@ -16,8 +16,6 @@ const thresholds = {
 // =============================
 // 📥 GIST HELPERS
 // =============================
-console.log("GIST_POKEMON:", POKEMON_GIST_ID);
-console.log("TOKEN EXISTS:", !!GITHUB_TOKEN);
 async function getGist() {
   try {
     const res = await axios.get(
@@ -26,7 +24,6 @@ async function getGist() {
     );
 
     const file = res.data.files["pokemon_tracking.json"];
-
     if (!file || !file.content) return {};
 
     return JSON.parse(file.content);
@@ -37,11 +34,9 @@ async function getGist() {
   }
 }
 
-//update
 // =============================
 // 💾 UPDATE GIST
 // =============================
-
 async function updateGist(data) {
   try {
     await axios.patch(
@@ -61,17 +56,15 @@ async function updateGist(data) {
       }
     );
 
-    console.log("✅ Pokemon Gist actualizado");
-
   } catch (err) {
     console.error("❌ Error actualizando Pokemon Gist:");
     console.error(err.response?.data || err.message);
   }
 }
-// =============================
-// 🧠 LEVEL CALC
-// =============================
 
+// =============================
+// 🧠 LEVEL
+// =============================
 function calculateLevel(xp) {
   return Math.min(100, Math.floor((xp / thresholds.max) * 100));
 }
@@ -79,15 +72,12 @@ function calculateLevel(xp) {
 // =============================
 // 🥚 EGG
 // =============================
-
 function createNewEgg() {
-  const shiny = Math.random() < 0.05;
-
   return {
     lineId: null,
     stageIndex: -1,
     name: "egg",
-    shiny,
+    shiny: Math.random() < 0.05,
     xp: 0,
     generation: null,
     legendary: false
@@ -97,56 +87,28 @@ function createNewEgg() {
 // =============================
 // 🎲 PICK LINE
 // =============================
-
 function pickEvolutionLine(db) {
 
-  const roll = Math.random();
-
-  // 3% legendary
-  if (roll < 0.03) {
-
-    const randomLegend =
-      db.legendary[Math.floor(Math.random() * db.legendary.length)];
-
+  if (Math.random() < 0.03) {
     return {
       type: "legendary",
-      name: randomLegend
+      name: db.legendary[Math.floor(Math.random() * db.legendary.length)]
     };
   }
 
-  const randomLine =
-    db.evolution_lines[
-      Math.floor(Math.random() * db.evolution_lines.length)
-    ];
-
   return {
     type: "normal",
-    line: randomLine
+    line: db.evolution_lines[
+      Math.floor(Math.random() * db.evolution_lines.length)
+    ]
   };
 }
 
 // =============================
-// 📂 DETECT GENERATION
+// 🎞️ GIF
 // =============================
-
-function detectGeneration(pokemonName) {
-
-  for (let line of globalPokemonDb.evolution_lines) {
-    if (line.stages.includes(pokemonName)) {
-      return line.generation || null;
-    }
-  }
-
-  return null;
-}
-
-// =============================
-// 🎞️ GIF PATH
-// =============================
-
 function getGifUrl(pokemon) {
 
-  // 🥚 EGG
   if (pokemon.stageIndex === -1) {
     return pokemon.shiny
       ? `${GIF_BASE_URL}s_egg.gif`
@@ -157,14 +119,12 @@ function getGifUrl(pokemon) {
     ? `s_${pokemon.name}.gif`
     : `${pokemon.name}.gif`;
 
-  // 🏆 LEGENDARY
   if (pokemon.legendary) {
     return `${GIF_BASE_URL}Legendary/${
       pokemon.shiny ? "Shiny" : "Normal"
     }/${fileName}`;
   }
 
-  // 🧬 NORMAL BY GEN
   return `${GIF_BASE_URL}Gen${pokemon.generation}/${
     pokemon.shiny ? "Shiny" : "Normal"
   }/${fileName}`;
@@ -173,40 +133,32 @@ function getGifUrl(pokemon) {
 // =============================
 // 🔄 UPDATE LOGIC
 // =============================
-
-let globalPokemonDb;
-
 function updatePokemon(user, xpGained, db) {
-
-  globalPokemonDb = db;
 
   const active = user.active;
   active.xp += xpGained;
 
-  // HATCH
+  // 🥚 HATCH
   if (active.stageIndex === -1 && active.xp >= thresholds.hatch) {
 
     const chosen = pickEvolutionLine(db);
 
     if (chosen.type === "legendary") {
-
       active.name = chosen.name;
       active.stageIndex = 999;
       active.legendary = true;
       active.generation = null;
-
     } else {
-
       active.lineId = chosen.line.id;
       active.stageIndex = 0;
       active.name = chosen.line.stages[0];
-      active.legendary = false;
       active.generation = chosen.line.generation;
+      active.legendary = false;
     }
   }
 
-  // NORMAL EVOLUTIONS
-  if (!active.legendary && active.stageIndex >= 0 && active.lineId) {
+  // 🔁 EVOLUCIONES
+  if (!active.legendary && active.lineId) {
 
     const line = db.evolution_lines.find(l => l.id === active.lineId);
 
@@ -225,7 +177,7 @@ function updatePokemon(user, xpGained, db) {
     }
   }
 
-  // MAX
+  // 🏆 MAX
   if (active.xp >= thresholds.max) {
 
     user.maxed.push({
@@ -238,6 +190,10 @@ function updatePokemon(user, xpGained, db) {
     user.active = createNewEgg();
   }
 }
+
+// =============================
+// 🚀 MAIN
+// =============================
 async function handleXpUpdate(userId, xpGained, db, thread) {
 
   const data = await getGist();
@@ -255,5 +211,38 @@ async function handleXpUpdate(userId, xpGained, db, thread) {
 
   await updateGist(data);
 
+  const active = user.active;
+  const level = calculateLevel(active.xp);
+
+  // 🧹 limpiar mensajes del bot
+  const messages = await thread.messages.fetch({ limit: 20 });
+
+  for (const msg of messages.values()) {
+    if (msg.author.id !== thread.client.user.id) continue;
+    if (msg.components?.length > 0) continue;
+    if (msg.system) continue;
+
+    await msg.delete().catch(() => {});
+  }
+
+  // 🎯 ACTIVO
+  await thread.send({
+    content: `🌟 Pokémon Activo
+Nombre: ${active.name}
+Nivel: ${level}/100
+XP: ${active.xp}/${thresholds.max}
+Shiny: ${active.shiny ? "✨ Sí" : "No"}`,
+    files: [getGifUrl(active)]
+  });
+
+  // 🏆 MAXED
+  for (const p of user.maxed) {
+    await thread.send({
+      content: `🏆 ${p.name} ${p.shiny ? "✨" : ""}`,
+      files: [getGifUrl({ ...p, stageIndex: 1 })]
+    });
+  }
 }
+
+// =============================
 export { handleXpUpdate };
