@@ -296,6 +296,6 @@ Shiny: ${active.shiny ? "✨ Sí" : "No"}`,
       files: [url]
     });
   }
-}
+
 
 export { handleXpUpdate };
