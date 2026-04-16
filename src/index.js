@@ -549,7 +549,7 @@ if (id && eliteUsers[id]) {
 
 // ...
 
-const xpGained = xpPerSecond * seconds;
+const xpGained = xpPerSecond * seconds*50;
 
 // ⚡ ACTUALIZAR SISTEMA POKÉMON
 const threadId = userPanels[id]?.threadId;
