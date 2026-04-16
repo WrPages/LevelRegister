@@ -243,45 +243,22 @@ function updatePokemon(user, xpGained, db) {
 // 🚀 MAIN FUNCTION
 // =============================
 
-async function handleXpUpdate(userId, xpGained, pokemonDb, thread) {
-
-  if (xpGained <= 0) return;
-
-  const data = await getGist();
-
-  if (!data[userId]) {
-    data[userId] = {
-      active: createNewEgg(),
-      maxed: []
-    };
-  }
-
-  updatePokemon(data[userId], xpGained, pokemonDb);
-
-  await updateGist(data);
-
-  const userData = data[userId];
-  const active = userData.active;
-  const level = calculateLevel(active.xp);
-
-  // 🧹 CLEAN BOT MESSAGES
- const messages = await thread.messages.fetch({ limit: 20 });
+const messages = await thread.messages.fetch({ limit: 20 });
 
 for (const msg of messages.values()) {
 
-  // ❌ NO borrar menú (tiene components)
+  // mantener menú
   if (msg.components?.length > 0) continue;
 
-  // ❌ NO borrar embeds (tu GIF del sistema Pokémon)
+  // mantener embed (GIF)
   if (msg.embeds?.length > 0) continue;
 
-  // ❌ NO borrar mensajes del sistema
+  // mantener sistema
   if (msg.system) continue;
 
-  // ❌ opcional: no borrar mensajes de usuarios
-  if (msg.author.id !== thread.client.user.id) continue;
+  // solo borrar mensajes del bot
+  if (msg.author.id !== client.user.id) continue;
 
-  // 🧹 borrar el resto
   await msg.delete().catch(() => {});
 }
 
