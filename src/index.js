@@ -299,49 +299,6 @@ function getUserRoleByGroup(group) {
 }
 
 // =============================pokepokepoke
-function getPokemonGif(pokemonName, generation, isShiny = false) {
-
-  const folder = isShiny ? "Shiny" : "Normal";
-  const prefix = isShiny ? "s_" : "";
-
-  return `${POKEMON_BASE_URL}Gen${generation}/${folder}/${prefix}${pokemonName}.gif`;
-}
-function assignPokemonIfNeeded(userId) {
-
-  if (!trackingData[userId]) return;
-
-  if (trackingData[userId].pokemonLineId) return;
-
-  const lines = pokemonDataset.evolution_lines;
-
-  const randomLine = lines[Math.floor(Math.random() * lines.length)];
-
-  trackingData[userId].pokemonLineId = randomLine.id;
-  trackingData[userId].pokemonStage = 0;
-  trackingData[userId].pokemonShiny = Math.random() < 0.03; // 3% shiny
-}
-function updatePokemonEvolution(userId, level) {
-
-  const data = trackingData[userId];
-  if (!data?.pokemonLineId) return;
-
-  const line = pokemonDataset.evolution_lines
-    .find(l => l.id === data.pokemonLineId);
-
-  if (!line) return;
-
-  let stage = 0;
-
-  if (level >= 16 && line.stages.length >= 2) stage = 1;
-  if (level >= 32 && line.stages.length >= 3) stage = 2;
-
-  if (stage >= line.stages.length)
-    stage = line.stages.length - 1;
-
-  data.pokemonStage = stage;
-}
-
-
 
 // =============================fin poke finfin
 client.once("clientReady", async () => {
@@ -586,11 +543,7 @@ if (id && eliteUsers[id]) {
 
   t.sessionXP += xpPerSecond * seconds;
     // 🔥 XP independiente para Pokémon
-if (!trackingData[id].pokemonXP) {
-  trackingData[id].pokemonXP = 0;
-}
 
-trackingData[id].pokemonXP += xpPerSecond * seconds* 100;
 
  
 
@@ -652,30 +605,41 @@ async function renderPanel(id, channel) {
  const userLevel = Math.floor(totalXP / 20);
 
 // 🔥 Nivel del Pokémon separado
-if (!trackingData[id].pokemonXP) {
-  trackingData[id].pokemonXP = 0;
-}
+//if (!trackingData[id].pokemonXP) {
+//  trackingData[id].pokemonXP = 0;
+//}
 
-const pokemonLevel = Math.floor(trackingData[id].pokemonXP / 20);
+//const pokemonLevel = Math.floor(trackingData[id].pokemonXP / 20);
 ///  ctx.fillStyle = "#ffffff";
 //ctx.font = "28px sans-serif";
 //ctx.fillText(`Nivel: ${level}`, 50, 80);
+// 🔥 Cargar estado real desde pokemonSystem (gist)
+const pokemonData = await getGist(process.env.GIST_POKEMON);
 
-  assignPokemonIfNeeded(id);
+const userPoke = pokemonData[id];
 
-updatePokemonEvolution(id, pokemonLevel);
+let pokemonName = "egg";
+let pokemonLevel = 0;
+let gif = null;
+let isShiny = false;
 
-const line = pokemonDataset.evolution_lines
-  .find(l => l.id === trackingData[id].pokemonLineId);
+if (userPoke) {
+  pokemonName = userPoke.active.name;
+ // pokemonLevel = Math.floor(userPoke.active.xp);
+  isShiny = userPoke.active.shiny;
 
-const currentPokemon =
-  line.stages[trackingData[id].pokemonStage];
+  // misma lógica que pokemonSystem
+  const base = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
 
-const gif = getPokemonGif(
-  currentPokemon,
-  line.generation,
-  trackingData[id].pokemonShiny
-);
+  if (userPoke.active.stageIndex === -1) {
+    gif = isShiny ? `${base}s_egg.gif` : `${base}egg.gif`;
+  } else if (userPoke.active.legendary) {
+    gif = `${base}Legendary/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
+  } else {
+    gif = `${base}Gen${userPoke.active.generation}/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
+  }
+}
+
 
 
 let role;
@@ -770,9 +734,9 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
 return {
   file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
   gif,
-  pokemonName: currentPokemon,
+  pokemonName,
   pokemonLevel,
-  isShiny: trackingData[id].pokemonShiny
+  isShiny
 };
 }
 function createCategoryMenu(type, userId) {
@@ -1406,7 +1370,7 @@ function sanitizeTracking() {
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
    trackingData[k].totalpacks = Number(trackingData[k].totalpacks) || 0;
     trackingData[k].currentpacks = Number(trackingData[k].currentpacks) || 0;
-    trackingData[k].pokemonXP = Number(trackingData[k].pokemonXP) || 0;
+    //trackingData[k].pokemonXP = Number(trackingData[k].pokemonXP) || 0;
     trackingData[k].lastHeartbeatPacks =
   Number(trackingData[k].lastHeartbeatPacks) || 0;
   //  trackingData[k].lastHeartbeatMessageId = trackingData[k].lastHeartbeatMessageId || null;
