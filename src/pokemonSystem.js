@@ -7,10 +7,10 @@ const GIF_BASE_URL =
   "https://raw.githubusercontent.com/WrPages/gif_database/main/";
 
 const thresholds = {
-  hatch: 100,
-  stage1: 200,
-  stage2: 300,
-  max: 400
+  hatch: 20,
+  stage1: 30,
+  stage2: 40,
+  max: 50
 };
 
 // =============================
