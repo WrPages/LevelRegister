@@ -484,23 +484,24 @@ onlineIds = onlineData.onlineIds;
 
 
 ///sep
-   const onlineSet = new Set(
-  onlineIds.map(uid => idMap[String(uid)])
-);
-
 for (const id in liveTracker) {
 
-  const isStillOnline = onlineSet.has(id);
+  let stillOnline = false;
 
-  if (!isStillOnline) {
+  for (const uid of onlineIds) {
+    if (idMap[String(uid)] === id) {
+      stillOnline = true;
+      break;
+    }
+  }
+
+  if (!stillOnline) {
 
     if (!trackingData[id]) continue;
 
     if (trackingData[id].currentpacks > 0) {
       trackingData[id].totalpacks += trackingData[id].currentpacks;
       trackingData[id].currentpacks = 0;
-
-      console.log("📦 Flush packs offline:", trackingData[id].name);
     }
 
     delete liveTracker[id];
@@ -610,6 +611,8 @@ if (threadId) {
       pokemonDataset,
       thread
     );
+
+    
 
   } catch (err) {
     console.log("❌ Error en sistema Pokémon:", err.message);
