@@ -979,34 +979,32 @@ if (thread) {
   .setImage(gif)
       ]
     });
-  } else {
-    // 🆕 Crear si no existe
-    const gifMessage = await thread.send({
-  embeds: [
-    new EmbedBuilder()
-      .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
-      .setDescription(`Nivel: ${pokemonLevel}`)
-      .setImage(gif)
-  ]
-});
+       } else {
+        // 🆕 Crear si no existe
+        const gifMessage = await thread.send({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
+              .setDescription(`Nivel: ${pokemonLevel}`)
+              .setImage(gif)
+          ]
+        });
 
-userPanels[id] = {
-  messageId: sent.id,
-  threadId: thread.id,
-  gifMessageId: gifMessage.id
-};
+        userPanels[id] = {
+          messageId: sent.id,
+          threadId: thread.id,
+          gifMessageId: gifMessage.id
+        };
 
-savePanels();
-        // 🧹 LIMPIAR THREAD
-       // const thread = await client.channels.fetch(userPanels[id].threadId);
+        savePanels();
 
         if (thread) {
           try {
             const msgs = await thread.messages.fetch({ limit: 50 });
 
             for (const m of msgs.values()) {
-              if (m.embeds.length > 0) continue;      // GIF
-              if (m.components.length > 0) continue;  // MENÚ
+              if (m.embeds.length > 0) continue;
+              if (m.components.length > 0) continue;
               if (m.system) continue;
 
               await m.delete().catch(() => {});
@@ -1018,12 +1016,13 @@ savePanels();
         }
 
         continue;
-  }
-      } catch (err) {
+      } // ✅ ESTA LLAVE FALTABA
+
+  } catch (err) {
         console.log(`⚠️ Panel perdido (${id}), recreando...`);
         delete userPanels[id];
         savePanels();
-
+      
       }
     }
 
