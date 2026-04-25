@@ -625,7 +625,7 @@ let isShiny = false;
 
 if (userPoke) {
   pokemonName = userPoke.active.name;
- // pokemonLevel = Math.floor(userPoke.active.xp);
+ pokemonLevel = Math.min(100, Math.floor((userPoke.active.xp / 50) * 100));
   isShiny = userPoke.active.shiny;
 
   // misma lógica que pokemonSystem
@@ -1039,7 +1039,7 @@ if (userPanels[id]?.messageId) {
       components: [menu],
     });
 
- const gifMessage = await thread.send({
+const gifMessage = await thread.send({
   embeds: [
     new EmbedBuilder()
       .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
