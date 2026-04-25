@@ -1,4 +1,5 @@
 import axios from "axios";
+import { EmbedBuilder } from "discord.js";
 
 const POKEMON_GIST_ID = process.env.GIST_POKEMON;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -13,9 +14,6 @@ const thresholds = {
   max: 50
 };
 
-// =============================
-// 📥 GIST HELPERS
-// =============================
 async function getGist() {
   try {
     const res = await axios.get(
@@ -27,16 +25,12 @@ async function getGist() {
     if (!file || !file.content) return {};
 
     return JSON.parse(file.content);
-
   } catch (err) {
     console.error("Error leyendo Gist Pokémon:", err.message);
     return {};
   }
 }
 
-// =============================
-// 💾 UPDATE GIST
-// =============================
 async function updateGist(data) {
   try {
     await axios.patch(
@@ -55,23 +49,16 @@ async function updateGist(data) {
         }
       }
     );
-
   } catch (err) {
     console.error("❌ Error actualizando Pokemon Gist:");
     console.error(err.response?.data || err.message);
   }
 }
 
-// =============================
-// 🧠 LEVEL
-// =============================
 function calculateLevel(xp) {
   return Math.min(100, Math.floor((xp / thresholds.max) * 100));
 }
 
-// =============================
-// 🥚 EGG
-// =============================
 function createNewEgg() {
   return {
     lineId: null,
@@ -84,11 +71,7 @@ function createNewEgg() {
   };
 }
 
-// =============================
-// 🎲 PICK LINE
-// =============================
 function pickEvolutionLine(db) {
-
   if (Math.random() < 0.03) {
     return {
       type: "legendary",
@@ -104,12 +87,15 @@ function pickEvolutionLine(db) {
   };
 }
 
-// =============================
-// 🎞️ GIF
-// =============================
-function getGifUrl(pokemon) {
+function encodeGifUrl(url) {
+  return url
+    .split("/")
+    .map((part, index) => index < 3 ? part : encodeURIComponent(part))
+    .join("/");
+}
 
-  if (pokemon.stageIndex === -1) {
+function getGifUrl(pokemon) {
+  if (pokemon.stageIndex === -1 || pokemon.name === "egg") {
     return pokemon.shiny
       ? `${GIF_BASE_URL}s_egg.gif`
       : `${GIF_BASE_URL}egg.gif`;
@@ -119,28 +105,58 @@ function getGifUrl(pokemon) {
     ? `s_${pokemon.name}.gif`
     : `${pokemon.name}.gif`;
 
+  let url;
+
   if (pokemon.legendary) {
-    return `${GIF_BASE_URL}Legendary/${
+    url = `${GIF_BASE_URL}Legendary/${
+      pokemon.shiny ? "Shiny" : "Normal"
+    }/${fileName}`;
+  } else {
+    url = `${GIF_BASE_URL}Gen${pokemon.generation}/${
       pokemon.shiny ? "Shiny" : "Normal"
     }/${fileName}`;
   }
 
-  return `${GIF_BASE_URL}Gen${pokemon.generation}/${
-    pokemon.shiny ? "Shiny" : "Normal"
-  }/${fileName}`;
+  return encodeGifUrl(url);
 }
 
-// =============================
-// 🔄 UPDATE LOGIC
-// =============================
-function updatePokemon(user, xpGained, db) {
+function normalizeUser(user) {
+  if (!user.active) user.active = createNewEgg();
 
+  // Migración desde tu sistema viejo
+  if (!user.hallOfFame) {
+    user.hallOfFame = [];
+  }
+
+  if (!user.boxes) {
+    user.boxes = [];
+  }
+
+  if (Array.isArray(user.maxed) && user.maxed.length > 0) {
+    for (const p of user.maxed) {
+      if (user.hallOfFame.length < 6) {
+        user.hallOfFame.push(p);
+      } else {
+        user.boxes.push(p);
+      }
+    }
+
+    user.maxed = [];
+  }
+
+  if (!user.messages) {
+    user.messages = {
+      active: null,
+      hall: null
+    };
+  }
+}
+
+function updatePokemon(user, xpGained, db) {
   const active = user.active;
   active.xp += xpGained;
 
-  // 🥚 HATCH
   if (active.stageIndex === -1 && active.xp >= thresholds.hatch) {
-
     const chosen = pickEvolutionLine(db);
 
     if (chosen.type === "legendary") {
@@ -157,92 +173,138 @@ function updatePokemon(user, xpGained, db) {
     }
   }
 
-  // 🔁 EVOLUCIONES
   if (!active.legendary && active.lineId) {
-
     const line = db.evolution_lines.find(l => l.id === active.lineId);
 
-    if (active.stageIndex === 0 && active.xp >= thresholds.stage1) {
-      active.stageIndex = 1;
-      active.name = line.stages[1];
-    }
+    if (line) {
+      if (active.stageIndex === 0 && active.xp >= thresholds.stage1 && line.stages[1]) {
+        active.stageIndex = 1;
+        active.name = line.stages[1];
+      }
 
-    if (
-      active.stageIndex === 1 &&
-      active.xp >= thresholds.stage2 &&
-      line.stages[2]
-    ) {
-      active.stageIndex = 2;
-      active.name = line.stages[2];
+      if (active.stageIndex === 1 && active.xp >= thresholds.stage2 && line.stages[2]) {
+        active.stageIndex = 2;
+        active.name = line.stages[2];
+      }
     }
   }
 
-  // 🏆 MAX
   if (active.xp >= thresholds.max) {
-
-    user.maxed.push({
+    const completed = {
       name: active.name,
       shiny: active.shiny,
       generation: active.generation,
-      legendary: active.legendary
-    });
+      legendary: active.legendary,
+      stageIndex: active.stageIndex
+    };
+
+    if (user.hallOfFame.length < 6) {
+      user.hallOfFame.push(completed);
+    } else {
+      user.boxes.push(completed);
+    }
 
     user.active = createNewEgg();
   }
 }
 
-// =============================
-// 🚀 MAIN
-// =============================
-async function handleXpUpdate(userId, xpGained, db, thread) {
+async function upsertMessage(thread, messageId, payload) {
+  let msg = null;
 
+  if (messageId) {
+    msg = await thread.messages.fetch(messageId).catch(() => null);
+  }
+
+  if (msg) {
+    await msg.edit(payload);
+    return msg.id;
+  }
+
+  const sent = await thread.send(payload);
+  return sent.id;
+}
+
+function buildActiveEmbed(active) {
+  const level = calculateLevel(active.xp);
+
+  return new EmbedBuilder()
+    .setTitle(`🌟 Pokémon activo: ${active.name.toUpperCase()} ${active.shiny ? "✨" : ""}`)
+    .setDescription(
+      `**Nivel:** ${level}/100\n` +
+      `**XP:** ${Math.floor(active.xp)}/${thresholds.max}\n` +
+      `**Shiny:** ${active.shiny ? "Sí ✨" : "No"}`
+    )
+    .setImage(getGifUrl(active));
+}
+
+function buildHallEmbeds(user) {
+  if (!user.hallOfFame.length) {
+    return [
+      new EmbedBuilder()
+        .setTitle("🏆 Hall de la Fama")
+        .setDescription("Todavía no hay Pokémon maxeados.")
+    ];
+  }
+
+  const embeds = [
+    new EmbedBuilder()
+      .setTitle("🏆 Hall de la Fama")
+      .setDescription(
+        `Pokémon en Hall: **${user.hallOfFame.length}/6**\n` +
+        `Pokémon en cajas: **${user.boxes.length}**`
+      )
+  ];
+
+  for (const [index, p] of user.hallOfFame.entries()) {
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle(`#${index + 1} ${p.name.toUpperCase()} ${p.shiny ? "✨" : ""}`)
+        .setImage(getGifUrl(p))
+    );
+  }
+
+  return embeds.slice(0, 10);
+}
+
+async function handleXpUpdate(userId, xpGained, db, thread) {
   const data = await getGist();
 
   if (!data[userId]) {
     data[userId] = {
       active: createNewEgg(),
-      maxed: []
+      maxed: [],
+      hallOfFame: [],
+      boxes: [],
+      messages: {
+        active: null,
+        hall: null
+      }
     };
   }
 
   const user = data[userId];
 
+  normalizeUser(user);
   updatePokemon(user, xpGained, db);
+  normalizeUser(user);
+
+  user.messages.active = await upsertMessage(
+    thread,
+    user.messages.active,
+    {
+      embeds: [buildActiveEmbed(user.active)]
+    }
+  );
+
+  user.messages.hall = await upsertMessage(
+    thread,
+    user.messages.hall,
+    {
+      embeds: buildHallEmbeds(user)
+    }
+  );
 
   await updateGist(data);
-
-  const active = user.active;
-  const level = calculateLevel(active.xp);
-
-  // 🧹 limpiar mensajes del bot
-  const messages = await thread.messages.fetch({ limit: 20 });
-
-  for (const msg of messages.values()) {
-    if (msg.author.id !== thread.client.user.id) continue;
-    if (msg.components?.length > 0) continue;
-    if (msg.system) continue;
-
-    await msg.delete().catch(() => {});
-  }
-
-  // 🎯 ACTIVO
-  await thread.send({
-    content: `🌟 Pokémon Activo
-Nombre: ${active.name}
-Nivel: ${level}/100
-XP: ${active.xp}/${thresholds.max}
-Shiny: ${active.shiny ? "✨ Sí" : "No"}`,
-    files: [getGifUrl(active)]
-  });
-
-  // 🏆 MAXED
-  for (const p of user.maxed) {
-    await thread.send({
-      content: `🏆 ${p.name} ${p.shiny ? "✨" : ""}`,
-      files: [getGifUrl({ ...p, stageIndex: 1 })]
-    });
-  }
 }
 
-// =============================
 export { handleXpUpdate };
