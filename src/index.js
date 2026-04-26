@@ -70,7 +70,9 @@ if (!process.env.GIST_PROFILES) {
 if (!process.env.RANKING_CHANNEL_ID) {
   throw new Error("❌ FALTA RANKING_CHANNEL_ID en Railway");
 }
-
+const pokemonDataset = JSON.parse(
+  fs.readFileSync("./pokemon_dataset.json", "utf8")
+);
 const commandMap = {
   nombre: "name",
   name: "name",
@@ -880,16 +882,17 @@ liveTracker[id].instances = instances;
 }
 function ensureUserProfile(id) {
   if (!userProfiles[id]) {
-    userProfiles[id] = {
-      favoritePokemon: [],
-      favoriteCard: null,
-      favoriteDeck: null,
-      mostValuableCard: null,
-      rarestCard: null,
-      bestGP: "",
-      status: "",
-      quote: ""
-    };
+ userProfiles[id] = {
+  favoritePokemon: [],
+  favoriteCard: null,
+  favoriteDeck: null,
+  mostValuableCard: null,
+  rarestCard: null,
+  bestGP: null,
+  maxRank: null,
+  status: "",
+  quote: ""
+};
   }
 
   return userProfiles[id];
@@ -903,12 +906,75 @@ function normalizePokemonName(name) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 }
+const GIF_BASE_URL = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
 
-function getPokemonGifUrl(name) {
-  const pokemon = normalizePokemonName(name);
-
-  return `https://raw.githubusercontent.com/WrPages/gif_database/main/${pokemon}.gif`;
+function encodeGifUrl(url) {
+  return url
+    .split("/")
+    .map((part, index) => index < 3 ? part : encodeURIComponent(part))
+    .join("/");
 }
+
+function normalizePokemonName(name) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function findPokemonInDataset(name) {
+  const cleanName = normalizePokemonName(name);
+
+  if (!pokemonDataset) return null;
+
+  for (const line of pokemonDataset.evolution_lines || []) {
+    const stageIndex = line.stages.findIndex(
+      p => normalizePokemonName(p) === cleanName
+    );
+
+    if (stageIndex !== -1) {
+      return {
+        name: normalizePokemonName(line.stages[stageIndex]),
+        generation: line.generation,
+        legendary: false
+      };
+    }
+  }
+
+  for (const legendary of pokemonDataset.legendary || []) {
+    if (normalizePokemonName(legendary) === cleanName) {
+      return {
+        name: normalizePokemonName(legendary),
+        generation: null,
+        legendary: true
+      };
+    }
+  }
+
+  return null;
+}
+
+function getPokemonGifUrlFromDataset(name) {
+  const pokemon = findPokemonInDataset(name);
+
+  if (!pokemon) return null;
+
+  const fileName = `${pokemon.name}.gif`;
+
+  let url;
+
+  if (pokemon.legendary) {
+    url = `${GIF_BASE_URL}Legendary/Normal/${fileName}`;
+  } else {
+    url = `${GIF_BASE_URL}Gen${pokemon.generation}/Normal/${fileName}`;
+  }
+
+  return encodeGifUrl(url);
+}
+
+
 
 function imageObjectToAttachment(imageObj, name) {
   if (!imageObj?.data) return null;
@@ -934,7 +1000,8 @@ function buildProfileMainEmbed(id) {
       { name: "⭐ Nivel", value: `${level}`, inline: true },
       { name: "✨ XP", value: `${Math.floor(totalXP)}`, inline: true },
       { name: "🏆 GP actual", value: `${t.gp || 0}`, inline: true },
-      { name: "🥇 Mejor GP", value: profile.bestGP || "No definido", inline: true },
+      { name: "🥇 Mejor GP", value: profile.bestGP ? "Imagen subida ✅" : "No definido", inline: true },
+{ name: "🏅 Rango máximo", value: profile.maxRank ? "Imagen subida ✅" : "No definido", inline: true },
       { name: "🔥 Estado", value: profile.status || "No definido", inline: true }
     );
 }
@@ -951,12 +1018,21 @@ function buildPokemonFavoriteEmbeds(id) {
     ];
   }
 
-  return profile.favoritePokemon.slice(0, 3).map((name, index) =>
-    new EmbedBuilder()
-      .setTitle(`❤️ Pokémon favorito #${index + 1}: ${name}`)
-      .setColor("#ffcc00")
-      .setImage(getPokemonGifUrl(name))
-  );
+  return profile.favoritePokemon.slice(0, 3).map((pokemon, index) => {
+    const name = typeof pokemon === "string" ? pokemon : pokemon.name;
+    const gif = typeof pokemon === "string"
+      ? getPokemonGifUrlFromDataset(name)
+      : pokemon.gif;
+
+    const embed = new EmbedBuilder()
+      .setTitle(`❤️ Pokémon favorito #${index + 1}`)
+      .setDescription(`**${name}**`)
+      .setColor("#ffcc00");
+
+    if (gif) embed.setThumbnail(gif);
+
+    return embed;
+  });
 }
 
 async function updateUserProfileThread(id) {
@@ -979,13 +1055,15 @@ async function updateUserProfileThread(id) {
   const favoriteDeck = imageObjectToAttachment(profile.favoriteDeck, "favorite-deck.png");
   const valuableCard = imageObjectToAttachment(profile.mostValuableCard, "valuable-card.png");
   const rarestCard = imageObjectToAttachment(profile.rarestCard, "rarest-card.png");
+  const bestGP = imageObjectToAttachment(profile.bestGP, "best-gp.png");
+const maxRank = imageObjectToAttachment(profile.maxRank, "max-rank.png");
 
   if (favoriteCard) {
     files.push(favoriteCard);
     embeds.push(
       new EmbedBuilder()
         .setTitle("🎴 Carta favorita")
-        .setImage("attachment://favorite-card.png")
+        .setThumbnail("attachment://favorite-card.png")
         .setColor("#ff66cc")
     );
   }
@@ -995,7 +1073,7 @@ async function updateUserProfileThread(id) {
     embeds.push(
       new EmbedBuilder()
         .setTitle("🃏 Mazo favorito")
-        .setImage("attachment://favorite-deck.png")
+        .setThumbnail("attachment://favorite-deck.png")
         .setColor("#9966ff")
     );
   }
@@ -1005,7 +1083,7 @@ async function updateUserProfileThread(id) {
     embeds.push(
       new EmbedBuilder()
         .setTitle("💎 Carta más valiosa")
-        .setImage("attachment://valuable-card.png")
+        .setThumbnail("attachment://valuable-card.png")
         .setColor("#00ffff")
     );
   }
@@ -1015,10 +1093,29 @@ async function updateUserProfileThread(id) {
     embeds.push(
       new EmbedBuilder()
         .setTitle("🌟 Carta más rara")
-        .setImage("attachment://rarest-card.png")
+        .setThumbnail("attachment://rarest-card.png")
         .setColor("#ffd700")
     );
   }
+  if (bestGP) {
+  files.push(bestGP);
+  embeds.push(
+    new EmbedBuilder()
+      .setTitle("🥇 Mejor GP obtenido")
+      .setThumbnail("attachment://best-gp.png")
+      .setColor("#ffd700")
+  );
+}
+
+if (maxRank) {
+  files.push(maxRank);
+  embeds.push(
+    new EmbedBuilder()
+      .setTitle("🏅 Rango máximo alcanzado")
+      .setThumbnail("attachment://max-rank.png")
+      .setColor("#ff9900")
+  );
+}
 
   let profileMsg = null;
 
@@ -1161,7 +1258,8 @@ if (userPanels[id]?.messageId) {
   { label: "Subir mazo favorito", value: "favoriteDeck" },
   { label: "Subir carta más valiosa", value: "mostValuableCard" },
   { label: "Subir carta más rara", value: "rarestCard" },
-  { label: "Mejor GP", value: "bestGP" },
+  { label: "Subir imagen de mejor GP", value: "bestGP" },
+{ label: "Subir imagen de rango máximo", value: "maxRank" },
   { label: "Estado", value: "status" },
   { label: "Frase del perfil", value: "quote" },
 ])
@@ -1246,7 +1344,15 @@ if (option === "rarestCard") {
 if (option === "bestGP") {
   profileEditState[i.user.id] = "bestGP";
   return i.reply({
-    content: "🥇 Escribe tu mejor GP obtenido. Ejemplo: Top 100, 1870 GP, Champion, etc.",
+    content: "🥇 Sube una imagen de tu mejor GP obtenido.",
+    ephemeral: true
+  });
+}
+
+if (option === "maxRank") {
+  profileEditState[i.user.id] = "maxRank";
+  return i.reply({
+    content: "🏅 Sube una imagen de tu rango máximo alcanzado.",
     ephemeral: true
   });
 }
@@ -1427,7 +1533,7 @@ rgb(255,0,0)`);
     }
   }
 
-  if (activeProfileEdit === "pokemon") {
+if (activeProfileEdit === "pokemon") {
   const pokemonName = msg.content.trim();
 
   if (!pokemonName) {
@@ -1439,7 +1545,16 @@ rgb(255,0,0)`);
     return msg.reply("❌ Ya tienes 3 Pokémon favoritos. Usa `pokemon reset` para borrar la lista.");
   }
 
-  profile.favoritePokemon.push(pokemonName);
+  const gif = getPokemonGifUrlFromDataset(pokemonName);
+
+  if (!gif) {
+    return msg.reply("❌ No encontré ese Pokémon en la base de datos. Revisa el nombre.");
+  }
+
+  profile.favoritePokemon.push({
+    name: normalizePokemonName(pokemonName),
+    gif
+  });
 
   delete profileEditState[msg.author.id];
   saveProfiles();
@@ -1447,14 +1562,6 @@ rgb(255,0,0)`);
   await updateUserProfileThread(id);
 
   return msg.reply(`✅ Pokémon favorito agregado: **${pokemonName}**`);
-}
-
-if (activeProfileEdit === "bestGP") {
-  profile.bestGP = msg.content.trim();
-  delete profileEditState[msg.author.id];
-  saveProfiles();
-  await updateUserProfileThread(id);
-  return msg.reply("✅ Mejor GP actualizado.");
 }
 
 if (activeProfileEdit === "status") {
@@ -1487,10 +1594,12 @@ if (msg.attachments.size > 0) {
   const base64 = Buffer.from(buffer).toString("base64");
 
   if (
-    activeProfileEdit === "favoriteCard" ||
-    activeProfileEdit === "favoriteDeck" ||
-    activeProfileEdit === "mostValuableCard" ||
-    activeProfileEdit === "rarestCard"
+ activeProfileEdit === "favoriteCard" ||
+activeProfileEdit === "favoriteDeck" ||
+activeProfileEdit === "mostValuableCard" ||
+activeProfileEdit === "rarestCard" ||
+activeProfileEdit === "bestGP" ||
+activeProfileEdit === "maxRank"
   ) {
     profile[activeProfileEdit] = {
       type: "base64",
