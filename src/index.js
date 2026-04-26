@@ -1629,55 +1629,6 @@ async function updateRanking() {
 }
 
 
-function buildRankingEmbed() {
-  const ranking = getUserRanking().slice(0, 10);
-
-  const description = ranking.map((u, index) => {
-    const medal =
-      index === 0 ? "🥇" :
-      index === 1 ? "🥈" :
-      index === 2 ? "🥉" :
-      `#${index + 1}`;
-
-    return `${medal} <@${u.id}> — **Lv ${u.level}** | XP: ${u.xp} | GP: ${u.gp} | Packs: ${u.packs}`;
-  }).join("\n");
-
-  return new EmbedBuilder()
-    .setTitle("🏆 Ranking de Rerollers")
-    .setColor("#ffd700")
-    .setDescription(description || "Todavía no hay usuarios en el ranking.")
-    .setFooter({ text: "Ordenado por nivel de usuario" })
-    .setTimestamp();
-}
-
-async function updateRanking() {
-  try {
-    const channel = await client.channels.fetch(process.env.RANKING_CHANNEL_ID);
-    if (!channel) return;
-
-    let message = null;
-
-    if (rankingMessageId) {
-      message = await channel.messages.fetch(rankingMessageId).catch(() => null);
-    }
-
-    const embed = buildRankingEmbed();
-
-    if (message) {
-      await message.edit({ embeds: [embed] });
-    } else {
-      const sent = await channel.send({ embeds: [embed] });
-
-      rankingMessageId = sent.id;
-      userSettings.rankingMessageId = rankingMessageId;
-      saveSettings();
-    }
-
-  } catch (err) {
-    console.log("❌ Error actualizando ranking:", err.message);
-  }
-}
-
 function startLoop() {
 
   // Ejecuta inmediatamente
