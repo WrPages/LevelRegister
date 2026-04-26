@@ -9,16 +9,13 @@ import {
   ButtonBuilder,
   ButtonStyle
 } from "discord.js";
-   import { handleXpUpdate } from "./pokemonSystem.js"; // arriba del archivo
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
-const pokemonDataset = JSON.parse(
-  fs.readFileSync("./pokemon_dataset.json", "utf8")
-);
+
 
 
 dotenv.config();
@@ -67,8 +64,12 @@ async function loadUserGPsCached() {
 if (!process.env.GIST_SETTINGS) {
   throw new Error("❌ FALTA GIST_SETTINGS en Railway");
 }
-
-
+if (!process.env.GIST_PROFILES) {
+  throw new Error("❌ FALTA GIST_PROFILES en Railway");
+}
+if (!process.env.RANKING_CHANNEL_ID) {
+  throw new Error("❌ FALTA RANKING_CHANNEL_ID en Railway");
+}
 
 const commandMap = {
   nombre: "name",
@@ -122,7 +123,7 @@ const GROUPS = {
     onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
   }
 };
-const POKEMON_BASE_URL = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
+
 
 // =============================
 let eliteUsers = {};
@@ -131,7 +132,10 @@ let trackingData = {};
 let usersByGroup = {};
 let liveTracker = {};
 let userPanels = {};
+let rankingMessageId = null;
 let userSettings = {};
+let userProfiles = {};
+let profileEditState = {};
 let editState = {};
 let lastManualEdit = {};
 let lastRun = Date.now();
@@ -194,7 +198,14 @@ function saveSettings() {
     updateGist(process.env.GIST_SETTINGS, userSettings, "settings.json");
   }, 2000);
 }
+let profileSaveTimeout;
 
+function saveProfiles() {
+  clearTimeout(profileSaveTimeout);
+  profileSaveTimeout = setTimeout(() => {
+    updateGist(process.env.GIST_PROFILES, userProfiles, "profiles.json");
+  }, 2000);
+}
 // =============================
 const colorCategories = {
   red: [
@@ -398,6 +409,9 @@ onlineIds = onlineData.onlineIds;
 userPanels = await getParsedGist(process.env.GIST_PANELS, "panels.json");
 trackingData = await getParsedGist(process.env.GIST_TRACKING, "tracking.json");
 userSettings = await getParsedGist(process.env.GIST_SETTINGS, "settings.json");
+userProfiles = await getParsedGist(process.env.GIST_PROFILES, "profiles.json");
+
+rankingMessageId = userSettings.rankingMessageId || null;
 
   sanitizeTracking();
 
@@ -407,10 +421,11 @@ userSettings = await getParsedGist(process.env.GIST_SETTINGS, "settings.json");
   // =============================
   console.log("🚀 Ejecutando actualización inicial...");
 
-  await runTrackingCycle();
-  await scanHeartbeats();
+await runTrackingCycle();
+await scanHeartbeats();
+await updateRanking();
 
-  await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
+await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
 
   console.log("✅ Datos sincronizados al iniciar");
 
@@ -549,31 +564,10 @@ if (id && eliteUsers[id]) {
 
 // ...
 
-const xpGained = xpPerSecond * seconds*10;
-
-// ⚡ ACTUALIZAR SISTEMA POKÉMON
-const threadId = userPanels[id]?.threadId;
-
-if (threadId) {
-  try {
-    const thread = await client.channels.fetch(threadId);
-
-    await handleXpUpdate(
-      id,
-      xpGained,
-      pokemonDataset,
-      thread
-    );
-
-    
-
-  } catch (err) {
-    console.log("❌ Error en sistema Pokémon:", err.message);
-  }
-}
 }
 
     await updatePanels();
+    await updateRanking();
 
   } catch (error) {
     console.error("❌ Error en runTrackingCycle:", error);
@@ -614,32 +608,6 @@ async function renderPanel(id, channel) {
 //ctx.font = "28px sans-serif";
 //ctx.fillText(`Nivel: ${level}`, 50, 80);
 // 🔥 Cargar estado real desde pokemonSystem (gist)
-const pokemonData = await getGist(process.env.GIST_POKEMON);
-
-const userPoke = pokemonData[id];
-
-let pokemonName = "egg";
-let pokemonLevel = 0;
-let gif = null;
-let isShiny = false;
-
-if (userPoke) {
-  pokemonName = userPoke.active.name;
- pokemonLevel = Math.min(100, Math.floor((userPoke.active.xp / 50) * 100));
-  isShiny = userPoke.active.shiny;
-
-  // misma lógica que pokemonSystem
-  const base = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
-
-  if (userPoke.active.stageIndex === -1) {
-    gif = isShiny ? `${base}s_egg.gif` : `${base}egg.gif`;
-  } else if (userPoke.active.legendary) {
-    gif = `${base}Legendary/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
-  } else {
-    gif = `${base}Gen${userPoke.active.generation}/${isShiny ? "Shiny" : "Normal"}/${isShiny ? "s_" : ""}${pokemonName}.gif`;
-  }
-}
-
 
 
 let role;
@@ -732,12 +700,9 @@ ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
 return {
-  file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" }),
-  gif,
-  pokemonName,
-  pokemonLevel,
-  isShiny
+  file: new AttachmentBuilder(canvas.toBuffer(), { name: "card.png" })
 };
+  
 }
 function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
@@ -913,7 +878,167 @@ liveTracker[id].instances = instances;
   }
 
 }
+function ensureUserProfile(id) {
+  if (!userProfiles[id]) {
+    userProfiles[id] = {
+      favoritePokemon: [],
+      favoriteCard: null,
+      favoriteDeck: null,
+      mostValuableCard: null,
+      rarestCard: null,
+      bestGP: "",
+      status: "",
+      quote: ""
+    };
+  }
 
+  return userProfiles[id];
+}
+
+function normalizePokemonName(name) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getPokemonGifUrl(name) {
+  const pokemon = normalizePokemonName(name);
+
+  return `https://raw.githubusercontent.com/WrPages/gif_database/main/${pokemon}.gif`;
+}
+
+function imageObjectToAttachment(imageObj, name) {
+  if (!imageObj?.data) return null;
+
+  const buffer = Buffer.from(imageObj.data, "base64");
+
+  return new AttachmentBuilder(buffer, { name });
+}
+
+function buildProfileMainEmbed(id) {
+  const profile = ensureUserProfile(id);
+  const t = trackingData[id] || {};
+  const s = liveTracker[id] || {};
+
+  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
+  const level = Math.floor(totalXP / 20);
+
+  return new EmbedBuilder()
+    .setTitle(`📘 Perfil de ${t.name || s.name || "Usuario"}`)
+    .setColor("#00ffcc")
+    .setDescription(profile.quote || "Perfil de reroll TCG Pocket")
+    .addFields(
+      { name: "⭐ Nivel", value: `${level}`, inline: true },
+      { name: "✨ XP", value: `${Math.floor(totalXP)}`, inline: true },
+      { name: "🏆 GP actual", value: `${t.gp || 0}`, inline: true },
+      { name: "🥇 Mejor GP", value: profile.bestGP || "No definido", inline: true },
+      { name: "🔥 Estado", value: profile.status || "No definido", inline: true }
+    );
+}
+
+function buildPokemonFavoriteEmbeds(id) {
+  const profile = ensureUserProfile(id);
+
+  if (!profile.favoritePokemon.length) {
+    return [
+      new EmbedBuilder()
+        .setTitle("❤️ Pokémon favoritos")
+        .setDescription("Todavía no hay Pokémon favoritos.")
+        .setColor("#ffcc00")
+    ];
+  }
+
+  return profile.favoritePokemon.slice(0, 3).map((name, index) =>
+    new EmbedBuilder()
+      .setTitle(`❤️ Pokémon favorito #${index + 1}: ${name}`)
+      .setColor("#ffcc00")
+      .setImage(getPokemonGifUrl(name))
+  );
+}
+
+async function updateUserProfileThread(id) {
+  const panel = userPanels[id];
+  if (!panel?.threadId) return;
+
+  const thread = await client.channels.fetch(panel.threadId).catch(() => null);
+  if (!thread) return;
+
+  const profile = ensureUserProfile(id);
+
+  const embeds = [
+    buildProfileMainEmbed(id),
+    ...buildPokemonFavoriteEmbeds(id)
+  ];
+
+  const files = [];
+
+  const favoriteCard = imageObjectToAttachment(profile.favoriteCard, "favorite-card.png");
+  const favoriteDeck = imageObjectToAttachment(profile.favoriteDeck, "favorite-deck.png");
+  const valuableCard = imageObjectToAttachment(profile.mostValuableCard, "valuable-card.png");
+  const rarestCard = imageObjectToAttachment(profile.rarestCard, "rarest-card.png");
+
+  if (favoriteCard) {
+    files.push(favoriteCard);
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle("🎴 Carta favorita")
+        .setImage("attachment://favorite-card.png")
+        .setColor("#ff66cc")
+    );
+  }
+
+  if (favoriteDeck) {
+    files.push(favoriteDeck);
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle("🃏 Mazo favorito")
+        .setImage("attachment://favorite-deck.png")
+        .setColor("#9966ff")
+    );
+  }
+
+  if (valuableCard) {
+    files.push(valuableCard);
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle("💎 Carta más valiosa")
+        .setImage("attachment://valuable-card.png")
+        .setColor("#00ffff")
+    );
+  }
+
+  if (rarestCard) {
+    files.push(rarestCard);
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle("🌟 Carta más rara")
+        .setImage("attachment://rarest-card.png")
+        .setColor("#ffd700")
+    );
+  }
+
+  let profileMsg = null;
+
+  if (panel.profileMessageId) {
+    profileMsg = await thread.messages.fetch(panel.profileMessageId).catch(() => null);
+  }
+
+  const payload = {
+    embeds: embeds.slice(0, 10),
+    files
+  };
+
+  if (profileMsg) {
+    await profileMsg.edit(payload);
+  } else {
+    profileMsg = await thread.send(payload);
+    userPanels[id].profileMessageId = profileMsg.id;
+    savePanels();
+  }
+}
 //let updatingPanels = false;
 // =============================
 async function updatePanels() {
@@ -931,8 +1056,7 @@ async function updatePanels() {
 
     if (!liveTracker[id]) continue;
 
-    const { file, gif, pokemonName, pokemonLevel, isShiny } =
-  await renderPanel(id, channel);
+const { file } = await renderPanel(id, channel);
 
   
     // =============================
@@ -1027,11 +1151,20 @@ if (userPanels[id]?.messageId) {
     const menu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`menu_${id}`)
-        .addOptions([
-          { label: "Cambiar fondo", value: "bg" },
-          { label: "Color nombre", value: "name" },
-          { label: "Color texto", value: "text" },
-        ])
+       .addOptions([
+  { label: "Cambiar fondo del panel", value: "bg" },
+  { label: "Color nombre", value: "name" },
+  { label: "Color texto", value: "text" },
+
+  { label: "Agregar Pokémon favorito", value: "pokemon" },
+  { label: "Subir carta favorita", value: "favoriteCard" },
+  { label: "Subir mazo favorito", value: "favoriteDeck" },
+  { label: "Subir carta más valiosa", value: "mostValuableCard" },
+  { label: "Subir carta más rara", value: "rarestCard" },
+  { label: "Mejor GP", value: "bestGP" },
+  { label: "Estado", value: "status" },
+  { label: "Frase del perfil", value: "quote" },
+])
     );
 
     await thread.send({
@@ -1039,22 +1172,17 @@ if (userPanels[id]?.messageId) {
       components: [menu],
     });
 
-const gifMessage = await thread.send({
-  embeds: [
-    new EmbedBuilder()
-      .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
-      .setDescription(`Nivel: ${pokemonLevel}`)
-      .setImage(gif)
-  ]
-});
+
 
 userPanels[id] = {
   messageId: sent.id,
   threadId: thread.id,
-//  gifMessageId: gifMessage.id
+  profileMessageId: null
 };
 
 savePanels();
+
+await updateUserProfileThread(id);
   }
 }
 
@@ -1074,6 +1202,70 @@ client.on("interactionCreate", async (i) => {
     if (option === "bg") {
       return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
     }
+
+    if (option === "pokemon") {
+  profileEditState[i.user.id] = "pokemon";
+  return i.reply({
+    content: "❤️ Escribe el nombre del Pokémon favorito. Máximo 3 Pokémon.",
+    ephemeral: true
+  });
+}
+
+if (option === "favoriteCard") {
+  profileEditState[i.user.id] = "favoriteCard";
+  return i.reply({
+    content: "🎴 Sube una imagen de tu carta favorita.",
+    ephemeral: true
+  });
+}
+
+if (option === "favoriteDeck") {
+  profileEditState[i.user.id] = "favoriteDeck";
+  return i.reply({
+    content: "🃏 Sube una imagen de tu mazo favorito.",
+    ephemeral: true
+  });
+}
+
+if (option === "mostValuableCard") {
+  profileEditState[i.user.id] = "mostValuableCard";
+  return i.reply({
+    content: "💎 Sube una imagen de tu carta más valiosa.",
+    ephemeral: true
+  });
+}
+
+if (option === "rarestCard") {
+  profileEditState[i.user.id] = "rarestCard";
+  return i.reply({
+    content: "🌟 Sube una imagen de tu carta más rara.",
+    ephemeral: true
+  });
+}
+
+if (option === "bestGP") {
+  profileEditState[i.user.id] = "bestGP";
+  return i.reply({
+    content: "🥇 Escribe tu mejor GP obtenido. Ejemplo: Top 100, 1870 GP, Champion, etc.",
+    ephemeral: true
+  });
+}
+
+if (option === "status") {
+  profileEditState[i.user.id] = "status";
+  return i.reply({
+    content: "🔥 Escribe tu estado. Ejemplo: Competitivo, Farmeando, Descanso.",
+    ephemeral: true
+  });
+}
+
+if (option === "quote") {
+  profileEditState[i.user.id] = "quote";
+  return i.reply({
+    content: "💬 Escribe tu frase personalizada.",
+    ephemeral: true
+  });
+}
 
    if (option === "name" || option === "text") {
   return i.reply({
@@ -1158,6 +1350,10 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 // =============================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
+  if (msg.content.toLowerCase().trim() === "ranking update") {
+  await updateRanking();
+  return msg.reply("✅ Ranking actualizado.");
+}
 
   // =============================
   // 🔥 1. TRACKING GLOBAL (SIEMPRE)
@@ -1180,7 +1376,21 @@ client.on("messageCreate", async (msg) => {
 
   if (!userSettings[id]) userSettings[id] = {};
 
+  const profile = ensureUserProfile(id);
+const activeProfileEdit = profileEditState[msg.author.id];
+
   const content = msg.content.toLowerCase().trim();
+  if (content === "pokemon reset") {
+  profile.favoritePokemon = [];
+  saveProfiles();
+  await updateUserProfileThread(id);
+  return msg.reply("✅ Pokémon favoritos reiniciados.");
+}
+
+if (content === "perfil actualizar") {
+  await updateUserProfileThread(id);
+  return msg.reply("✅ Perfil actualizado.");
+}
 
   // =============================
   // 🎨 COLOR
@@ -1217,29 +1427,94 @@ rgb(255,0,0)`);
     }
   }
 
+  if (activeProfileEdit === "pokemon") {
+  const pokemonName = msg.content.trim();
+
+  if (!pokemonName) {
+    return msg.reply("❌ Escribe un nombre válido.");
+  }
+
+  if (profile.favoritePokemon.length >= 3) {
+    delete profileEditState[msg.author.id];
+    return msg.reply("❌ Ya tienes 3 Pokémon favoritos. Usa `pokemon reset` para borrar la lista.");
+  }
+
+  profile.favoritePokemon.push(pokemonName);
+
+  delete profileEditState[msg.author.id];
+  saveProfiles();
+
+  await updateUserProfileThread(id);
+
+  return msg.reply(`✅ Pokémon favorito agregado: **${pokemonName}**`);
+}
+
+if (activeProfileEdit === "bestGP") {
+  profile.bestGP = msg.content.trim();
+  delete profileEditState[msg.author.id];
+  saveProfiles();
+  await updateUserProfileThread(id);
+  return msg.reply("✅ Mejor GP actualizado.");
+}
+
+if (activeProfileEdit === "status") {
+  profile.status = msg.content.trim();
+  delete profileEditState[msg.author.id];
+  saveProfiles();
+  await updateUserProfileThread(id);
+  return msg.reply("✅ Estado actualizado.");
+}
+
+if (activeProfileEdit === "quote") {
+  profile.quote = msg.content.trim();
+  delete profileEditState[msg.author.id];
+  saveProfiles();
+  await updateUserProfileThread(id);
+  return msg.reply("✅ Frase actualizada.");
+}
   // =============================
   // 🖼️ FONDO
   // =============================
-  if (msg.attachments.size > 0) {
-    const file = msg.attachments.first();
+if (msg.attachments.size > 0) {
+  const file = msg.attachments.first();
 
-    if (file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
-
-      const res = await fetch(file.url);
-      const buffer = await res.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString("base64");
-
-      userSettings[id].bg = {
-        type: "base64",
-        data: base64
-      };
-
-      saveSettings();
-      await forceRender(id);
-
-      return msg.reply("Fondo actualizado ✅");
-    }
+  if (!file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
+    return msg.reply("❌ Solo se aceptan imágenes png, jpg, jpeg o webp.");
   }
+
+  const res = await fetch(file.url);
+  const buffer = await res.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+
+  if (
+    activeProfileEdit === "favoriteCard" ||
+    activeProfileEdit === "favoriteDeck" ||
+    activeProfileEdit === "mostValuableCard" ||
+    activeProfileEdit === "rarestCard"
+  ) {
+    profile[activeProfileEdit] = {
+      type: "base64",
+      data: base64
+    };
+
+    delete profileEditState[msg.author.id];
+
+    saveProfiles();
+    await updateUserProfileThread(id);
+
+    return msg.reply("✅ Imagen guardada en tu perfil.");
+  }
+
+  userSettings[id].bg = {
+    type: "base64",
+    data: base64
+  };
+
+  saveSettings();
+  await forceRender(id);
+
+  return msg.reply("Fondo actualizado ✅");
+}
 });
 
 // =============================
@@ -1286,9 +1561,143 @@ function resetAllPokemon() {
   }
 }
 
+function getUserRanking() {
+  return Object.entries(trackingData)
+    .map(([id, data]) => {
+      const session = liveTracker[id] || {};
 
+      const totalXP = (data.xp || 0) + (session.sessionXP || 0);
+      const level = Math.floor(totalXP / 20);
 
-  
+      return {
+        id,
+        name: data.name || session.name || "Unknown",
+        level,
+        xp: Math.floor(totalXP),
+        gp: data.gp || 0,
+        packs: (data.totalpacks || 0) + (data.currentpacks || 0),
+        instances: data.recordInstances || 0
+      };
+    })
+    .sort((a, b) => b.level - a.level || b.xp - a.xp);
+}
+
+function buildRankingEmbed() {
+  const ranking = getUserRanking().slice(0, 10);
+
+  const description = ranking.map((u, index) => {
+    const medal =
+      index === 0 ? "🥇" :
+      index === 1 ? "🥈" :
+      index === 2 ? "🥉" :
+      `#${index + 1}`;
+
+    return `${medal} <@${u.id}> — **Lv ${u.level}** | XP: ${u.xp} | GP: ${u.gp} | Packs: ${u.packs}`;
+  }).join("\n");
+
+  return new EmbedBuilder()
+    .setTitle("🏆 Ranking de Rerollers")
+    .setColor("#ffd700")
+    .setDescription(description || "Todavía no hay usuarios en el ranking.")
+    .setFooter({ text: "Ordenado por nivel de usuario" })
+    .setTimestamp();
+}
+async function updateRanking() {
+  try {
+    const channel = await client.channels.fetch(process.env.RANKING_CHANNEL_ID);
+
+    if (!channel) return;
+
+    let message = null;
+
+    if (rankingMessageId) {
+      message = await channel.messages.fetch(rankingMessageId).catch(() => null);
+    }
+
+    const embed = buildRankingEmbed();
+
+    if (message) {
+      await message.edit({ embeds: [embed] });
+    } else {
+      const sent = await channel.send({ embeds: [embed] });
+      rankingMessageId = sent.id;
+    }
+
+  } catch (err) {
+    console.log("❌ Error actualizando ranking:", err.message);
+  }
+}
+
+function getUserRanking() {
+  return Object.entries(trackingData)
+    .map(([id, data]) => {
+      const session = liveTracker[id] || {};
+
+      const totalXP = (data.xp || 0) + (session.sessionXP || 0);
+      const level = Math.floor(totalXP / 20);
+
+      return {
+        id,
+        name: data.name || session.name || "Unknown",
+        level,
+        xp: Math.floor(totalXP),
+        gp: data.gp || 0,
+        packs: (data.totalpacks || 0) + (data.currentpacks || 0),
+        instances: data.recordInstances || 0
+      };
+    })
+    .sort((a, b) => b.level - a.level || b.xp - a.xp);
+}
+
+function buildRankingEmbed() {
+  const ranking = getUserRanking().slice(0, 10);
+
+  const description = ranking.map((u, index) => {
+    const medal =
+      index === 0 ? "🥇" :
+      index === 1 ? "🥈" :
+      index === 2 ? "🥉" :
+      `#${index + 1}`;
+
+    return `${medal} <@${u.id}> — **Lv ${u.level}** | XP: ${u.xp} | GP: ${u.gp} | Packs: ${u.packs}`;
+  }).join("\n");
+
+  return new EmbedBuilder()
+    .setTitle("🏆 Ranking de Rerollers")
+    .setColor("#ffd700")
+    .setDescription(description || "Todavía no hay usuarios en el ranking.")
+    .setFooter({ text: "Ordenado por nivel de usuario" })
+    .setTimestamp();
+}
+
+async function updateRanking() {
+  try {
+    const channel = await client.channels.fetch(process.env.RANKING_CHANNEL_ID);
+    if (!channel) return;
+
+    let message = null;
+
+    if (rankingMessageId) {
+      message = await channel.messages.fetch(rankingMessageId).catch(() => null);
+    }
+
+    const embed = buildRankingEmbed();
+
+    if (message) {
+      await message.edit({ embeds: [embed] });
+    } else {
+      const sent = await channel.send({ embeds: [embed] });
+
+      rankingMessageId = sent.id;
+      userSettings.rankingMessageId = rankingMessageId;
+      saveSettings();
+    }
+
+  } catch (err) {
+    console.log("❌ Error actualizando ranking:", err.message);
+  }
+}
+
 function startLoop() {
 
   // Ejecuta inmediatamente
