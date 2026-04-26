@@ -1628,26 +1628,6 @@ async function updateRanking() {
   }
 }
 
-function getUserRanking() {
-  return Object.entries(trackingData)
-    .map(([id, data]) => {
-      const session = liveTracker[id] || {};
-
-      const totalXP = (data.xp || 0) + (session.sessionXP || 0);
-      const level = Math.floor(totalXP / 20);
-
-      return {
-        id,
-        name: data.name || session.name || "Unknown",
-        level,
-        xp: Math.floor(totalXP),
-        gp: data.gp || 0,
-        packs: (data.totalpacks || 0) + (data.currentpacks || 0),
-        instances: data.recordInstances || 0
-      };
-    })
-    .sort((a, b) => b.level - a.level || b.xp - a.xp);
-}
 
 function buildRankingEmbed() {
   const ranking = getUserRanking().slice(0, 10);
