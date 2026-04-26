@@ -915,14 +915,6 @@ function encodeGifUrl(url) {
     .join("/");
 }
 
-function normalizePokemonName(name) {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 function findPokemonInDataset(name) {
   const cleanName = normalizePokemonName(name);
