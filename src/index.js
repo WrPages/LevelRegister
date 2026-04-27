@@ -907,8 +907,6 @@ function ensureUserProfile(id) {
       rarestCard: null,
       bestGP: null,
       maxRank: null,
-      extraImage1: null,
-      extraImage2: null,
       profileBg: null,
       customLabels: {},
       status: "",
@@ -1091,79 +1089,61 @@ async function buildProfileCollage(id) {
   ctx.textAlign = "center";
   ctx.fillText(label("title", "Perfil del jugador"), 450, 75);
 
-  const slots = [
-    // Fila superior: 3 cartas
-    {
-      key: "favoriteCard",
-      label: label("favoriteCard", "Carta favorita"),
-      x: 45,
-      y: 150,
-      w: 240,
-      h: 320
-    },
-    {
-      key: "mostValuableCard",
-      label: label("mostValuableCard", "Carta más valiosa"),
-      x: 330,
-      y: 150,
-      w: 240,
-      h: 320
-    },
-    {
-      key: "rarestCard",
-      label: label("rarestCard", "Carta más deseada"),
-      x: 615,
-      y: 150,
-      w: 240,
-      h: 320
-    },
+const slots = [
+  // Fila superior
+  {
+    key: "favoriteCard",
+    label: label("favoriteCard", "Carta favorita"),
+    x: 45,
+    y: 150,
+    w: 240,
+    h: 320
+  },
+  {
+    key: "mostValuableCard",
+    label: label("mostValuableCard", "Carta más valiosa"),
+    x: 330,
+    y: 150,
+    w: 240,
+    h: 320
+  },
+  {
+    key: "rarestCard",
+    label: label("rarestCard", "Carta más deseada"),
+    x: 615,
+    y: 150,
+    w: 240,
+    h: 320
+  },
 
-    // Mazo favorito grande
-    {
-      key: "favoriteDeck",
-      label: label("favoriteDeck", "Mazo favorito"),
-      x: 70,
-      y: 570,
-      w: 760,
-      h: 430
-    },
+  // Mazo grande
+  {
+    key: "favoriteDeck",
+    label: label("favoriteDeck", "Mazo favorito"),
+    x: 70,
+    y: 570,
+    w: 760,
+    h: 430
+  },
 
-    // Fila media inferior: rango y mejor GP
-    {
-      key: "maxRank",
-      label: label("maxRank", "Rango máximo alcanzado"),
-      x: 80,
-      y: 1110,
-      w: 330,
-      h: 300
-    },
-    {
-      key: "bestGP",
-      label: label("bestGP", "Mejor GP"),
-      x: 490,
-      y: 1110,
-      w: 330,
-      h: 300
-    },
-
-    // Fila extra debajo del mazo
-    {
-      key: "extraImage1",
-      label: label("extraImage1", "Imagen extra 1"),
-      x: 80,
-      y: 1470,
-      w: 330,
-      h: 90
-    },
-    {
-      key: "extraImage2",
-      label: label("extraImage2", "Imagen extra 2"),
-      x: 490,
-      y: 1470,
-      w: 330,
-      h: 90
-    }
-  ];
+  // Parte inferior
+  {
+    key: "maxRank",
+    label: label("maxRank", "Rango máximo alcanzado"),
+    x: 80,
+    y: 1110,
+    w: 330,
+    h: 300
+  },
+  {
+    key: "bestGP",
+    label: label("bestGP", "Mejor GP"),
+    x: 490,
+    y: 1110,
+    w: 330,
+    h: 300
+  }
+];
 
   function drawPlaceholder(x, y, w, h) {
     ctx.fillStyle = "rgba(255,255,255,0.10)";
