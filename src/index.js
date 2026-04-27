@@ -1046,141 +1046,120 @@ function buildPokemonFavoriteEmbeds(id) {
 async function buildProfileCollage(id) {
   const profile = ensureUserProfile(id);
 
-  const canvas = createCanvas(900, 900);
+  const canvas = createCanvas(1200, 1000);
   const ctx = canvas.getContext("2d");
 
-  // Fondo nuevo, NO boceto
-  const gradient = ctx.createLinearGradient(0, 0, 900, 900);
+  const gradient = ctx.createLinearGradient(0, 0, 1200, 1000);
   gradient.addColorStop(0, "#111827");
   gradient.addColorStop(1, "#020617");
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 900, 900);
+  ctx.fillRect(0, 0, 1200, 1000);
 
-  // Título
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 42px sans-serif";
+  ctx.font = "bold 52px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("Perfil del jugador", 450, 65);
+  ctx.fillText("Perfil del jugador", 600, 70);
 
   const slots = [
     {
       key: "favoriteCard",
       label: "Carta favorita",
-      x: 80,
-      y: 110,
+      x: 70,
+      y: 130,
       w: 260,
-      h: 230
+      h: 300
     },
     {
       key: "mostValuableCard",
       label: "Carta más valiosa",
-      x: 560,
-      y: 110,
+      x: 470,
+      y: 130,
       w: 260,
-      h: 230
+      h: 300
+    },
+    {
+      key: "rarestCard",
+      label: "Carta más deseada",
+      x: 870,
+      y: 130,
+      w: 260,
+      h: 300
     },
     {
       key: "favoriteDeck",
       label: "Mazo favorito",
       x: 80,
-      y: 370,
-      w: 260,
-      h: 230
+      y: 500,
+      w: 620,
+      h: 390
     },
     {
       key: "maxRank",
-      label: "Rango máximo",
-      x: 560,
-      y: 370,
-      w: 260,
-      h: 230
+      label: "Rango máximo alcanzado",
+      x: 810,
+      y: 530,
+      w: 300,
+      h: 330
     },
     {
       key: "bestGP",
       label: "Mejor GP",
-      x: 80,
-      y: 630,
-      w: 260,
-      h: 220
-    },
-    {
-      key: "rarestCard",
-      label: "Carta más deseada",
-      x: 560,
-      y: 630,
-      w: 260,
-      h: 220
+      x: 810,
+      y: 780,
+      w: 300,
+      h: 180
     }
   ];
 
-  function drawCard(slot) {
-    ctx.fillStyle = "#1f2937";
+  function drawPlaceholder(x, y, w, h) {
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
     ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 28);
+    ctx.roundRect(x, y, w, h, 24);
     ctx.fill();
 
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 28);
-    ctx.stroke();
-
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = "#94a3b8";
     ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y + 38);
+    ctx.fillText("Sin imagen", x + w / 2, y + h / 2 + 8);
   }
 
-  async function drawImage(slot) {
+  async function drawSlot(slot) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 30px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y);
+
+    const imgX = slot.x;
+    const imgY = slot.y + 25;
+    const imgW = slot.w;
+    const imgH = slot.h;
+
     const imgObj = profile[slot.key];
 
-    const imgX = slot.x + 25;
-    const imgY = slot.y + 60;
-    const imgW = slot.w - 50;
-    const imgH = slot.h - 85;
-
-    ctx.fillStyle = "#0f172a";
-    ctx.beginPath();
-    ctx.roundRect(imgX, imgY, imgW, imgH, 18);
-    ctx.fill();
-
     if (!imgObj?.data) {
-      ctx.fillStyle = "#64748b";
-      ctx.font = "20px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("Sin imagen", slot.x + slot.w / 2, imgY + imgH / 2 + 8);
+      drawPlaceholder(imgX, imgY, imgW, imgH);
       return;
     }
 
-try {
-  const img = await loadImage(Buffer.from(imgObj.data, "base64"));
+    try {
+      const img = await loadImage(Buffer.from(imgObj.data, "base64"));
 
-  // 👇 Esto evita que se corte la imagen
-  const ratio = Math.min(imgW / img.width, imgH / img.height);
+      const ratio = Math.min(imgW / img.width, imgH / img.height);
+      const newW = img.width * ratio;
+      const newH = img.height * ratio;
 
-  const newW = img.width * ratio;
-  const newH = img.height * ratio;
+      const dx = imgX + (imgW - newW) / 2;
+      const dy = imgY + (imgH - newH) / 2;
 
-  const dx = imgX + (imgW - newW) / 2;
-  const dy = imgY + (imgH - newH) / 2;
-
-  ctx.save();
-
-  ctx.beginPath();
-  ctx.roundRect(imgX, imgY, imgW, imgH, 18);
-  ctx.clip();
-
-  ctx.drawImage(img, dx, dy, newW, newH);
-
-  ctx.restore();
-} catch (err) {
-  console.error(`Error dibujando ${slot.key}:`, err.message);
-}
+      ctx.drawImage(img, dx, dy, newW, newH);
+    } catch (err) {
+      console.error(`Error dibujando ${slot.key}:`, err.message);
+      drawPlaceholder(imgX, imgY, imgW, imgH);
+    }
   }
 
   for (const slot of slots) {
-    drawCard(slot);
-    await drawImage(slot);
+    await drawSlot(slot);
   }
 
   const fileName = `perfil-collage-${id}-${Date.now()}.png`;
