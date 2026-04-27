@@ -1050,122 +1050,149 @@ async function buildProfileCollage(id) {
   const ctx = canvas.getContext("2d");
 
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, 900, 900);
 
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 5;
 
+  // Marco principal
   ctx.beginPath();
   ctx.roundRect(20, 20, 860, 860, 120);
   ctx.stroke();
 
-  ctx.fillStyle = "#000";
-  ctx.font = "34px Righteous";
-
   const slots = [
     {
       key: "favoriteCard",
-      label: "Carta favorita",
+      label: ["Carta favorita"],
+      labelX: 65,
+      labelY: 105,
       x: 135,
       y: 135,
       w: 130,
-      h: 165,
-      textX: 65,
-      textY: 105
+      h: 160,
+      radius: 22
     },
     {
       key: "favoriteDeck",
-      label: "Mazo favorito",
-      x: 150,
-      y: 390,
-      w: 135,
-      h: 170,
-      textX: 85,
-      textY: 355
+      label: ["Mazo favorito"],
+      labelX: 85,
+      labelY: 350,
+      x: 70,
+      y: 360,
+      w: 275,
+      h: 235,
+      radius: 42
     },
     {
       key: "bestGP",
-      label: "mejor gp",
+      label: ["mejor gp"],
+      labelX: 115,
+      labelY: 645,
       x: 110,
-      y: 665,
+      y: 660,
       w: 190,
-      h: 165,
-      textX: 115,
-      textY: 645
+      h: 170,
+      radius: 0
     },
     {
       key: "mostValuableCard",
-      label: "Carta mas\nvaliosa",
+      label: ["Carta mas", "valiosa"],
+      labelX: 570,
+      labelY: 105,
       x: 630,
       y: 160,
       w: 100,
       h: 145,
-      textX: 570,
-      textY: 105
+      radius: 18
     },
     {
       key: "maxRank",
-      label: "rango máximo\nalcanzado",
+      label: ["rango máximo", "alcanzado"],
+      labelX: 555,
+      labelY: 345,
       x: 560,
       y: 395,
       w: 230,
       h: 185,
-      textX: 555,
-      textY: 345
+      radius: 35
     },
     {
       key: "rarestCard",
-      label: "Carta mas\ndeseada",
+      label: ["Carta mas", "deseada"],
+      labelX: 575,
+      labelY: 615,
       x: 580,
-      y: 675,
+      y: 670,
       w: 180,
-      h: 150,
-      textX: 575,
-      textY: 615
+      h: 155,
+      radius: 0
     }
   ];
 
-  for (const slot of slots) {
-    const lines = slot.label.split("\n");
+  function drawBox(slot) {
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 4;
+
+    ctx.beginPath();
+
+    if (slot.radius > 0) {
+      ctx.roundRect(slot.x, slot.y, slot.w, slot.h, slot.radius);
+    } else {
+      ctx.rect(slot.x, slot.y, slot.w, slot.h);
+    }
+
+    ctx.stroke();
+  }
+
+  function drawCenteredText(lines, x, y) {
+    ctx.fillStyle = "#000000";
+    ctx.font = "34px monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
 
     lines.forEach((line, index) => {
-      ctx.fillText(line, slot.textX, slot.textY + index * 40);
+      ctx.fillText(line, x, y + index * 40);
     });
+  }
 
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 20);
-    ctx.stroke();
-
+  async function drawImageInSlot(slot) {
     const imgObj = profile[slot.key];
+    if (!imgObj?.data) return;
 
-    if (imgObj?.data) {
-      try {
-        const img = await loadImage(Buffer.from(imgObj.data, "base64"));
+    try {
+      const img = await loadImage(Buffer.from(imgObj.data, "base64"));
 
-        const ratio = Math.max(slot.w / img.width, slot.h / img.height);
-        const newW = img.width * ratio;
-        const newH = img.height * ratio;
-        const dx = slot.x + (slot.w - newW) / 2;
-        const dy = slot.y + (slot.h - newH) / 2;
+      const ratio = Math.max(slot.w / img.width, slot.h / img.height);
+      const newW = img.width * ratio;
+      const newH = img.height * ratio;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 18);
-        ctx.clip();
-        ctx.drawImage(img, dx, dy, newW, newH);
-        ctx.restore();
+      const dx = slot.x + (slot.w - newW) / 2;
+      const dy = slot.y + (slot.h - newH) / 2;
 
-        ctx.strokeStyle = "#000";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 20);
-        ctx.stroke();
-      } catch (err) {
-        console.error(`Error dibujando ${slot.key}:`, err.message);
+      ctx.save();
+
+      ctx.beginPath();
+      if (slot.radius > 0) {
+        ctx.roundRect(slot.x, slot.y, slot.w, slot.h, slot.radius);
+      } else {
+        ctx.rect(slot.x, slot.y, slot.w, slot.h);
       }
+      ctx.clip();
+
+      ctx.drawImage(img, dx, dy, newW, newH);
+
+      ctx.restore();
+
+      drawBox(slot);
+    } catch (err) {
+      console.error(`Error dibujando ${slot.key}:`, err.message);
     }
+  }
+
+  for (const slot of slots) {
+    drawCenteredText(slot.label, slot.labelX, slot.labelY);
+    drawBox(slot);
+    await drawImageInSlot(slot);
   }
 
   return new AttachmentBuilder(canvas.toBuffer("image/png"), {
