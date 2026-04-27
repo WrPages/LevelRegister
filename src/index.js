@@ -969,22 +969,19 @@ function findPokemonInDataset(name) {
 }
 
 function getPokemonGifUrlFromDataset(name) {
-  const pokemon = findPokemonInDataset(name);
 
-  if (!pokemon) return null;
+  const isShiny = name.startsWith("s_");
+  const cleanName = name.replace(/^s_/, "");
 
-  const fileName = `${pokemon.name}.gif`;
+  const data = pokemonDataset[cleanName];
+  if (!data) return null;
 
-  let url;
+  // 👇 usa shiny si existe
+  if (isShiny && data.shiny) return data.shiny;
 
-  if (pokemon.legendary) {
-    url = `${GIF_BASE_URL}Legendary/Normal/${fileName}`;
-  } else {
-    url = `${GIF_BASE_URL}Gen${pokemon.generation}/Normal/${fileName}`;
-  }
-
-  return encodeGifUrl(url);
+  return data.gif || data.image || null;
 }
+
 
 
 
@@ -1020,31 +1017,28 @@ function buildProfileMainEmbed(id) {
 
 function buildPokemonFavoriteEmbeds(id) {
   const profile = ensureUserProfile(id);
+  const pokemons = profile.favoritePokemon || [];
 
-  if (!profile.favoritePokemon.length) {
-    return [
-      new EmbedBuilder()
-        .setTitle("❤️ Pokémon favoritos")
-        .setDescription("Todavía no hay Pokémon favoritos.")
-        .setColor("#ffcc00")
-    ];
-  }
+  if (pokemons.length === 0) return [];
 
-  return profile.favoritePokemon.slice(0, 3).map((pokemon, index) => {
-    const name = typeof pokemon === "string" ? pokemon : pokemon.name;
-    const gif = typeof pokemon === "string"
-      ? getPokemonGifUrlFromDataset(name)
-      : pokemon.gif;
+  const embed = new EmbedBuilder()
+    .setColor(0x00ffff)
+    .setTitle("Pokemones favoritos");
 
-    const embed = new EmbedBuilder()
-      .setTitle(`❤️ Pokémon favorito #${index + 1}`)
-      .setDescription(`**${name}**`)
-      .setColor("#ffcc00");
-
-    if (gif) embed.setThumbnail(gif);
-
-    return embed;
+  // 👇 metemos los 3 gifs en una sola imagen vertical
+  const images = pokemons.slice(0, 3).map(p => {
+    const name = p.toLowerCase();
+    return getPokemonGif(name);
   });
+
+  // solo usa la primera como imagen principal (limitación de Discord)
+  embed.setImage(images[0]);
+
+  // los otros como campos invisibles con imagen
+  if (images[1]) embed.addFields({ name: "\u200B", value: images[1] });
+  if (images[2]) embed.addFields({ name: "\u200B", value: images[2] });
+
+  return [embed];
 }
 async function buildProfileCollage(id) {
   const profile = ensureUserProfile(id);
