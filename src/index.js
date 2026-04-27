@@ -75,9 +75,7 @@ if (!process.env.PROFILE_FORUM_CHANNEL_ID) {
 if (!process.env.RANKING_CHANNEL_ID) {
   throw new Error("❌ FALTA RANKING_CHANNEL_ID en Railway");
 }
-const pokemonDataset = JSON.parse(
-  fs.readFileSync("./pokemon_dataset.json", "utf8")
-);
+
 const commandMap = {
   nombre: "name",
   name: "name",
@@ -926,62 +924,6 @@ function normalizePokemonName(name) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 }
-const GIF_BASE_URL = "https://raw.githubusercontent.com/WrPages/gif_database/main/";
-
-function encodeGifUrl(url) {
-  return url
-    .split("/")
-    .map((part, index) => index < 3 ? part : encodeURIComponent(part))
-    .join("/");
-}
-
-
-function findPokemonInDataset(name) {
-  const cleanName = normalizePokemonName(name);
-
-  if (!pokemonDataset) return null;
-
-  for (const line of pokemonDataset.evolution_lines || []) {
-    const stageIndex = line.stages.findIndex(
-      p => normalizePokemonName(p) === cleanName
-    );
-
-    if (stageIndex !== -1) {
-      return {
-        name: normalizePokemonName(line.stages[stageIndex]),
-        generation: line.generation,
-        legendary: false
-      };
-    }
-  }
-
-  for (const legendary of pokemonDataset.legendary || []) {
-    if (normalizePokemonName(legendary) === cleanName) {
-      return {
-        name: normalizePokemonName(legendary),
-        generation: null,
-        legendary: true
-      };
-    }
-  }
-
-  return null;
-}
-
-function getPokemonGifUrlFromDataset(name) {
-
-  const isShiny = name.startsWith("s_");
-  const cleanName = name.replace(/^s_/, "");
-
-  const data = pokemonDataset[cleanName];
-  if (!data) return null;
-
-  // 👇 usa shiny si existe
-  if (isShiny && data.shiny) return data.shiny;
-
-  return data.gif || data.image || null;
-}
-
 
 
 
@@ -1015,31 +957,84 @@ function buildProfileMainEmbed(id) {
     );
 }
 
-function buildPokemonFavoriteEmbeds(id) {
+const POKEMON_GIF_ROOT = process.cwd();
+
+function parsePokemonName(rawName) {
+  const raw = rawName.trim();
+
+  const isShiny = /^s[_\-\s]/i.test(raw) || /^shiny\s+/i.test(raw);
+
+  const clean = raw
+    .replace(/^s[_\-\s]/i, "")
+    .replace(/^shiny\s+/i, "");
+
+  return {
+    isShiny,
+    cleanName: normalizePokemonName(clean)
+  };
+}
+
+function findPokemonGifFile(rawName) {
+  const { isShiny, cleanName } = parsePokemonName(rawName);
+
+  const typeFolder = isShiny ? "Shiny" : "Normal";
+
+  for (let gen = 1; gen <= 8; gen++) {
+    const dir = path.join(POKEMON_GIF_ROOT, `Gen${gen}`, typeFolder);
+
+    if (!fs.existsSync(dir)) continue;
+
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+      if (!file.toLowerCase().endsWith(".gif")) continue;
+
+      const baseName = file
+        .replace(/\.gif$/i, "")
+        .replace(/^s[_\-\s]/i, "");
+
+      if (normalizePokemonName(baseName) === cleanName) {
+        return path.join(dir, file);
+      }
+    }
+  }
+
+  return null;
+}
+
+async function buildPokemonFavoriteEmbeds(id) {
   const profile = ensureUserProfile(id);
   const pokemons = profile.favoritePokemon || [];
 
-  if (pokemons.length === 0) return [];
+  if (pokemons.length === 0) {
+    return { embeds: [], files: [] };
+  }
 
-  const embed = new EmbedBuilder()
-    .setColor(0x00ffff)
-    .setTitle("Pokemones favoritos");
+  const embeds = [];
+  const files = [];
 
-  // 👇 metemos los 3 gifs en una sola imagen vertical
-  const images = pokemons.slice(0, 3).map(p => {
-    const name = p.toLowerCase();
-    return getPokemonGif(name);
-  });
+  for (const p of pokemons.slice(0, 3)) {
+    if (!p.gifPath || !fs.existsSync(p.gifPath)) continue;
 
-  // solo usa la primera como imagen principal (limitación de Discord)
-  embed.setImage(images[0]);
+    const fileName = `pokemon-${id}-${Date.now()}-${files.length}.gif`;
 
-  // los otros como campos invisibles con imagen
-  if (images[1]) embed.addFields({ name: "\u200B", value: images[1] });
-  if (images[2]) embed.addFields({ name: "\u200B", value: images[2] });
+    files.push(
+      new AttachmentBuilder(p.gifPath, {
+        name: fileName
+      })
+    );
 
-  return [embed];
+    embeds.push(
+      new EmbedBuilder()
+        .setColor(0x00ffff)
+        .setTitle(`❤️ ${p.displayName}`)
+        .setImage(`attachment://${fileName}`)
+    );
+  }
+
+  return { embeds, files };
 }
+
 async function buildProfileCollage(id) {
   const profile = ensureUserProfile(id);
 
@@ -1212,19 +1207,20 @@ async function updateUserProfilePost(id) {
     profileMsg = await post.messages.fetch(panel.profileMessageId).catch(() => null);
   }
 
-  const pokemonEmbeds = buildPokemonFavoriteEmbeds(id);
+const pokemonData = await buildPokemonFavoriteEmbeds(id);
 
-  const payload = {
-    content: "",
+const payload = {
+  content: "",
 
-    // 👇 AQUÍ VA LA IMAGEN COMO ARCHIVO (NO embed)
-    files: [collage.file],
+  files: [
+    collage.file,
+    ...pokemonData.files
+  ],
 
-    // 👇 SOLO los Pokémon como embed
-    embeds: pokemonEmbeds.slice(0, 10),
+  embeds: pokemonData.embeds.slice(0, 10),
 
-    attachments: []
-  };
+  attachments: []
+};
 
   if (profileMsg) {
     await profileMsg.edit(payload);
@@ -1632,16 +1628,18 @@ if (activeProfileEdit === "pokemon") {
     return msg.reply("❌ Ya tienes 3 Pokémon favoritos. Usa `pokemon reset` para borrar la lista.");
   }
 
-  const gif = getPokemonGifUrlFromDataset(pokemonName);
 
-  if (!gif) {
-    return msg.reply("❌ No encontré ese Pokémon en la base de datos. Revisa el nombre.");
-  }
+const gifPath = findPokemonGifFile(pokemonName);
 
-  profile.favoritePokemon.push({
-    name: normalizePokemonName(pokemonName),
-    gif
-  });
+if (!gifPath) {
+  return msg.reply("❌ No encontré ese GIF en las carpetas Gen1 a Gen8. Revisa el nombre.");
+}
+
+profile.favoritePokemon.push({
+  name: parsePokemonName(pokemonName).cleanName,
+  displayName: pokemonName.trim(),
+  gifPath
+});
 
   delete profileEditState[msg.author.id];
   saveProfiles();
