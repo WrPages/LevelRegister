@@ -1379,8 +1379,8 @@ client.on("interactionCreate", async (i) => {
     const id = i.user.id;
     const option = i.values[0];
 
-   if (option === "bg") {
-  profileEditState[i.user.id] = "bg";
+if (option === "bg") {
+  profileEditState[i.user.id] = "panelBg";
 
   return i.reply({
     content: "🖼️ Sube una imagen para el fondo del panel principal.",
@@ -1696,15 +1696,19 @@ if (activeProfileEdit === "quote") {
 if (msg.attachments.size > 0) {
   const file = msg.attachments.first();
 
-  if (!file.url.match(/\.(png|jpg|jpeg|webp)(\?.*)?$/i)) {
-    return msg.reply("❌ Solo se aceptan imágenes png, jpg, jpeg o webp.");
-  }
-
   if (!activeProfileEdit) {
     return msg.reply("❌ Primero selecciona en el menú qué imagen quieres cambiar.");
   }
 
-  const profileImageFields = [
+  if (!file.url.match(/\.(png|jpg|jpeg|webp)(\?.*)?$/i)) {
+    return msg.reply("❌ Solo se aceptan imágenes png, jpg, jpeg o webp.");
+  }
+
+  const res = await fetch(file.url);
+  const buffer = await res.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+
+  const profileFields = [
     "favoriteCard",
     "favoriteDeck",
     "mostValuableCard",
@@ -1714,16 +1718,7 @@ if (msg.attachments.size > 0) {
     "profileBg"
   ];
 
-  const panelImageFields = [
-    "bg"
-  ];
-
-  const res = await fetch(file.url);
-  const arrayBuffer = await res.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
-
-  // Imágenes del canvas del perfil
-  if (profileImageFields.includes(activeProfileEdit)) {
+  if (profileFields.includes(activeProfileEdit)) {
     profile[activeProfileEdit] = {
       type: "base64",
       data: base64
@@ -1734,11 +1729,10 @@ if (msg.attachments.size > 0) {
     saveProfiles();
     await updateUserProfilePost(id);
 
-    return msg.reply(`✅ Imagen actualizada: ${activeProfileEdit}`);
+    return msg.reply(`✅ Imagen actualizada en perfil: ${activeProfileEdit}`);
   }
 
-  // Fondo del panel principal
-  if (panelImageFields.includes(activeProfileEdit)) {
+  if (activeProfileEdit === "panelBg") {
     userSettings[id].bg = {
       type: "base64",
       data: base64
@@ -1749,7 +1743,7 @@ if (msg.attachments.size > 0) {
     saveSettings();
     await forceRender(id);
 
-    return msg.reply("✅ Fondo del panel actualizado.");
+    return msg.reply("✅ Fondo del panel principal actualizado.");
   }
 
   return msg.reply(`❌ Tipo de edición no reconocido: ${activeProfileEdit}`);
