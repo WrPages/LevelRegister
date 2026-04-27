@@ -1180,7 +1180,10 @@ const slots = [
       const dx = imgX + (imgW - w) / 2;
       const dy = imgY + (imgH - h) / 2;
 
-      ctx.drawImage(img, dx, dy, w, h);
+      ctx.save();
+ctx.globalAlpha = 0.85; // 1 = normal, 0.5 = más transparente
+ctx.drawImage(img, dx, dy, w, h);
+ctx.restore();
     } catch (err) {
       console.error(`Error dibujando ${slot.key}:`, err.message);
       drawPlaceholder(imgX, imgY, imgW, imgH);
