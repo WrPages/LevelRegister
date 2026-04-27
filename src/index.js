@@ -1122,7 +1122,7 @@ const slots = [
     label: label("favoriteDeck", "Mazo favorito"),
     x: 70,
     y: 570,
-    w: 760,
+    w: 600,
     h: 430
   },
 
