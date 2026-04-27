@@ -1198,7 +1198,8 @@ async function updateUserProfilePost(id) {
   const collage = await buildProfileCollage(id);
 
   const embeds = [
-    buildProfileMainEmbed(id)
+    new EmbedBuilder()
+      .setColor(0x00ffff)
       .setImage(`attachment://${collage.fileName}`),
     ...buildPokemonFavoriteEmbeds(id)
   ];
@@ -1210,6 +1211,7 @@ async function updateUserProfilePost(id) {
   }
 
   const payload = {
+    content: "",
     embeds: embeds.slice(0, 10),
     files: [collage.file],
     attachments: []
