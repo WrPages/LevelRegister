@@ -1436,6 +1436,13 @@ if (option === "maxRank") {
     ephemeral: true
   });
 }
+    if (option === "profileBg") {
+  profileEditState[i.user.id] = "profileBg";
+  return i.reply({
+    content: "🖼️ Sube la imagen que quieres usar como fondo del perfil.",
+    ephemeral: true
+  });
+}
 
 if (option === "status") {
   profileEditState[i.user.id] = "status";
@@ -1697,9 +1704,7 @@ activeProfileEdit === "mostValuableCard" ||
 activeProfileEdit === "rarestCard" ||
 activeProfileEdit === "bestGP" ||
 activeProfileEdit === "maxRank" ||
-    activeProfileEdit === "profileBg" ||
-activeProfileEdit === "extraImage1" ||
-activeProfileEdit === "extraImage2"
+activeProfileEdit === "profileBg" 
   ) {
     profile[activeProfileEdit] = {
       type: "base64",
