@@ -1152,25 +1152,30 @@ async function buildProfileCollage(id) {
       return;
     }
 
-    try {
-      const img = await loadImage(Buffer.from(imgObj.data, "base64"));
+try {
+  const img = await loadImage(Buffer.from(imgObj.data, "base64"));
 
-      const ratio = Math.max(imgW / img.width, imgH / img.height);
-      const newW = img.width * ratio;
-      const newH = img.height * ratio;
+  // 👇 Esto evita que se corte la imagen
+  const ratio = Math.min(imgW / img.width, imgH / img.height);
 
-      const dx = imgX + (imgW - newW) / 2;
-      const dy = imgY + (imgH - newH) / 2;
+  const newW = img.width * ratio;
+  const newH = img.height * ratio;
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(imgX, imgY, imgW, imgH, 18);
-      ctx.clip();
-      ctx.drawImage(img, dx, dy, newW, newH);
-      ctx.restore();
-    } catch (err) {
-      console.error(`Error dibujando ${slot.key}:`, err.message);
-    }
+  const dx = imgX + (imgW - newW) / 2;
+  const dy = imgY + (imgH - newH) / 2;
+
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.roundRect(imgX, imgY, imgW, imgH, 18);
+  ctx.clip();
+
+  ctx.drawImage(img, dx, dy, newW, newH);
+
+  ctx.restore();
+} catch (err) {
+  console.error(`Error dibujando ${slot.key}:`, err.message);
+}
   }
 
   for (const slot of slots) {
