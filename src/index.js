@@ -1083,65 +1083,58 @@ async function buildProfileCollage(id) {
 
   const label = (key, fallback) => profile.customLabels?.[key] || fallback;
 
-  // Título principal
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 52px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(label("title", "Perfil del jugador"), 450, 75);
+
 
 const slots = [
-  // Fila superior
   {
     key: "favoriteCard",
     label: label("favoriteCard", "Carta favorita"),
-    x: 45,
-    y: 150,
-    w: 240,
-    h: 320
+    x: 55,
+    y: 70,
+    w: 220,
+    h: 300
   },
   {
     key: "mostValuableCard",
     label: label("mostValuableCard", "Carta más valiosa"),
-    x: 330,
-    y: 150,
-    w: 240,
-    h: 320
+    x: 340,
+    y: 70,
+    w: 220,
+    h: 300
   },
   {
     key: "rarestCard",
     label: label("rarestCard", "Carta más deseada"),
-    x: 615,
-    y: 150,
-    w: 240,
-    h: 320
+    x: 625,
+    y: 70,
+    w: 220,
+    h: 300
   },
 
-  // Mazo grande
-{
-  key: "favoriteDeck",
-  label: label("favoriteDeck", "Mazo favorito"),
-  w: 600,
-  h: 430,
-  x: (900 - 600) / 2, // 👈 centrado real
-  y: 570
-},
+  {
+    key: "favoriteDeck",
+    label: label("favoriteDeck", "Mazo favorito"),
+    x: 110,
+    y: 460,
+    w: 680,
+    h: 520
+  },
 
-  // Parte inferior
   {
     key: "maxRank",
     label: label("maxRank", "Rango máximo alcanzado"),
-    x: 80,
-    y: 1110,
-    w: 330,
+    x: 55,
+    y: 1090,
+    w: 360,
     h: 300
   },
   {
     key: "bestGP",
     label: label("bestGP", "Mejor GP"),
-    x: 490,
-    y: 1110,
-    w: 330,
-    h: 300
+    x: 465,
+    y: 1090,
+    w: 380,
+    h: 340
   }
 ];
 
