@@ -1117,14 +1117,14 @@ const slots = [
   },
 
   // Mazo grande
-  {
-    key: "favoriteDeck",
-    label: label("favoriteDeck", "Mazo favorito"),
-    x: 70,
-    y: 570,
-    w: 600,
-    h: 430
-  },
+{
+  key: "favoriteDeck",
+  label: label("favoriteDeck", "Mazo favorito"),
+  w: 600,
+  h: 430,
+  x: (900 - 600) / 2, // 👈 centrado real
+  y: 570
+},
 
   // Parte inferior
   {
