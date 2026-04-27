@@ -301,6 +301,18 @@ function isValidColor(color) {
 
   return ctx.fillStyle !== "#000" || color === "#000";
 }
+function getProfilePostUrl(post) {
+  return `https://discord.com/channels/${post.guildId}/${post.id}`;
+}
+
+function buildProfileButton(post) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("Ver perfil completo")
+      .setStyle(ButtonStyle.Link)
+      .setURL(getProfilePostUrl(post))
+  );
+}
 // =============================
 function getUserRoleByGroup(group) {
 
@@ -1241,9 +1253,16 @@ if (userPanels[id]?.messageId) {
   } else {
 
     // 🔁 Editar panel
-    await msg.edit({ files: [file] });
-
 const post = await client.channels.fetch(userPanels[id].postId).catch(() => null);
+
+await msg.edit({
+  files: [file],
+  components: post ? [buildProfileButton(post)] : []
+});
+
+if (!post) {
+  console.log(`⚠️ Post no encontrado (${id}), recreando perfil...`);
+}
 
 if (post) {
   savePanels();
@@ -1254,11 +1273,9 @@ if (post) {
   
 }
 
-    // =============================
-    // 🆕 CREAR PANEL NUEVO
-    // =============================
-const sent = await channel.send({ files: [file] });
-
+// =============================
+// 🆕 CREAR PANEL NUEVO
+// =============================
 const forum = await client.channels.fetch(process.env.PROFILE_FORUM_CHANNEL_ID);
 
 if (!forum || forum.type !== ChannelType.GuildForum) {
@@ -1269,52 +1286,39 @@ const post = await forum.threads.create({
   name: `Perfil de ${liveTracker[id]?.name || trackingData[id]?.name || id}`,
   autoArchiveDuration: 1440,
   message: {
-    content: "🎮 Personaliza tu panel"
+    content: "🎮 Perfil completo del usuario"
   }
 });
 
-    // 🧹 LIMPIAR THREAD NUEVO (por seguridad)
-    try {
-      const msgs = await thread.messages.fetch({ limit: 50 });
+const sent = await channel.send({
+  files: [file],
+  components: [buildProfileButton(post)]
+});
 
-      for (const m of msgs.values()) {
-        if (m.embeds.length > 0) continue;
-        if (m.components.length > 0) continue;
-        if (m.system) continue;
+const menu = new ActionRowBuilder().addComponents(
+  new StringSelectMenuBuilder()
+    .setCustomId(`menu_${id}`)
+    .setPlaceholder("Personalizar perfil")
+    .addOptions([
+      { label: "Cambiar fondo del panel", value: "bg" },
+      { label: "Color nombre", value: "name" },
+      { label: "Color texto", value: "text" },
+      { label: "Agregar Pokémon favorito", value: "pokemon" },
+      { label: "Subir carta favorita", value: "favoriteCard" },
+      { label: "Subir mazo favorito", value: "favoriteDeck" },
+      { label: "Subir carta más valiosa", value: "mostValuableCard" },
+      { label: "Subir carta más rara", value: "rarestCard" },
+      { label: "Subir imagen de mejor GP", value: "bestGP" },
+      { label: "Subir imagen de rango máximo", value: "maxRank" },
+      { label: "Estado", value: "status" },
+      { label: "Frase del perfil", value: "quote" },
+    ])
+);
 
-        await m.delete().catch(() => {});
-      }
-
-    } catch (err) {
-      console.log("Error limpiando thread:", err.message);
-    }
-
-    const menu = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`menu_${id}`)
-       .addOptions([
-  { label: "Cambiar fondo del panel", value: "bg" },
-  { label: "Color nombre", value: "name" },
-  { label: "Color texto", value: "text" },
-
-  { label: "Agregar Pokémon favorito", value: "pokemon" },
-  { label: "Subir carta favorita", value: "favoriteCard" },
-  { label: "Subir mazo favorito", value: "favoriteDeck" },
-  { label: "Subir carta más valiosa", value: "mostValuableCard" },
-  { label: "Subir carta más rara", value: "rarestCard" },
-  { label: "Subir imagen de mejor GP", value: "bestGP" },
-{ label: "Subir imagen de rango máximo", value: "maxRank" },
-  { label: "Estado", value: "status" },
-  { label: "Frase del perfil", value: "quote" },
-])
-    );
-
-   await post.send({
+await post.send({
   content: "🎮 Personaliza tu panel",
   components: [menu],
 });
-
-
 
 userPanels[id] = {
   messageId: sent.id,
@@ -1691,10 +1695,12 @@ if (!liveTracker[id]) {
   const { file } = await renderPanel(id, channel);
   const msg = await channel.messages.fetch(userPanels[id].messageId);
 
-  await msg.edit({
-  //  content: `updated_${Date.now()}`,
-  files: [file]
-  });
+const post = await client.channels.fetch(userPanels[id].postId).catch(() => null);
+
+await msg.edit({
+  files: [file],
+  components: post ? [buildProfileButton(post)] : []
+});
 }
 
 
