@@ -7,7 +7,8 @@ import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ChannelType
 } from "discord.js";
 import dotenv from "dotenv";
 import path from "path";
@@ -67,6 +68,10 @@ if (!process.env.GIST_SETTINGS) {
 if (!process.env.GIST_PROFILES) {
   throw new Error("❌ FALTA GIST_PROFILES en Railway");
 }
+if (!process.env.PROFILE_FORUM_CHANNEL_ID) {
+  throw new Error("❌ FALTA PROFILE_FORUM_CHANNEL_ID en Railway");
+}
+
 if (!process.env.RANKING_CHANNEL_ID) {
   throw new Error("❌ FALTA RANKING_CHANNEL_ID en Railway");
 }
@@ -1026,108 +1031,175 @@ function buildPokemonFavoriteEmbeds(id) {
     return embed;
   });
 }
+async function buildProfileCollage(id) {
+  const profile = ensureUserProfile(id);
 
-async function updateUserProfileThread(id) {
+  const canvas = createCanvas(900, 900);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 4;
+
+  ctx.beginPath();
+  ctx.roundRect(20, 20, 860, 860, 120);
+  ctx.stroke();
+
+  ctx.fillStyle = "#000";
+  ctx.font = "34px Righteous";
+
+  const slots = [
+    {
+      key: "favoriteCard",
+      label: "Carta favorita",
+      x: 135,
+      y: 135,
+      w: 130,
+      h: 165,
+      textX: 65,
+      textY: 105
+    },
+    {
+      key: "favoriteDeck",
+      label: "Mazo favorito",
+      x: 150,
+      y: 390,
+      w: 135,
+      h: 170,
+      textX: 85,
+      textY: 355
+    },
+    {
+      key: "bestGP",
+      label: "mejor gp",
+      x: 110,
+      y: 665,
+      w: 190,
+      h: 165,
+      textX: 115,
+      textY: 645
+    },
+    {
+      key: "mostValuableCard",
+      label: "Carta mas\nvaliosa",
+      x: 630,
+      y: 160,
+      w: 100,
+      h: 145,
+      textX: 570,
+      textY: 105
+    },
+    {
+      key: "maxRank",
+      label: "rango máximo\nalcanzado",
+      x: 560,
+      y: 395,
+      w: 230,
+      h: 185,
+      textX: 555,
+      textY: 345
+    },
+    {
+      key: "rarestCard",
+      label: "Carta mas\ndeseada",
+      x: 580,
+      y: 675,
+      w: 180,
+      h: 150,
+      textX: 575,
+      textY: 615
+    }
+  ];
+
+  for (const slot of slots) {
+    const lines = slot.label.split("\n");
+
+    lines.forEach((line, index) => {
+      ctx.fillText(line, slot.textX, slot.textY + index * 40);
+    });
+
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 20);
+    ctx.stroke();
+
+    const imgObj = profile[slot.key];
+
+    if (imgObj?.data) {
+      try {
+        const img = await loadImage(Buffer.from(imgObj.data, "base64"));
+
+        const ratio = Math.max(slot.w / img.width, slot.h / img.height);
+        const newW = img.width * ratio;
+        const newH = img.height * ratio;
+        const dx = slot.x + (slot.w - newW) / 2;
+        const dy = slot.y + (slot.h - newH) / 2;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 18);
+        ctx.clip();
+        ctx.drawImage(img, dx, dy, newW, newH);
+        ctx.restore();
+
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 20);
+        ctx.stroke();
+      } catch (err) {
+        console.error(`Error dibujando ${slot.key}:`, err.message);
+      }
+    }
+  }
+
+  return new AttachmentBuilder(canvas.toBuffer("image/png"), {
+    name: "perfil-collage.png"
+  });
+}
+
+async function updateUserProfilePost(id) {
   const panel = userPanels[id];
-  if (!panel?.threadId) return;
+  if (!panel?.postId) return;
 
-  const thread = await client.channels.fetch(panel.threadId).catch(() => null);
-  if (!thread) return;
+  const post = await client.channels.fetch(panel.postId).catch(() => null);
+  if (!post) return;
 
   const profile = ensureUserProfile(id);
 
+  const collage = await buildProfileCollage(id);
+
   const embeds = [
-    buildProfileMainEmbed(id),
+    buildProfileMainEmbed(id)
+      .setImage("attachment://perfil-collage.png"),
     ...buildPokemonFavoriteEmbeds(id)
   ];
-
-  const files = [];
-
-  const favoriteCard = imageObjectToAttachment(profile.favoriteCard, "favorite-card.png");
-  const favoriteDeck = imageObjectToAttachment(profile.favoriteDeck, "favorite-deck.png");
-  const valuableCard = imageObjectToAttachment(profile.mostValuableCard, "valuable-card.png");
-  const rarestCard = imageObjectToAttachment(profile.rarestCard, "rarest-card.png");
-  const bestGP = imageObjectToAttachment(profile.bestGP, "best-gp.png");
-const maxRank = imageObjectToAttachment(profile.maxRank, "max-rank.png");
-
-  if (favoriteCard) {
-    files.push(favoriteCard);
-    embeds.push(
-      new EmbedBuilder()
-        .setTitle("🎴 Carta favorita")
-        .setThumbnail("attachment://favorite-card.png")
-        .setColor("#ff66cc")
-    );
-  }
-
-  if (favoriteDeck) {
-    files.push(favoriteDeck);
-    embeds.push(
-      new EmbedBuilder()
-        .setTitle("🃏 Mazo favorito")
-        .setThumbnail("attachment://favorite-deck.png")
-        .setColor("#9966ff")
-    );
-  }
-
-  if (valuableCard) {
-    files.push(valuableCard);
-    embeds.push(
-      new EmbedBuilder()
-        .setTitle("💎 Carta más valiosa")
-        .setThumbnail("attachment://valuable-card.png")
-        .setColor("#00ffff")
-    );
-  }
-
-  if (rarestCard) {
-    files.push(rarestCard);
-    embeds.push(
-      new EmbedBuilder()
-        .setTitle("🌟 Carta más rara")
-        .setThumbnail("attachment://rarest-card.png")
-        .setColor("#ffd700")
-    );
-  }
-  if (bestGP) {
-  files.push(bestGP);
-  embeds.push(
-    new EmbedBuilder()
-      .setTitle("🥇 Mejor GP obtenido")
-      .setThumbnail("attachment://best-gp.png")
-      .setColor("#ffd700")
-  );
-}
-
-if (maxRank) {
-  files.push(maxRank);
-  embeds.push(
-    new EmbedBuilder()
-      .setTitle("🏅 Rango máximo alcanzado")
-      .setThumbnail("attachment://max-rank.png")
-      .setColor("#ff9900")
-  );
-}
 
   let profileMsg = null;
 
   if (panel.profileMessageId) {
-    profileMsg = await thread.messages.fetch(panel.profileMessageId).catch(() => null);
+    profileMsg = await post.messages.fetch(panel.profileMessageId).catch(() => null);
   }
 
   const payload = {
     embeds: embeds.slice(0, 10),
-    files
+    files: [collage]
   };
 
   if (profileMsg) {
     await profileMsg.edit(payload);
   } else {
-    profileMsg = await thread.send(payload);
+    profileMsg = await post.send(payload);
     userPanels[id].profileMessageId = profileMsg.id;
     savePanels();
   }
 }
+
+
+
 //let updatingPanels = false;
 // =============================
 async function updatePanels() {
@@ -1171,40 +1243,11 @@ if (userPanels[id]?.messageId) {
     // 🔁 Editar panel
     await msg.edit({ files: [file] });
 
-    const thread = await client.channels.fetch(userPanels[id].threadId);
+const post = await client.channels.fetch(userPanels[id].postId).catch(() => null);
 
-    if (thread) {
-    //  let gifMsg = null;
-
-    //  if (userPanels[id].gifMessageId) {
-    //    try {
-    //      gifMsg = await thread.messages.fetch(userPanels[id].gifMessageId);
-      //  } catch {}
-     // }
-
-    //  if (gifMsg) {
-    //    await gifMsg.edit({
-      //    embeds: [
-         //   new EmbedBuilder()
-            //  .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
-           //   .setDescription(`Nivel: ${pokemonLevel}`)
-            //  .setImage(gif)
-         // ]
-       // });
-    //  } else {
-        // 🆕 crear si no existe
-     //   const gifMessage = await thread.send({
-     //     embeds: [
-      //      new EmbedBuilder()
-      //        .setTitle(`${pokemonName.toUpperCase()} ${isShiny ? "⭐" : ""}`)
-       //       .setDescription(`Nivel: ${pokemonLevel}`)
-      //        .setImage(gif)
-       //   ]
-      //  });
-
-       // userPanels[id].gifMessageId = gifMessage.id;
-        savePanels();
-      }
+if (post) {
+  savePanels();
+}
     }
 
     continue; // 🔥 IMPORTANTE
@@ -1214,12 +1257,21 @@ if (userPanels[id]?.messageId) {
     // =============================
     // 🆕 CREAR PANEL NUEVO
     // =============================
-    const sent = await channel.send({ files: [file] });
+const sent = await channel.send({ files: [file] });
 
-    const thread = await sent.startThread({
-      name: "Perfil",
-      autoArchiveDuration: 1440,
-    });
+const forum = await client.channels.fetch(process.env.PROFILE_FORUM_CHANNEL_ID);
+
+if (!forum || forum.type !== ChannelType.GuildForum) {
+  throw new Error("❌ PROFILE_FORUM_CHANNEL_ID no es un canal foro válido.");
+}
+
+const post = await forum.threads.create({
+  name: `Perfil de ${liveTracker[id]?.name || trackingData[id]?.name || id}`,
+  autoArchiveDuration: 1440,
+  message: {
+    content: "🎮 Personaliza tu panel"
+  }
+});
 
     // 🧹 LIMPIAR THREAD NUEVO (por seguridad)
     try {
@@ -1257,22 +1309,22 @@ if (userPanels[id]?.messageId) {
 ])
     );
 
-    await thread.send({
-      content: "🎮 Personaliza tu panel",
-      components: [menu],
-    });
+   await post.send({
+  content: "🎮 Personaliza tu panel",
+  components: [menu],
+});
 
 
 
 userPanels[id] = {
   messageId: sent.id,
-  threadId: thread.id,
+  postId: post.id,
   profileMessageId: null
 };
 
 savePanels();
 
-await updateUserProfileThread(id);
+await updateUserProfilePost(id);
   }
 }
 
@@ -1411,8 +1463,7 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
   }
 
   const entry = Object.entries(userPanels)
-    .find(([_, data]) => data.threadId === i.channel.id);
-
+    .find(([_, data]) => data.postId === i.channel.id);
   if (!entry) {
     return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
   }
@@ -1466,7 +1517,7 @@ client.on("messageCreate", async (msg) => {
   // =============================
 
   const entry = Object.entries(userPanels)
-    .find(([_, d]) => d.threadId === msg.channel.id);
+    .find(([_, d]) => d.postId === msg.channel.id);
 
   if (!entry) return;
 
@@ -1481,12 +1532,12 @@ const activeProfileEdit = profileEditState[msg.author.id];
   if (content === "pokemon reset") {
   profile.favoritePokemon = [];
   saveProfiles();
-  await updateUserProfileThread(id);
+  await updateUserProfilePost(id);
   return msg.reply("✅ Pokémon favoritos reiniciados.");
 }
 
 if (content === "perfil actualizar") {
-  await updateUserProfileThread(id);
+  await updateUserProfilePost(id);
   return msg.reply("✅ Perfil actualizado.");
 }
 
@@ -1551,7 +1602,7 @@ if (activeProfileEdit === "pokemon") {
   delete profileEditState[msg.author.id];
   saveProfiles();
 
-  await updateUserProfileThread(id);
+  await updateUserProfilePost(id);
 
   return msg.reply(`✅ Pokémon favorito agregado: **${pokemonName}**`);
 }
@@ -1560,7 +1611,7 @@ if (activeProfileEdit === "status") {
   profile.status = msg.content.trim();
   delete profileEditState[msg.author.id];
   saveProfiles();
-  await updateUserProfileThread(id);
+  await updateUserProfilePost(id);
   return msg.reply("✅ Estado actualizado.");
 }
 
@@ -1568,7 +1619,7 @@ if (activeProfileEdit === "quote") {
   profile.quote = msg.content.trim();
   delete profileEditState[msg.author.id];
   saveProfiles();
-  await updateUserProfileThread(id);
+  await updateUserProfilePost(id);
   return msg.reply("✅ Frase actualizada.");
 }
   // =============================
@@ -1601,7 +1652,7 @@ activeProfileEdit === "maxRank"
     delete profileEditState[msg.author.id];
 
     saveProfiles();
-    await updateUserProfileThread(id);
+    await updateUserProfilePost(id);
 
     return msg.reply("✅ Imagen guardada en tu perfil.");
   }
