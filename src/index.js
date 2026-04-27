@@ -1046,7 +1046,7 @@ function buildPokemonFavoriteEmbeds(id) {
 async function buildProfileCollage(id) {
   const profile = ensureUserProfile(id);
 
-  const canvas = createCanvas(1200, 1000);
+  const canvas = createCanvas(1200, 1250);
   const ctx = canvas.getContext("2d");
 
   const gradient = ctx.createLinearGradient(0, 0, 1200, 1000);
@@ -1093,22 +1093,22 @@ async function buildProfileCollage(id) {
       w: 620,
       h: 390
     },
-    {
-      key: "maxRank",
-      label: "Rango máximo alcanzado",
-      x: 810,
-      y: 530,
-      w: 300,
-      h: 330
-    },
-    {
-      key: "bestGP",
-      label: "Mejor GP",
-      x: 810,
-      y: 780,
-      w: 300,
-      h: 180
-    }
+{
+  key: "maxRank",
+  label: "Rango máximo alcanzado",
+  x: 810,
+  y: 520,
+  w: 300,
+  h: 300
+},
+{
+  key: "bestGP",
+  label: "Mejor GP",
+  x: 810,
+  y: 880,
+  w: 300,
+  h: 220
+}
   ];
 
   function drawPlaceholder(x, y, w, h) {
