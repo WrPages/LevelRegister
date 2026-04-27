@@ -1309,7 +1309,7 @@ if (!forum || forum.type !== ChannelType.GuildForum) {
   throw new Error("❌ PROFILE_FORUM_CHANNEL_ID no es un canal foro válido.");
 }
 
-const post = await forum.threads.create({
+const post = await forum.Post.create({
   name: `Perfil de ${liveTracker[id]?.name || trackingData[id]?.name || id}`,
   autoArchiveDuration: 1440,
   message: {
