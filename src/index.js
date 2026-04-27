@@ -1379,9 +1379,14 @@ client.on("interactionCreate", async (i) => {
     const id = i.user.id;
     const option = i.values[0];
 
-    if (option === "bg") {
-      return i.reply({ content: "🖼️ Sube una imagen", ephemeral: true });
-    }
+   if (option === "bg") {
+  profileEditState[i.user.id] = "bg";
+
+  return i.reply({
+    content: "🖼️ Sube una imagen para el fondo del panel principal.",
+    ephemeral: true
+  });
+}
 
     if (option === "pokemon") {
   profileEditState[i.user.id] = "pokemon";
@@ -1691,23 +1696,34 @@ if (activeProfileEdit === "quote") {
 if (msg.attachments.size > 0) {
   const file = msg.attachments.first();
 
-  if (!file.url.match(/\.(png|jpg|jpeg|webp)/i)) {
+  if (!file.url.match(/\.(png|jpg|jpeg|webp)(\?.*)?$/i)) {
     return msg.reply("❌ Solo se aceptan imágenes png, jpg, jpeg o webp.");
   }
 
-  const res = await fetch(file.url);
-  const buffer = await res.arrayBuffer();
-  const base64 = Buffer.from(buffer).toString("base64");
+  if (!activeProfileEdit) {
+    return msg.reply("❌ Primero selecciona en el menú qué imagen quieres cambiar.");
+  }
 
-  if (
- activeProfileEdit === "favoriteCard" ||
-activeProfileEdit === "favoriteDeck" ||
-activeProfileEdit === "mostValuableCard" ||
-activeProfileEdit === "rarestCard" ||
-activeProfileEdit === "bestGP" ||
-activeProfileEdit === "maxRank" ||
-activeProfileEdit === "profileBg" 
-  ) {
+  const profileImageFields = [
+    "favoriteCard",
+    "favoriteDeck",
+    "mostValuableCard",
+    "rarestCard",
+    "bestGP",
+    "maxRank",
+    "profileBg"
+  ];
+
+  const panelImageFields = [
+    "bg"
+  ];
+
+  const res = await fetch(file.url);
+  const arrayBuffer = await res.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+  // Imágenes del canvas del perfil
+  if (profileImageFields.includes(activeProfileEdit)) {
     profile[activeProfileEdit] = {
       type: "base64",
       data: base64
@@ -1718,18 +1734,25 @@ activeProfileEdit === "profileBg"
     saveProfiles();
     await updateUserProfilePost(id);
 
-    return msg.reply("✅ Imagen guardada en tu perfil.");
+    return msg.reply(`✅ Imagen actualizada: ${activeProfileEdit}`);
   }
 
-  userSettings[id].bg = {
-    type: "base64",
-    data: base64
-  };
+  // Fondo del panel principal
+  if (panelImageFields.includes(activeProfileEdit)) {
+    userSettings[id].bg = {
+      type: "base64",
+      data: base64
+    };
 
-  saveSettings();
-  await forceRender(id);
+    delete profileEditState[msg.author.id];
 
-  return msg.reply("Fondo actualizado ✅");
+    saveSettings();
+    await forceRender(id);
+
+    return msg.reply("✅ Fondo del panel actualizado.");
+  }
+
+  return msg.reply(`❌ Tipo de edición no reconocido: ${activeProfileEdit}`);
 }
 });
 
