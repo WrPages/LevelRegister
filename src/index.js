@@ -1051,92 +1051,179 @@ function buildPokemonFavoriteEmbeds(id) {
 async function buildProfileCollage(id) {
   const profile = ensureUserProfile(id);
 
-  const canvas = createCanvas(1600, 900);
+  const canvas = createCanvas(900, 1600);
   const ctx = canvas.getContext("2d");
 
+  // Fondo personalizado o fondo default
   if (profile.profileBg?.data) {
     try {
       const bg = await loadImage(Buffer.from(profile.profileBg.data, "base64"));
-      const ratio = Math.max(1600 / bg.width, 900 / bg.height);
+
+      const ratio = Math.max(900 / bg.width, 1600 / bg.height);
       const w = bg.width * ratio;
       const h = bg.height * ratio;
-      ctx.drawImage(bg, (1600 - w) / 2, (900 - h) / 2, w, h);
+
+      ctx.drawImage(bg, (900 - w) / 2, (1600 - h) / 2, w, h);
     } catch {
-      ctx.fillStyle = "#020617";
-      ctx.fillRect(0, 0, 1600, 900);
+      const gradient = ctx.createLinearGradient(0, 0, 900, 1600);
+      gradient.addColorStop(0, "#111827");
+      gradient.addColorStop(1, "#020617");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 900, 1600);
     }
   } else {
-    const gradient = ctx.createLinearGradient(0, 0, 1600, 900);
+    const gradient = ctx.createLinearGradient(0, 0, 900, 1600);
     gradient.addColorStop(0, "#111827");
     gradient.addColorStop(1, "#020617");
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1600, 900);
+    ctx.fillRect(0, 0, 900, 1600);
   }
 
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(0, 0, 1600, 900);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 56px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("Perfil del jugador", 800, 70);
+  // Capa oscura para que el texto se lea sobre cualquier fondo
+  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.fillRect(0, 0, 900, 1600);
 
   const label = (key, fallback) => profile.customLabels?.[key] || fallback;
 
+  // Título principal
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 52px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(label("title", "Perfil del jugador"), 450, 75);
+
   const slots = [
-    { key: "favoriteCard", label: label("favoriteCard", "Carta favorita"), x: 70, y: 130, w: 280, h: 280 },
-    { key: "mostValuableCard", label: label("mostValuableCard", "Carta más valiosa"), x: 500, y: 130, w: 280, h: 280 },
-    { key: "rarestCard", label: label("rarestCard", "Carta más deseada"), x: 930, y: 130, w: 280, h: 280 },
+    // Fila superior: 3 cartas
+    {
+      key: "favoriteCard",
+      label: label("favoriteCard", "Carta favorita"),
+      x: 45,
+      y: 150,
+      w: 240,
+      h: 320
+    },
+    {
+      key: "mostValuableCard",
+      label: label("mostValuableCard", "Carta más valiosa"),
+      x: 330,
+      y: 150,
+      w: 240,
+      h: 320
+    },
+    {
+      key: "rarestCard",
+      label: label("rarestCard", "Carta más deseada"),
+      x: 615,
+      y: 150,
+      w: 240,
+      h: 320
+    },
 
-    { key: "favoriteDeck", label: label("favoriteDeck", "Mazo favorito"), x: 70, y: 500, w: 680, h: 320 },
-    { key: "maxRank", label: label("maxRank", "Rango máximo alcanzado"), x: 860, y: 500, w: 300, h: 300 },
+    // Mazo favorito grande
+    {
+      key: "favoriteDeck",
+      label: label("favoriteDeck", "Mazo favorito"),
+      x: 70,
+      y: 570,
+      w: 760,
+      h: 430
+    },
 
-    { key: "extraImage1", label: label("extraImage1", "Imagen extra 1"), x: 70, y: 830, w: 300, h: 0 },
-    { key: "extraImage2", label: label("extraImage2", "Imagen extra 2"), x: 420, y: 830, w: 300, h: 0 },
+    // Fila media inferior: rango y mejor GP
+    {
+      key: "maxRank",
+      label: label("maxRank", "Rango máximo alcanzado"),
+      x: 80,
+      y: 1110,
+      w: 330,
+      h: 300
+    },
+    {
+      key: "bestGP",
+      label: label("bestGP", "Mejor GP"),
+      x: 490,
+      y: 1110,
+      w: 330,
+      h: 300
+    },
 
-    { key: "bestGP", label: label("bestGP", "Mejor GP"), x: 1230, y: 500, w: 300, h: 300 }
+    // Fila extra debajo del mazo
+    {
+      key: "extraImage1",
+      label: label("extraImage1", "Imagen extra 1"),
+      x: 80,
+      y: 1470,
+      w: 330,
+      h: 90
+    },
+    {
+      key: "extraImage2",
+      label: label("extraImage2", "Imagen extra 2"),
+      x: 490,
+      y: 1470,
+      w: 330,
+      h: 90
+    }
   ];
 
-  async function drawSlot(slot) {
-    if (slot.h <= 0) return;
+  function drawPlaceholder(x, y, w, h) {
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 24);
+    ctx.fill();
 
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "bold 24px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Sin imagen", x + w / 2, y + h / 2 + 8);
+  }
+
+  async function drawSlot(slot) {
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 30px sans-serif";
+    ctx.font = "bold 28px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y);
 
     const imgX = slot.x;
-    const imgY = slot.y + 25;
+    const imgY = slot.y + 28;
     const imgW = slot.w;
     const imgH = slot.h;
 
     const imgObj = profile[slot.key];
 
     if (!imgObj?.data) {
-      ctx.fillStyle = "rgba(255,255,255,0.10)";
-      ctx.beginPath();
-      ctx.roundRect(imgX, imgY, imgW, imgH, 24);
-      ctx.fill();
-
-      ctx.fillStyle = "#cbd5e1";
-      ctx.font = "bold 24px sans-serif";
-      ctx.fillText("Sin imagen", imgX + imgW / 2, imgY + imgH / 2);
+      drawPlaceholder(imgX, imgY, imgW, imgH);
       return;
     }
 
-    const img = await loadImage(Buffer.from(imgObj.data, "base64"));
-    const ratio = Math.min(imgW / img.width, imgH / img.height);
-    const w = img.width * ratio;
-    const h = img.height * ratio;
-    ctx.drawImage(img, imgX + (imgW - w) / 2, imgY + (imgH - h) / 2, w, h);
+    try {
+      const img = await loadImage(Buffer.from(imgObj.data, "base64"));
+
+      // Muestra la imagen completa, sin cortarla
+      const ratio = Math.min(imgW / img.width, imgH / img.height);
+
+      const w = img.width * ratio;
+      const h = img.height * ratio;
+
+      const dx = imgX + (imgW - w) / 2;
+      const dy = imgY + (imgH - h) / 2;
+
+      ctx.drawImage(img, dx, dy, w, h);
+    } catch (err) {
+      console.error(`Error dibujando ${slot.key}:`, err.message);
+      drawPlaceholder(imgX, imgY, imgW, imgH);
+    }
   }
 
-  for (const slot of slots) await drawSlot(slot);
+  for (const slot of slots) {
+    await drawSlot(slot);
+  }
 
   const fileName = `perfil-collage-${id}-${Date.now()}.png`;
 
   return {
-    file: new AttachmentBuilder(canvas.toBuffer("image/png"), { name: fileName }),
+    file: new AttachmentBuilder(canvas.toBuffer("image/png"), {
+      name: fileName
+    }),
     fileName
   };
 }
