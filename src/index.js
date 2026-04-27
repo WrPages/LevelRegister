@@ -1197,23 +1197,23 @@ async function updateUserProfilePost(id) {
 
   const collage = await buildProfileCollage(id);
 
-  const embeds = [
-    new EmbedBuilder()
-      .setColor(0x00ffff)
-      .setImage(`attachment://${collage.fileName}`),
-    ...buildPokemonFavoriteEmbeds(id)
-  ];
-
   let profileMsg = null;
 
   if (panel.profileMessageId) {
     profileMsg = await post.messages.fetch(panel.profileMessageId).catch(() => null);
   }
 
+  const pokemonEmbeds = buildPokemonFavoriteEmbeds(id);
+
   const payload = {
     content: "",
-    embeds: embeds.slice(0, 10),
+
+    // 👇 AQUÍ VA LA IMAGEN COMO ARCHIVO (NO embed)
     files: [collage.file],
+
+    // 👇 SOLO los Pokémon como embed
+    embeds: pokemonEmbeds.slice(0, 10),
+
     attachments: []
   };
 
