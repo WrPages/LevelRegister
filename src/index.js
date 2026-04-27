@@ -899,19 +899,24 @@ liveTracker[id].instances = instances;
 }
 function ensureUserProfile(id) {
   if (!userProfiles[id]) {
- userProfiles[id] = {
-  favoritePokemon: [],
-  favoriteCard: null,
-  favoriteDeck: null,
-  mostValuableCard: null,
-  rarestCard: null,
-  bestGP: null,
-  maxRank: null,
-  status: "",
-  quote: ""
-};
+    userProfiles[id] = {
+      favoritePokemon: [],
+      favoriteCard: null,
+      favoriteDeck: null,
+      mostValuableCard: null,
+      rarestCard: null,
+      bestGP: null,
+      maxRank: null,
+      extraImage1: null,
+      extraImage2: null,
+      profileBg: null,
+      customLabels: {},
+      status: "",
+      quote: ""
+    };
   }
 
+  if (!userProfiles[id].customLabels) userProfiles[id].customLabels = {};
   return userProfiles[id];
 }
 
@@ -1046,84 +1051,55 @@ function buildPokemonFavoriteEmbeds(id) {
 async function buildProfileCollage(id) {
   const profile = ensureUserProfile(id);
 
-  const canvas = createCanvas(1200, 1250);
+  const canvas = createCanvas(1600, 900);
   const ctx = canvas.getContext("2d");
 
-  const gradient = ctx.createLinearGradient(0, 0, 1200, 1000);
-  gradient.addColorStop(0, "#111827");
-  gradient.addColorStop(1, "#020617");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 1200, 1000);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 52px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("Perfil del jugador", 600, 70);
-
-  const slots = [
-    {
-      key: "favoriteCard",
-      label: "Carta favorita",
-      x: 70,
-      y: 130,
-      w: 260,
-      h: 300
-    },
-    {
-      key: "mostValuableCard",
-      label: "Carta más valiosa",
-      x: 470,
-      y: 130,
-      w: 260,
-      h: 300
-    },
-    {
-      key: "rarestCard",
-      label: "Carta más deseada",
-      x: 870,
-      y: 130,
-      w: 260,
-      h: 300
-    },
-    {
-      key: "favoriteDeck",
-      label: "Mazo favorito",
-      x: 80,
-      y: 500,
-      w: 620,
-      h: 390
-    },
-{
-  key: "maxRank",
-  label: "Rango máximo alcanzado",
-  x: 810,
-  y: 520,
-  w: 300,
-  h: 300
-},
-{
-  key: "bestGP",
-  label: "Mejor GP",
-  x: 810,
-  y: 880,
-  w: 300,
-  h: 220
-}
-  ];
-
-  function drawPlaceholder(x, y, w, h) {
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 24);
-    ctx.fill();
-
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "bold 24px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("Sin imagen", x + w / 2, y + h / 2 + 8);
+  if (profile.profileBg?.data) {
+    try {
+      const bg = await loadImage(Buffer.from(profile.profileBg.data, "base64"));
+      const ratio = Math.max(1600 / bg.width, 900 / bg.height);
+      const w = bg.width * ratio;
+      const h = bg.height * ratio;
+      ctx.drawImage(bg, (1600 - w) / 2, (900 - h) / 2, w, h);
+    } catch {
+      ctx.fillStyle = "#020617";
+      ctx.fillRect(0, 0, 1600, 900);
+    }
+  } else {
+    const gradient = ctx.createLinearGradient(0, 0, 1600, 900);
+    gradient.addColorStop(0, "#111827");
+    gradient.addColorStop(1, "#020617");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1600, 900);
   }
 
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fillRect(0, 0, 1600, 900);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 56px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("Perfil del jugador", 800, 70);
+
+  const label = (key, fallback) => profile.customLabels?.[key] || fallback;
+
+  const slots = [
+    { key: "favoriteCard", label: label("favoriteCard", "Carta favorita"), x: 70, y: 130, w: 280, h: 280 },
+    { key: "mostValuableCard", label: label("mostValuableCard", "Carta más valiosa"), x: 500, y: 130, w: 280, h: 280 },
+    { key: "rarestCard", label: label("rarestCard", "Carta más deseada"), x: 930, y: 130, w: 280, h: 280 },
+
+    { key: "favoriteDeck", label: label("favoriteDeck", "Mazo favorito"), x: 70, y: 500, w: 680, h: 320 },
+    { key: "maxRank", label: label("maxRank", "Rango máximo alcanzado"), x: 860, y: 500, w: 300, h: 300 },
+
+    { key: "extraImage1", label: label("extraImage1", "Imagen extra 1"), x: 70, y: 830, w: 300, h: 0 },
+    { key: "extraImage2", label: label("extraImage2", "Imagen extra 2"), x: 420, y: 830, w: 300, h: 0 },
+
+    { key: "bestGP", label: label("bestGP", "Mejor GP"), x: 1230, y: 500, w: 300, h: 300 }
+  ];
+
   async function drawSlot(slot) {
+    if (slot.h <= 0) return;
+
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 30px sans-serif";
     ctx.textAlign = "center";
@@ -1137,37 +1113,30 @@ async function buildProfileCollage(id) {
     const imgObj = profile[slot.key];
 
     if (!imgObj?.data) {
-      drawPlaceholder(imgX, imgY, imgW, imgH);
+      ctx.fillStyle = "rgba(255,255,255,0.10)";
+      ctx.beginPath();
+      ctx.roundRect(imgX, imgY, imgW, imgH, 24);
+      ctx.fill();
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "bold 24px sans-serif";
+      ctx.fillText("Sin imagen", imgX + imgW / 2, imgY + imgH / 2);
       return;
     }
 
-    try {
-      const img = await loadImage(Buffer.from(imgObj.data, "base64"));
-
-      const ratio = Math.min(imgW / img.width, imgH / img.height);
-      const newW = img.width * ratio;
-      const newH = img.height * ratio;
-
-      const dx = imgX + (imgW - newW) / 2;
-      const dy = imgY + (imgH - newH) / 2;
-
-      ctx.drawImage(img, dx, dy, newW, newH);
-    } catch (err) {
-      console.error(`Error dibujando ${slot.key}:`, err.message);
-      drawPlaceholder(imgX, imgY, imgW, imgH);
-    }
+    const img = await loadImage(Buffer.from(imgObj.data, "base64"));
+    const ratio = Math.min(imgW / img.width, imgH / img.height);
+    const w = img.width * ratio;
+    const h = img.height * ratio;
+    ctx.drawImage(img, imgX + (imgW - w) / 2, imgY + (imgH - h) / 2, w, h);
   }
 
-  for (const slot of slots) {
-    await drawSlot(slot);
-  }
+  for (const slot of slots) await drawSlot(slot);
 
   const fileName = `perfil-collage-${id}-${Date.now()}.png`;
 
   return {
-    file: new AttachmentBuilder(canvas.toBuffer("image/png"), {
-      name: fileName
-    }),
+    file: new AttachmentBuilder(canvas.toBuffer("image/png"), { name: fileName }),
     fileName
   };
 }
@@ -1311,6 +1280,10 @@ const menu = new ActionRowBuilder().addComponents(
       { label: "Subir imagen de rango máximo", value: "maxRank" },
       { label: "Estado", value: "status" },
       { label: "Frase del perfil", value: "quote" },
+      { label: "Cambiar fondo del perfil", value: "profileBg" },
+{ label: "Subir imagen extra 1", value: "extraImage1" },
+{ label: "Subir imagen extra 2", value: "extraImage2" },
+{ label: "Cambiar textos del perfil", value: "profileLabels" },
     ])
 );
 
@@ -1625,6 +1598,24 @@ if (activeProfileEdit === "quote") {
   await updateUserProfilePost(id);
   return msg.reply("✅ Frase actualizada.");
 }
+
+  if (activeProfileEdit === "profileLabels") {
+  const parts = msg.content.split("=");
+  if (parts.length < 2) {
+    return msg.reply("Usa: `favoriteCard=Mi texto`");
+  }
+
+  const key = parts[0].trim();
+  const value = parts.slice(1).join("=").trim();
+
+  profile.customLabels[key] = value;
+
+  delete profileEditState[msg.author.id];
+  saveProfiles();
+  await updateUserProfilePost(id);
+
+  return msg.reply("✅ Texto actualizado.");
+}
   // =============================
   // 🖼️ FONDO
   // =============================
@@ -1645,7 +1636,10 @@ activeProfileEdit === "favoriteDeck" ||
 activeProfileEdit === "mostValuableCard" ||
 activeProfileEdit === "rarestCard" ||
 activeProfileEdit === "bestGP" ||
-activeProfileEdit === "maxRank"
+activeProfileEdit === "maxRank" ||
+    activeProfileEdit === "profileBg" ||
+activeProfileEdit === "extraImage1" ||
+activeProfileEdit === "extraImage2"
   ) {
     profile[activeProfileEdit] = {
       type: "base64",
