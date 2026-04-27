@@ -1195,9 +1195,14 @@ async function buildProfileCollage(id) {
     await drawImageInSlot(slot);
   }
 
-  return new AttachmentBuilder(canvas.toBuffer("image/png"), {
-    name: "perfil-collage.png"
-  });
+const fileName = `perfil-collage-${id}-${Date.now()}.png`;
+
+return {
+  file: new AttachmentBuilder(canvas.toBuffer("image/png"), {
+    name: fileName
+  }),
+  fileName
+};
 }
 
 async function updateUserProfilePost(id) {
@@ -1207,13 +1212,11 @@ async function updateUserProfilePost(id) {
   const post = await client.channels.fetch(panel.postId).catch(() => null);
   if (!post) return;
 
-  const profile = ensureUserProfile(id);
-
   const collage = await buildProfileCollage(id);
 
   const embeds = [
     buildProfileMainEmbed(id)
-      .setImage("attachment://perfil-collage.png"),
+      .setImage(`attachment://${collage.fileName}`),
     ...buildPokemonFavoriteEmbeds(id)
   ];
 
@@ -1225,7 +1228,8 @@ async function updateUserProfilePost(id) {
 
   const payload = {
     embeds: embeds.slice(0, 10),
-    files: [collage]
+    files: [collage.file],
+    attachments: []
   };
 
   if (profileMsg) {
@@ -1236,7 +1240,6 @@ async function updateUserProfilePost(id) {
     savePanels();
   }
 }
-
 
 
 //let updatingPanels = false;
