@@ -1359,25 +1359,8 @@ const sent = await channel.send({
 const menu = new ActionRowBuilder().addComponents(
   new StringSelectMenuBuilder()
     .setCustomId(`menu_${id}`)
-    .setPlaceholder("Personalizar perfil")
-    .addOptions([
-      { label: "Cambiar fondo del panel", value: "bg" },
-      { label: "Color nombre", value: "name" },
-      { label: "Color texto", value: "text" },
-      { label: "Agregar Pokémon favorito", value: "pokemon" },
-      { label: "Subir carta favorita", value: "favoriteCard" },
-      { label: "Subir mazo favorito", value: "favoriteDeck" },
-      { label: "Subir carta más valiosa", value: "mostValuableCard" },
-      { label: "Subir carta más rara", value: "rarestCard" },
-      { label: "Subir imagen de mejor GP", value: "bestGP" },
-      { label: "Subir imagen de rango máximo", value: "maxRank" },
-      { label: "Estado", value: "status" },
-      { label: "Frase del perfil", value: "quote" },
-      { label: "Cambiar fondo del perfil", value: "profileBg" },
-{ label: "Subir imagen extra 1", value: "extraImage1" },
-{ label: "Subir imagen extra 2", value: "extraImage2" },
-{ label: "Cambiar textos del perfil", value: "profileLabels" },
-    ])
+.setPlaceholder("Personalizar perfil")
+.addOptions([
 );
 
 await post.send({
@@ -1705,23 +1688,7 @@ if (activeProfileEdit === "quote") {
   return replyAndDelete(msg, "✅ Frase actualizada.");
 }
 
-  if (activeProfileEdit === "profileLabels") {
-  const parts = msg.content.split("=");
-  if (parts.length < 2) {
-    return msg.reply("Usa: `favoriteCard=Mi texto`");
-  }
 
-  const key = parts[0].trim();
-  const value = parts.slice(1).join("=").trim();
-
-  profile.customLabels[key] = value;
-
-  delete profileEditState[msg.author.id];
-  saveProfiles();
-  await updateUserProfilePost(id);
-
-  return replyAndDelete(msg, "✅ Texto actualizado.");
-}
   // =============================
   // 🖼️ FONDO
   // =============================
