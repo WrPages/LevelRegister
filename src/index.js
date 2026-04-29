@@ -923,7 +923,7 @@ function ensureUserProfile(id) {
       profileBg: null,
       customLabels: {},
       status: "",
-      quote: "",
+quote: "",
 textColor: "#ffffff"
     };
   }
@@ -1080,6 +1080,7 @@ async function buildPokemonFavoriteEmbeds(id) {
 
 async function buildProfileCollage(id) {
   const profile = ensureUserProfile(id);
+    const profileTextColor = profile.textColor || "#ffffff";
 
   const canvas = createCanvas(900, 1600);
   const ctx = canvas.getContext("2d");
@@ -1600,18 +1601,29 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 
   if (!userSettings[id]) userSettings[id] = {};
 
-  if (type === "name") userSettings[id].nameColor = color;
-  if (type === "text") userSettings[id].textColor = color;
-
+if (type === "name") {
+  userSettings[id].nameColor = color;
   saveSettings();
-
-  await i.update({
-    content: `✅ Color aplicado`,
-    components: []
-  });
-
   await forceRender(id);
 }
+
+if (type === "text") {
+  userSettings[id].textColor = color;
+  saveSettings();
+  await forceRender(id);
+}
+
+if (type === "profileText") {
+  const profile = ensureUserProfile(id);
+  profile.textColor = color;
+  saveProfiles();
+  await updateUserProfilePost(id);
+}
+
+await i.update({
+  content: `✅ Color aplicado`,
+  components: []
+});
 
 
 
