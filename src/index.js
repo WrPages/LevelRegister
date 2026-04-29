@@ -923,11 +923,13 @@ function ensureUserProfile(id) {
       profileBg: null,
       customLabels: {},
       status: "",
-      quote: ""
+      quote: "",
+textColor: "#ffffff"
     };
   }
 
   if (!userProfiles[id].customLabels) userProfiles[id].customLabels = {};
+  if (!userProfiles[id].textColor) userProfiles[id].textColor = "#ffffff";
   return userProfiles[id];
 }
 
@@ -1174,17 +1176,17 @@ const slots = [
     ctx.roundRect(x, y, w, h, 24);
     ctx.fill();
 
-    ctx.fillStyle = "#cbd5e1";
+    ctx.fillStyle = profile.textColor || "#cbd5e1";
     ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("Sin imagen", x + w / 2, y + h / 2 + 8);
   }
 
   async function drawSlot(slot) {
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 28px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y);
+ctx.fillStyle = profile.textColor || "#ffffff";
+ctx.font = "bold 28px sans-serif";
+ctx.textAlign = "center";
+ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y);
 
     const imgX = slot.x;
     const imgY = slot.y + 28;
@@ -1362,60 +1364,65 @@ const menu = new ActionRowBuilder().addComponents(
     .setPlaceholder("Elige qué panel quieres personalizar")
     .addOptions([
       {
-        label: "📊 MAIN | Cambiar fondo",
+        label: "📊 A | Cambiar fondo",
         description: "Fondo del panel principal de estadísticas",
         value: "bg"
       },
       {
-        label: "📊 MAIN | Color nombre",
+        label: "📊 A | Color nombre",
         description: "Color del nombre en el panel principal",
         value: "name"
       },
       {
-        label: "📊 MAIN | Color texto",
+        label: "📊 A | Color texto",
         description: "Color del texto en el panel principal",
         value: "text"
       },
       {
-        label: "👤 PERSONAL | Pokémon favorito",
+        label: "👤 B | Pokémon favorito",
         description: "Agrega hasta 3 Pokémon favoritos",
         value: "pokemon"
       },
       {
-        label: "👤 PERSONAL | Carta favorita",
+        label: "👤 B | Carta favorita",
         description: "Sube la imagen de tu carta favorita",
         value: "favoriteCard"
       },
       {
-        label: "👤 PERSONAL | Mazo favorito",
+        label: "👤 B | Mazo favorito",
         description: "Sube la imagen de tu mazo favorito",
         value: "favoriteDeck"
       },
       {
-        label: "👤 PERSONAL | Carta más valiosa",
+        label: "👤 B | Carta más valiosa",
         description: "Sube la imagen de tu carta más valiosa",
         value: "mostValuableCard"
       },
       {
-        label: "👤 PERSONAL | Carta más rara",
+        label: "👤 B | Carta más rara",
         description: "Sube la imagen de tu carta más rara",
         value: "rarestCard"
       },
       {
-        label: "👤 PERSONAL | Mejor GP",
+        label: "👤 B | Mejor GP",
         description: "Sube la imagen de tu mejor GP",
         value: "bestGP"
       },
       {
-        label: "👤 PERSONAL | Rango máximo",
+        label: "👤 B | Rango máximo",
         description: "Sube la imagen de tu rango máximo",
         value: "maxRank"
       },
       {
-        label: "👤 PERSONAL | Fondo del perfil",
+        label: "👤 B | Fondo del perfil",
         description: "Cambia el fondo del segundo panel",
         value: "profileBg"
-      }
+      },
+      {
+  label: "👤 PERSONAL | Color texto",
+  description: "Cambia el color del texto del segundo panel",
+  value: "profileText"
+      },
     ])
 );
 
@@ -1538,7 +1545,7 @@ if (option === "quote") {
   });
 }
 
-   if (option === "name" || option === "text") {
+   if (option === "name" || option === "text" || option === "profileText") {
   return i.reply({
     content: "🎨 Elige una categoría:",
     components: [createCategoryMenu(option, id)],
@@ -1686,11 +1693,24 @@ red, blue, gold
 rgb(255,0,0)`);
       }
 
-      if (type === "name") userSettings[id].nameColor = color;
-      if (type === "text") userSettings[id].textColor = color;
+if (type === "name") {
+  userSettings[id].nameColor = color;
+  saveSettings();
+  await forceRender(id);
+}
 
-      saveSettings();
-      await forceRender(id);
+if (type === "text") {
+  userSettings[id].textColor = color;
+  saveSettings();
+  await forceRender(id);
+}
+
+if (type === "profileText") {
+  const profile = ensureUserProfile(id);
+  profile.textColor = color;
+  saveProfiles();
+  await updateUserProfilePost(id);
+}
 
       return msg.reply(`✅ Color aplicado: ${color}`);
     }
