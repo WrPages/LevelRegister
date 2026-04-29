@@ -949,7 +949,7 @@ function buildProfileMainEmbed(id) {
     );
 }
 
-const POKEMON_GIF_ROOT = process.cwd();
+const POKEMON_GIF_ROOT = path.resolve(".");
 
 function normalizePokemonName(name) {
   return name
@@ -986,15 +986,38 @@ function findPokemonGifFile(rawName) {
     ? `s_${cleanName}.gif`
     : `${cleanName}.gif`;
 
+  console.log("🔍 Buscando Pokémon GIF:", {
+    rawName,
+    cleanName,
+    isShiny,
+    expectedFile,
+    root: POKEMON_GIF_ROOT
+  });
+
   for (let gen = 1; gen <= 8; gen++) {
     const dir = path.join(POKEMON_GIF_ROOT, `Gen${gen}`, folder);
-    const gifPath = path.join(dir, expectedFile);
 
-    if (fs.existsSync(gifPath)) {
-      return gifPath;
+    console.log("📁 Revisando carpeta:", dir);
+
+    if (!fs.existsSync(dir)) {
+      console.log("❌ No existe carpeta:", dir);
+      continue;
+    }
+
+    const files = fs.readdirSync(dir);
+
+    const foundFile = files.find(file =>
+      file.toLowerCase() === expectedFile.toLowerCase()
+    );
+
+    if (foundFile) {
+      const finalPath = path.join(dir, foundFile);
+      console.log("✅ GIF encontrado:", finalPath);
+      return finalPath;
     }
   }
 
+  console.log("❌ GIF no encontrado:", expectedFile);
   return null;
 }
 
