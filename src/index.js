@@ -1412,16 +1412,6 @@ const menu = new ActionRowBuilder().addComponents(
         value: "maxRank"
       },
       {
-        label: "👤 PERSONAL | Estado",
-        description: "Edita tu estado del perfil personal",
-        value: "status"
-      },
-      {
-        label: "👤 PERSONAL | Frase",
-        description: "Edita tu frase personalizada",
-        value: "quote"
-      },
-      {
         label: "👤 PERSONAL | Fondo del perfil",
         description: "Cambia el fondo del segundo panel",
         value: "profileBg"
