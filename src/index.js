@@ -981,42 +981,21 @@ function parsePokemonName(rawName) {
   };
 }
 
-function findPokemonGifFile(rawName) {
+function findPokemonGifUrl(rawName) {
   const { isShiny, cleanName } = parsePokemonName(rawName);
 
-  console.log("🔍 Buscando:", {
-    rawName,
-    cleanName,
-    isShiny,
-    root: POKEMON_GIF_ROOT
-  });
+  const folder = isShiny ? "Shiny" : "Normal";
+  const fileName = isShiny
+    ? `s_${cleanName}.gif`
+    : `${cleanName}.gif`;
+
+  const BASE_URL = "https://raw.githubusercontent.com/WrPages/gif_database/main";
 
   for (let gen = 1; gen <= 8; gen++) {
-    const folder = isShiny ? "Shiny" : "Normal";
-    const dir = path.join(POKEMON_GIF_ROOT, `Gen${gen}`, folder);
-
-    console.log("📁 Revisando:", dir);
-
-    if (!fs.existsSync(dir)) {
-      console.log("❌ Carpeta no existe:", dir);
-      continue;
-    }
-
-    const files = fs.readdirSync(dir);
-
-    const found = files.find(file => {
-      const base = normalizePokemonName(file);
-      return base === cleanName && file.toLowerCase().endsWith(".gif");
-    });
-
-    if (found) {
-      const finalPath = path.join(dir, found);
-      console.log("✅ Encontrado:", finalPath);
-      return finalPath;
-    }
+    const url = `${BASE_URL}/Gen${gen}/${folder}/${fileName}`;
+    return url; // probamos directamente (Discord carga la imagen)
   }
 
-  console.log("❌ No encontrado:", rawName);
   return null;
 }
 
