@@ -953,7 +953,13 @@ function buildProfileMainEmbed(id) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const POKEMON_GIF_ROOT = __dirname;
+const POKEMON_GIF_BASE_URL =
+  "https://raw.githubusercontent.com/WrPages/gif_database/main";
+
+const POKEMON_DATASET_URL =
+  `${POKEMON_GIF_BASE_URL}/pokemon_dataset.json`;
+
+let pokemonGenerationCache = null;
 
 function normalizePokemonName(name) {
   return name
@@ -981,22 +987,50 @@ function parsePokemonName(rawName) {
   };
 }
 
-function findPokemonGifUrl(rawName) {
-  const { isShiny, cleanName } = parsePokemonName(rawName);
+async function loadPokemonGenerations() {
+  if (pokemonGenerationCache) return pokemonGenerationCache;
 
-  const folder = isShiny ? "Shiny" : "Normal";
-  const fileName = isShiny
-    ? `s_${cleanName}.gif`
-    : `${cleanName}.gif`;
+  const res = await fetch(POKEMON_DATASET_URL);
+  const data = await res.json();
 
-  const BASE_URL = "https://raw.githubusercontent.com/WrPages/gif_database/main";
+  const map = new Map();
 
-  for (let gen = 1; gen <= 8; gen++) {
-    const url = `${BASE_URL}/Gen${gen}/${folder}/${fileName}`;
-    return url; // probamos directamente (Discord carga la imagen)
+  for (const line of data.evolution_lines || []) {
+    for (const name of line.stages || []) {
+      map.set(normalizePokemonName(name), line.generation);
+    }
+
+    for (const name of line.branch_evolutions || []) {
+      map.set(normalizePokemonName(name), line.generation);
+    }
   }
 
-  return null;
+  for (const name of data.legendary || []) {
+    map.set(normalizePokemonName(name), "Legendary");
+  }
+
+  pokemonGenerationCache = map;
+  return map;
+}
+
+async function getPokemonGifUrl(rawName) {
+  const parsed = parsePokemonName(rawName);
+  const generations = await loadPokemonGenerations();
+
+  const gen = generations.get(parsed.cleanName);
+
+  if (!gen) return null;
+
+  const folder = parsed.isShiny ? "Shiny" : "Normal";
+  const fileName = parsed.isShiny
+    ? `s_${parsed.cleanName}.gif`
+    : `${parsed.cleanName}.gif`;
+
+  if (gen === "Legendary") {
+    return `${POKEMON_GIF_BASE_URL}/Legendary/${fileName}`;
+  }
+
+  return `${POKEMON_GIF_BASE_URL}/Gen${gen}/${folder}/${fileName}`;
 }
 
 
@@ -1010,32 +1044,22 @@ async function buildPokemonFavoriteEmbeds(id) {
   }
 
   const embeds = [];
-  const files = [];
 
   for (const p of pokemons.slice(0, 3)) {
-const gifPath = findPokemonGifFile(
-  p.isShiny ? `s_${p.name}` : p.name
-);
+    const searchName = p.isShiny ? `s_${p.name}` : p.name;
+    const gifUrl = await getPokemonGifUrl(searchName);
 
-    if (!gifPath || !fs.existsSync(gifPath)) continue;
-
-    const fileName = `pokemon-${id}-${Date.now()}-${files.length}.gif`;
-
-    files.push(
-      new AttachmentBuilder(gifPath, {
-        name: fileName
-      })
-    );
+    if (!gifUrl) continue;
 
     embeds.push(
       new EmbedBuilder()
         .setColor(p.isShiny ? 0xffd700 : 0x00ffff)
         .setTitle(`${p.isShiny ? "✨" : "❤️"} ${p.displayName}`)
-        .setImage(`attachment://${fileName}`)
+        .setImage(gifUrl)
     );
   }
 
-  return { embeds, files };
+  return { embeds, files: [] };
 }
 
 async function buildProfileCollage(id) {
@@ -1631,10 +1655,10 @@ if (activeProfileEdit === "pokemon") {
     return msg.reply("❌ Ya tienes 3 Pokémon favoritos. Usa `pokemon reset` para borrar la lista.");
   }
 
-  const parsed = parsePokemonName(pokemonName);
-  const gifPath = findPokemonGifFile(pokemonName);
+const parsed = parsePokemonName(pokemonName);
+const gifUrl = await getPokemonGifUrl(pokemonName);
 
-  if (!gifPath) {
+  if (!gifUrl) {
     return msg.reply("❌ No encontré ese GIF en las carpetas Gen1 a Gen8. Revisa el nombre.");
   }
 
