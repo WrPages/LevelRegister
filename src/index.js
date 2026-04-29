@@ -16,6 +16,7 @@ import fs from "fs";
 import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import { getGist, updateGist } from "./gist.js";
+import { fileURLToPath } from "url";
 
 
 
@@ -949,12 +950,18 @@ function buildProfileMainEmbed(id) {
     );
 }
 
-const POKEMON_GIF_ROOT = path.resolve(".");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const POKEMON_GIF_ROOT = __dirname;
 
 function normalizePokemonName(name) {
   return name
     .toLowerCase()
     .trim()
+    .replace(/\.(gif|png|webp)$/i, "")
+    .replace(/^s[_\-\s]/i, "")
+    .replace(/^shiny\s+/i, "")
     .replace(/\s+/g, "-")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
@@ -967,13 +974,9 @@ function parsePokemonName(rawName) {
     /^s[_\-\s]/i.test(raw) ||
     /^shiny\s+/i.test(raw);
 
-  const clean = raw
-    .replace(/^s[_\-\s]/i, "")
-    .replace(/^shiny\s+/i, "");
-
   return {
     isShiny,
-    cleanName: normalizePokemonName(clean),
+    cleanName: normalizePokemonName(raw),
     displayName: raw
   };
 }
@@ -981,45 +984,43 @@ function parsePokemonName(rawName) {
 function findPokemonGifFile(rawName) {
   const { isShiny, cleanName } = parsePokemonName(rawName);
 
-  const folder = isShiny ? "Shiny" : "Normal";
-  const expectedFile = isShiny
-    ? `s_${cleanName}.gif`
-    : `${cleanName}.gif`;
-
-  console.log("🔍 Buscando Pokémon GIF:", {
+  console.log("🔍 Buscando:", {
     rawName,
     cleanName,
     isShiny,
-    expectedFile,
     root: POKEMON_GIF_ROOT
   });
 
   for (let gen = 1; gen <= 8; gen++) {
+    const folder = isShiny ? "Shiny" : "Normal";
     const dir = path.join(POKEMON_GIF_ROOT, `Gen${gen}`, folder);
 
-    console.log("📁 Revisando carpeta:", dir);
+    console.log("📁 Revisando:", dir);
 
     if (!fs.existsSync(dir)) {
-      console.log("❌ No existe carpeta:", dir);
+      console.log("❌ Carpeta no existe:", dir);
       continue;
     }
 
     const files = fs.readdirSync(dir);
 
-    const foundFile = files.find(file =>
-      file.toLowerCase() === expectedFile.toLowerCase()
-    );
+    const found = files.find(file => {
+      const base = normalizePokemonName(file);
+      return base === cleanName && file.toLowerCase().endsWith(".gif");
+    });
 
-    if (foundFile) {
-      const finalPath = path.join(dir, foundFile);
-      console.log("✅ GIF encontrado:", finalPath);
+    if (found) {
+      const finalPath = path.join(dir, found);
+      console.log("✅ Encontrado:", finalPath);
       return finalPath;
     }
   }
 
-  console.log("❌ GIF no encontrado:", expectedFile);
+  console.log("❌ No encontrado:", rawName);
   return null;
 }
+
+
 
 async function buildPokemonFavoriteEmbeds(id) {
   const profile = ensureUserProfile(id);
@@ -1033,8 +1034,9 @@ async function buildPokemonFavoriteEmbeds(id) {
   const files = [];
 
   for (const p of pokemons.slice(0, 3)) {
-    const searchName = p.isShiny ? `s_${p.name}` : p.name;
-    const gifPath = findPokemonGifFile(searchName);
+const gifPath = findPokemonGifFile(
+  p.isShiny ? `s_${p.name}` : p.name
+);
 
     if (!gifPath || !fs.existsSync(gifPath)) continue;
 
