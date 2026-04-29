@@ -212,6 +212,20 @@ function saveProfiles() {
     updateGist(process.env.GIST_PROFILES, userProfiles, "profiles.json");
   }, 2000);
 }
+function deleteLater(message, delay = 60_000) {
+  if (!message || !message.deletable) return;
+
+  setTimeout(() => {
+    message.delete().catch(() => {});
+  }, delay);
+}
+
+async function replyAndDelete(msg, content, delay = 60_000) {
+  const reply = await msg.reply(content);
+  deleteLater(reply, delay);
+  deleteLater(msg, delay);
+  return reply;
+}
 // =============================
 const colorCategories = {
   red: [
@@ -1600,13 +1614,12 @@ const activeProfileEdit = profileEditState[msg.author.id];
   profile.favoritePokemon = [];
   saveProfiles();
   await updateUserProfilePost(id);
-  return msg.reply("✅ Pokémon favoritos reiniciados.");
+  return replyAndDelete(msg, "✅ Pokémon favoritos reiniciados.");
 }
 
 if (content === "perfil actualizar") {
   await updateUserProfilePost(id);
-  return msg.reply("✅ Perfil actualizado.");
-}
+return replyAndDelete(msg, "✅ Perfil actualizado.");}
 
   // =============================
   // 🎨 COLOR
@@ -1673,7 +1686,7 @@ const gifUrl = await getPokemonGifUrl(pokemonName);
 
   await updateUserProfilePost(id);
 
-  return msg.reply(`✅ Pokémon favorito agregado: **${pokemonName}**`);
+  return replyAndDelete(msg, `✅ Pokémon favorito agregado: **${pokemonName}**`);
 }
 
 if (activeProfileEdit === "status") {
@@ -1681,7 +1694,7 @@ if (activeProfileEdit === "status") {
   delete profileEditState[msg.author.id];
   saveProfiles();
   await updateUserProfilePost(id);
-  return msg.reply("✅ Estado actualizado.");
+  return replyAndDelete(msg, "✅ Estado actualizado.");
 }
 
 if (activeProfileEdit === "quote") {
@@ -1689,7 +1702,7 @@ if (activeProfileEdit === "quote") {
   delete profileEditState[msg.author.id];
   saveProfiles();
   await updateUserProfilePost(id);
-  return msg.reply("✅ Frase actualizada.");
+  return replyAndDelete(msg, "✅ Frase actualizada.");
 }
 
   if (activeProfileEdit === "profileLabels") {
@@ -1707,7 +1720,7 @@ if (activeProfileEdit === "quote") {
   saveProfiles();
   await updateUserProfilePost(id);
 
-  return msg.reply("✅ Texto actualizado.");
+  return replyAndDelete(msg, "✅ Texto actualizado.");
 }
   // =============================
   // 🖼️ FONDO
@@ -1716,11 +1729,11 @@ if (msg.attachments.size > 0) {
   const file = msg.attachments.first();
 
   if (!activeProfileEdit) {
-    return msg.reply("❌ Primero selecciona en el menú qué imagen quieres cambiar.");
+    return replyAndDelete(msg, "❌ Primero selecciona en el menú qué imagen quieres cambiar.");
   }
 
   if (!file.url.match(/\.(png|jpg|jpeg|webp)(\?.*)?$/i)) {
-    return msg.reply("❌ Solo se aceptan imágenes png, jpg, jpeg o webp.");
+    return replyAndDelete(msg, "❌ Solo se aceptan imágenes png, jpg, jpeg o webp.");
   }
 
   const res = await fetch(file.url);
@@ -1748,7 +1761,7 @@ if (msg.attachments.size > 0) {
     saveProfiles();
     await updateUserProfilePost(id);
 
-    return msg.reply(`✅ Imagen actualizada en perfil: ${activeProfileEdit}`);
+    return replyAndDelete(msg, `✅ Imagen actualizada en perfil: ${activeProfileEdit}`);
   }
 
   if (activeProfileEdit === "panelBg") {
@@ -1762,7 +1775,7 @@ if (msg.attachments.size > 0) {
     saveSettings();
     await forceRender(id);
 
-    return msg.reply("✅ Fondo del panel principal actualizado.");
+    return replyAndDelete(msg, "✅ Fondo del panel principal actualizado.");
   }
 
   return msg.reply(`❌ Tipo de edición no reconocido: ${activeProfileEdit}`);
