@@ -1429,6 +1429,18 @@ const menu = new ActionRowBuilder().addComponents(
     ])
 );
 
+const menuMsg = await post.send({
+  content: "🎮 Personaliza tu panel desde este menú:",
+  components: [menu],
+});
+
+userPanels[id] = {
+  messageId: sent.id,
+  postId: post.id,
+  menuMessageId: menuMsg.id,
+  profileMessageId: null
+};
+
 savePanels();
 
 await updateUserProfilePost(id);
