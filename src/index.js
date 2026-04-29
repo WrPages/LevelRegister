@@ -916,14 +916,6 @@ function ensureUserProfile(id) {
   return userProfiles[id];
 }
 
-function normalizePokemonName(name) {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 
 
