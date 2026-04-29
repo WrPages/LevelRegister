@@ -959,10 +959,21 @@ function buildProfileMainEmbed(id) {
 
 const POKEMON_GIF_ROOT = process.cwd();
 
+function normalizePokemonName(name) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function parsePokemonName(rawName) {
   const raw = rawName.trim();
 
-  const isShiny = /^s[_\-\s]/i.test(raw) || /^shiny\s+/i.test(raw);
+  const isShiny =
+    /^s[_\-\s]/i.test(raw) ||
+    /^shiny\s+/i.test(raw);
 
   const clean = raw
     .replace(/^s[_\-\s]/i, "")
@@ -970,32 +981,25 @@ function parsePokemonName(rawName) {
 
   return {
     isShiny,
-    cleanName: normalizePokemonName(clean)
+    cleanName: normalizePokemonName(clean),
+    displayName: raw
   };
 }
 
 function findPokemonGifFile(rawName) {
   const { isShiny, cleanName } = parsePokemonName(rawName);
 
-  const typeFolder = isShiny ? "Shiny" : "Normal";
+  const folder = isShiny ? "Shiny" : "Normal";
+  const expectedFile = isShiny
+    ? `s_${cleanName}.gif`
+    : `${cleanName}.gif`;
 
   for (let gen = 1; gen <= 8; gen++) {
-    const dir = path.join(POKEMON_GIF_ROOT, `Gen${gen}`, typeFolder);
+    const dir = path.join(POKEMON_GIF_ROOT, `Gen${gen}`, folder);
+    const gifPath = path.join(dir, expectedFile);
 
-    if (!fs.existsSync(dir)) continue;
-
-    const files = fs.readdirSync(dir);
-
-    for (const file of files) {
-      if (!file.toLowerCase().endsWith(".gif")) continue;
-
-      const baseName = file
-        .replace(/\.gif$/i, "")
-        .replace(/^s[_\-\s]/i, "");
-
-      if (normalizePokemonName(baseName) === cleanName) {
-        return path.join(dir, file);
-      }
+    if (fs.existsSync(gifPath)) {
+      return gifPath;
     }
   }
 
@@ -1014,20 +1018,23 @@ async function buildPokemonFavoriteEmbeds(id) {
   const files = [];
 
   for (const p of pokemons.slice(0, 3)) {
-    if (!p.gifPath || !fs.existsSync(p.gifPath)) continue;
+    const searchName = p.isShiny ? `s_${p.name}` : p.name;
+    const gifPath = findPokemonGifFile(searchName);
+
+    if (!gifPath || !fs.existsSync(gifPath)) continue;
 
     const fileName = `pokemon-${id}-${Date.now()}-${files.length}.gif`;
 
     files.push(
-      new AttachmentBuilder(p.gifPath, {
+      new AttachmentBuilder(gifPath, {
         name: fileName
       })
     );
 
     embeds.push(
       new EmbedBuilder()
-        .setColor(0x00ffff)
-        .setTitle(`❤️ ${p.displayName}`)
+        .setColor(p.isShiny ? 0xffd700 : 0x00ffff)
+        .setTitle(`${p.isShiny ? "✨" : "❤️"} ${p.displayName}`)
         .setImage(`attachment://${fileName}`)
     );
   }
@@ -1628,18 +1635,18 @@ if (activeProfileEdit === "pokemon") {
     return msg.reply("❌ Ya tienes 3 Pokémon favoritos. Usa `pokemon reset` para borrar la lista.");
   }
 
+  const parsed = parsePokemonName(pokemonName);
+  const gifPath = findPokemonGifFile(pokemonName);
 
-const gifPath = findPokemonGifFile(pokemonName);
+  if (!gifPath) {
+    return msg.reply("❌ No encontré ese GIF en las carpetas Gen1 a Gen8. Revisa el nombre.");
+  }
 
-if (!gifPath) {
-  return msg.reply("❌ No encontré ese GIF en las carpetas Gen1 a Gen8. Revisa el nombre.");
-}
-
-profile.favoritePokemon.push({
-  name: parsePokemonName(pokemonName).cleanName,
-  displayName: pokemonName.trim(),
-  gifPath
-});
+  profile.favoritePokemon.push({
+    name: parsed.cleanName,
+    displayName: parsed.displayName,
+    isShiny: parsed.isShiny
+  });
 
   delete profileEditState[msg.author.id];
   saveProfiles();
