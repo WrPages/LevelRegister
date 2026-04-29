@@ -1359,20 +1359,75 @@ const sent = await channel.send({
 const menu = new ActionRowBuilder().addComponents(
   new StringSelectMenuBuilder()
     .setCustomId(`menu_${id}`)
-.setPlaceholder("Personalizar perfil")
-.addOptions([
+    .setPlaceholder("Elige qué panel quieres personalizar")
+    .addOptions([
+      {
+        label: "📊 MAIN | Cambiar fondo",
+        description: "Fondo del panel principal de estadísticas",
+        value: "bg"
+      },
+      {
+        label: "📊 MAIN | Color nombre",
+        description: "Color del nombre en el panel principal",
+        value: "name"
+      },
+      {
+        label: "📊 MAIN | Color texto",
+        description: "Color del texto en el panel principal",
+        value: "text"
+      },
+      {
+        label: "👤 PERSONAL | Pokémon favorito",
+        description: "Agrega hasta 3 Pokémon favoritos",
+        value: "pokemon"
+      },
+      {
+        label: "👤 PERSONAL | Carta favorita",
+        description: "Sube la imagen de tu carta favorita",
+        value: "favoriteCard"
+      },
+      {
+        label: "👤 PERSONAL | Mazo favorito",
+        description: "Sube la imagen de tu mazo favorito",
+        value: "favoriteDeck"
+      },
+      {
+        label: "👤 PERSONAL | Carta más valiosa",
+        description: "Sube la imagen de tu carta más valiosa",
+        value: "mostValuableCard"
+      },
+      {
+        label: "👤 PERSONAL | Carta más rara",
+        description: "Sube la imagen de tu carta más rara",
+        value: "rarestCard"
+      },
+      {
+        label: "👤 PERSONAL | Mejor GP",
+        description: "Sube la imagen de tu mejor GP",
+        value: "bestGP"
+      },
+      {
+        label: "👤 PERSONAL | Rango máximo",
+        description: "Sube la imagen de tu rango máximo",
+        value: "maxRank"
+      },
+      {
+        label: "👤 PERSONAL | Estado",
+        description: "Edita tu estado del perfil personal",
+        value: "status"
+      },
+      {
+        label: "👤 PERSONAL | Frase",
+        description: "Edita tu frase personalizada",
+        value: "quote"
+      },
+      {
+        label: "👤 PERSONAL | Fondo del perfil",
+        description: "Cambia el fondo del segundo panel",
+        value: "profileBg"
+      }
+    ])
 );
-
-await post.send({
-  content: "🎮 Personaliza tu panel",
-  components: [menu],
-});
-
-userPanels[id] = {
-  messageId: sent.id,
-  postId: post.id,
-  profileMessageId: null
-};
 
 savePanels();
 
