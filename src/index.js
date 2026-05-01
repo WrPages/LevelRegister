@@ -389,10 +389,21 @@ client.once("clientReady", async () => {
     const usersData = await getParsedGist(group.usersGistId);
 
     for (const [id, user] of Object.entries(usersData)) {
-      eliteUsers[id] = {
-        ...user,
-        group: groupName
-      };
+    if (!eliteUsers[id]) {
+  eliteUsers[id] = {
+    ...user,
+    group: groupName,
+    groups: [groupName]
+  };
+} else {
+  if (!eliteUsers[id].groups) eliteUsers[id].groups = [eliteUsers[id].group];
+
+  if (!eliteUsers[id].groups.includes(groupName)) {
+    eliteUsers[id].groups.push(groupName);
+  }
+
+  eliteUsers[id].group = eliteUsers[id].groups[0];
+}
     }
   }
 
@@ -1915,6 +1926,7 @@ function getUserRanking(groupFilter = null) {
         name: user.name || data.name || session.name || "Unknown",
         group: rankingGroup,
         realGroup: user.group,
+        roles: user.groups || [user.group],
         level,
         xp: Math.floor(totalXP),
         gp: data.gp || 0,
@@ -2021,9 +2033,17 @@ if (group === "global") {
   roleColor = groupColor(user.realGroup || user.group);
 }
 
-ctx.fillStyle = roleColor;
-ctx.font = "17px Righteous";
-ctx.fillText(displayRole, 130, y + 63);
+const roles = user.roles || [user.realGroup || user.group];
+
+let roleX = 130;
+
+for (const role of roles) {
+  ctx.fillStyle = groupColor(role);
+  ctx.font = "17px Righteous";
+  ctx.fillText(groupLabel(role), roleX, y + 63);
+
+  roleX += ctx.measureText(groupLabel(role)).width + 16;
+}
 
     // Stats
     ctx.fillStyle = "#ffffff";
