@@ -1967,11 +1967,12 @@ const shownUsers = users.slice(0, maxUsers);
 
   ctx.fillStyle = accent;
   ctx.font = "42px Righteous";
-  ctx.fillText(title, 40, 65);
+  const cleanTitle = title.replace(/^[^\w\s]+\s*/, "");
+ctx.fillText(cleanTitle, 40, 65);
 
   ctx.fillStyle = "#cbd5e1";
   ctx.font = "22px Righteous";
-  ctx.fillText("Ordenado por nivel de usuario", 42, 105);
+  ctx.fillText("Sorted by user level", 42, 105);
 
   ctx.fillStyle = accent;
   ctx.fillRect(40, 125, width - 80, 4);
