@@ -1906,23 +1906,58 @@ function getUserRanking() {
 }
 
 function buildRankingEmbed() {
-  const ranking = getUserRanking().slice(0, 10);
+  const ranking = getUserRanking();
 
-  const description = ranking.map((u, index) => {
-    const medal =
-      index === 0 ? "🥇" :
-      index === 1 ? "🥈" :
-      index === 2 ? "🥉" :
-      `#${index + 1}`;
+  // =============================
+  // 🌍 GLOBAL
+  // =============================
+  const globalList = ranking
+    .map((u, i) => `#${i + 1} <@${u.id}> — Lv ${u.level}`)
+    .join("\n");
 
-    return `${medal} <@${u.id}> — **Lv ${u.level}** | XP: ${u.xp} | GP: ${u.gp} | Packs: ${u.packs}`;
-  }).join("\n");
+  // =============================
+  // 🧩 POR GRUPO
+  // =============================
+  const groups = {
+    trainer: [],
+    gymLeader: [],
+    eliteFour: []
+  };
+
+  for (const user of ranking) {
+    const group = eliteUsers[user.id]?.group;
+    if (groups[group]) {
+      groups[group].push(user);
+    }
+  }
+
+  const buildGroupText = (arr) =>
+    arr.map((u, i) => `#${i + 1} <@${u.id}> — Lv ${u.level}`).join("\n") || "Vacío";
 
   return new EmbedBuilder()
-    .setTitle("🏆 Ranking de Rerollers")
+    .setTitle("🏆 Ranking Global + Grupos")
     .setColor("#ffd700")
-    .setDescription(description || "Todavía no hay usuarios en el ranking.")
-    .setFooter({ text: "Ordenado por nivel de usuario" })
+
+    .addFields(
+      {
+        name: "🌍 Global (Todos)",
+        value: globalList.slice(0, 1000) || "Sin datos"
+      },
+      {
+        name: "🟢 Trainers",
+        value: buildGroupText(groups.trainer)
+      },
+      {
+        name: "🔵 Gym Leaders",
+        value: buildGroupText(groups.gymLeader)
+      },
+      {
+        name: "🟣 Elite Four",
+        value: buildGroupText(groups.eliteFour)
+      }
+    )
+
+    .setFooter({ text: "Ordenado por nivel" })
     .setTimestamp();
 }
 async function updateRanking() {
