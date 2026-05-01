@@ -2012,9 +2012,18 @@ ctx.fillText(rankNumber, 65, y + 52);
     ctx.fillText(user.name.slice(0, 22), 130, y + 42);
 
     // Grupo
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "17px Righteous";
-    ctx.fillText(groupLabel(user.group), 130, y + 63);
+// Grupo / rango
+let displayRole = groupLabel(user.realGroup || user.group);
+let roleColor = groupColor(user.realGroup || user.group);
+
+if (group === "global") {
+  displayRole = groupLabel(user.realGroup || user.group);
+  roleColor = groupColor(user.realGroup || user.group);
+}
+
+ctx.fillStyle = roleColor;
+ctx.font = "17px Righteous";
+ctx.fillText(displayRole, 130, y + 63);
 
     // Stats
     ctx.fillStyle = "#ffffff";
