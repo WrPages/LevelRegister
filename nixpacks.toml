@@ -1,11 +1,12 @@
 [phases.setup]
 nixPkgs = [
-  "nodejs_18",
+  "nodejs_22",
   "cairo",
   "pango",
   "libpng",
   "libjpeg",
-  "giflib"
+  "giflib",
+  "pkg-config"
 ]
 
 [phases.install]
