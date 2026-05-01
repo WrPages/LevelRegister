@@ -1884,9 +1884,12 @@ function resetAllPokemon() {
   }
 }
 
-function getUserRanking() {
-  return Object.entries(trackingData)
-    .map(([id, data]) => {
+function getUserRanking(groupFilter = null) {
+  return Object.entries(eliteUsers)
+    .map(([id, user]) => {
+      if (groupFilter && user.group !== groupFilter) return null;
+
+      const data = trackingData[id] || {};
       const session = liveTracker[id] || {};
 
       const totalXP = (data.xp || 0) + (session.sessionXP || 0);
@@ -1894,7 +1897,8 @@ function getUserRanking() {
 
       return {
         id,
-        name: data.name || session.name || "Unknown",
+        name: user.name || data.name || session.name || "Unknown",
+        group: user.group,
         level,
         xp: Math.floor(totalXP),
         gp: data.gp || 0,
@@ -1902,69 +1906,147 @@ function getUserRanking() {
         instances: data.recordInstances || 0
       };
     })
+    .filter(Boolean)
     .sort((a, b) => b.level - a.level || b.xp - a.xp);
 }
 
-function buildRankingEmbed() {
-  const ranking = getUserRanking();
+function groupLabel(group) {
+  if (group === "trainer") return "Trainers";
+  if (group === "gymLeader") return "Gym Leaders";
+  if (group === "eliteFour") return "Elite Four";
+  return "Global";
+}
 
-  // =============================
-  // 🌍 GLOBAL
-  // =============================
-  const globalList = ranking
-    .map((u, i) => `#${i + 1} <@${u.id}> — Lv ${u.level}`)
-    .join("\n");
+function groupColor(group) {
+  if (group === "trainer") return "#00ff88";
+  if (group === "gymLeader") return "#00aaff";
+  if (group === "eliteFour") return "#b84dff";
+  return "#ffd700";
+}
 
-  // =============================
-  // 🧩 POR GRUPO
-  // =============================
-  const groups = {
-    trainer: [],
-    gymLeader: [],
-    eliteFour: []
-  };
+async function buildRankingPanel(title, users, group = "global") {
+  const width = 900;
+  const rowHeight = 72;
+  const headerHeight = 150;
+  const maxUsers = 15;
 
-  for (const user of ranking) {
-    const group = eliteUsers[user.id]?.group;
-    if (groups[group]) {
-      groups[group].push(user);
-    }
+  const shownUsers = users.slice(0, maxUsers);
+  const height = headerHeight + Math.max(shownUsers.length, 1) * rowHeight + 50;
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  const accent = groupColor(group);
+
+  // Fondo
+  const gradient = ctx.createLinearGradient(0, 0, width, height);
+  gradient.addColorStop(0, "#0f172a");
+  gradient.addColorStop(1, "#020617");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+
+  // Header
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(0, 0, width, headerHeight);
+
+  ctx.fillStyle = accent;
+  ctx.font = "42px Righteous";
+  ctx.fillText(title, 40, 65);
+
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "22px Righteous";
+  ctx.fillText("Ordenado por nivel de usuario", 42, 105);
+
+  ctx.fillStyle = accent;
+  ctx.fillRect(40, 125, width - 80, 4);
+
+  if (shownUsers.length === 0) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "28px Righteous";
+    ctx.fillText("Sin usuarios registrados", 40, 210);
+
+    return new AttachmentBuilder(canvas.toBuffer("image/png"), {
+      name: `ranking-${group}.png`
+    });
   }
 
-  const buildGroupText = (arr) =>
-    arr.map((u, i) => `#${i + 1} <@${u.id}> — Lv ${u.level}`).join("\n") || "Vacío";
+  for (let i = 0; i < shownUsers.length; i++) {
+    const user = shownUsers[i];
+    const y = headerHeight + i * rowHeight;
 
-  return new EmbedBuilder()
-    .setTitle("🏆 Ranking Global + Grupos")
-    .setColor("#ffd700")
+    // Fila alterna
+    ctx.fillStyle = i % 2 === 0
+      ? "rgba(255,255,255,0.055)"
+      : "rgba(255,255,255,0.025)";
+    ctx.fillRect(30, y + 8, width - 60, rowHeight - 10);
 
-    .addFields(
-      {
-        name: "🌍 Global (Todos)",
-        value: globalList.slice(0, 1000) || "Sin datos"
-      },
-      {
-        name: "🟢 Trainers",
-        value: buildGroupText(groups.trainer)
-      },
-      {
-        name: "🔵 Gym Leaders",
-        value: buildGroupText(groups.gymLeader)
-      },
-      {
-        name: "🟣 Elite Four",
-        value: buildGroupText(groups.eliteFour)
-      }
-    )
+    // Ranking
+    let medal = `#${i + 1}`;
+    if (i === 0) medal = "🥇";
+    if (i === 1) medal = "🥈";
+    if (i === 2) medal = "🥉";
 
-    .setFooter({ text: "Ordenado por nivel" })
-    .setTimestamp();
+    ctx.fillStyle = accent;
+    ctx.font = "30px Righteous";
+    ctx.fillText(medal, 55, y + 52);
+
+    // Nombre
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "26px Righteous";
+    ctx.fillText(user.name.slice(0, 22), 130, y + 42);
+
+    // Grupo
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "17px Righteous";
+    ctx.fillText(groupLabel(user.group), 130, y + 63);
+
+    // Stats
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "24px Righteous";
+    ctx.fillText(`Lv ${user.level}`, 520, y + 42);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "17px Righteous";
+    ctx.fillText(`${user.xp} XP`, 520, y + 63);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "22px Righteous";
+    ctx.fillText(`GP ${user.gp}`, 660, y + 42);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "17px Righteous";
+    ctx.fillText(`${user.packs} packs`, 660, y + 63);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "22px Righteous";
+    ctx.fillText(`x${user.instances}`, 790, y + 42);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "17px Righteous";
+    ctx.fillText("record", 790, y + 63);
+  }
+
+  return new AttachmentBuilder(canvas.toBuffer("image/png"), {
+    name: `ranking-${group}.png`
+  });
 }
+
 async function updateRanking() {
   try {
     const channel = await client.channels.fetch(process.env.RANKING_CHANNEL_ID);
-
     if (!channel) return;
+
+    const globalRanking = getUserRanking();
+    const trainerRanking = getUserRanking("trainer");
+    const gymLeaderRanking = getUserRanking("gymLeader");
+    const eliteFourRanking = getUserRanking("eliteFour");
+
+    const files = [
+      await buildRankingPanel("🏆 Ranking Global", globalRanking, "global"),
+      await buildRankingPanel("🟢 Ranking Trainers", trainerRanking, "trainer"),
+      await buildRankingPanel("🔵 Ranking Gym Leaders", gymLeaderRanking, "gymLeader"),
+      await buildRankingPanel("🟣 Ranking Elite Four", eliteFourRanking, "eliteFour")
+    ];
 
     let message = null;
 
@@ -1972,13 +2054,21 @@ async function updateRanking() {
       message = await channel.messages.fetch(rankingMessageId).catch(() => null);
     }
 
-    const embed = buildRankingEmbed();
+    const payload = {
+      content: "🏆 **Rankings de Rerollers**",
+      files,
+      attachments: []
+    };
 
     if (message) {
-      await message.edit({ embeds: [embed] });
+      await message.edit(payload);
     } else {
-      const sent = await channel.send({ embeds: [embed] });
+      const sent = await channel.send(payload);
       rankingMessageId = sent.id;
+
+      if (!userSettings.global) userSettings.global = {};
+      userSettings.rankingMessageId = rankingMessageId;
+      saveSettings();
     }
 
   } catch (err) {
