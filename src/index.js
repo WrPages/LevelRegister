@@ -83,6 +83,7 @@ const commandMap = {
   texto: "text",
   text: "text",
 };
+const SHOW_GYM_LEADERS_AS_TRAINERS_IN_RANKING = true;///GymLEaderonTrainer
 // =============================
 // 🧠 FONT
 // =============================
@@ -1885,10 +1886,23 @@ function resetAllPokemon() {
   }
 }
 
+function getRankingGroup(userGroup) {
+  if (
+    SHOW_GYM_LEADERS_AS_TRAINERS_IN_RANKING &&
+    userGroup === "gymLeader"
+  ) {
+    return "trainer";
+  }
+
+  return userGroup;
+}
+
 function getUserRanking(groupFilter = null) {
   return Object.entries(eliteUsers)
     .map(([id, user]) => {
-      if (groupFilter && user.group !== groupFilter) return null;
+      const rankingGroup = getRankingGroup(user.group);
+
+      if (groupFilter && rankingGroup !== groupFilter) return null;
 
       const data = trackingData[id] || {};
       const session = liveTracker[id] || {};
@@ -1899,7 +1913,8 @@ function getUserRanking(groupFilter = null) {
       return {
         id,
         name: user.name || data.name || session.name || "Unknown",
-        group: user.group,
+        group: rankingGroup,
+        realGroup: user.group,
         level,
         xp: Math.floor(totalXP),
         gp: data.gp || 0,
@@ -1926,13 +1941,13 @@ function groupColor(group) {
 }
 
 async function buildRankingPanel(title, users, group = "global") {
-  const width = 900;
-  const rowHeight = 72;
-  const headerHeight = 150;
-  const maxUsers = 15;
+const width = 900;
+const height = 1280;
+const rowHeight = 72;
+const headerHeight = 150;
+const maxUsers = 15;
 
-  const shownUsers = users.slice(0, maxUsers);
-  const height = headerHeight + Math.max(shownUsers.length, 1) * rowHeight + 50;
+const shownUsers = users.slice(0, maxUsers);
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
@@ -2038,32 +2053,28 @@ async function updateRanking() {
 
     rankingMessageIds = userSettings.rankingMessageIds || {};
 
-    const rankings = [
-      {
-        key: "global",
-        title: "🏆 Ranking Global",
-        users: getUserRanking(),
-        group: "global"
-      },
-      {
-        key: "trainer",
-        title: "🟢 Ranking Trainers",
-        users: getUserRanking("trainer"),
-        group: "trainer"
-      },
-      {
-        key: "gymLeader",
-        title: "🔵 Ranking Gym Leaders",
-        users: getUserRanking("gymLeader"),
-        group: "gymLeader"
-      },
-      {
-        key: "eliteFour",
-        title: "🟣 Ranking Elite Four",
-        users: getUserRanking("eliteFour"),
-        group: "eliteFour"
-      }
-    ];
+const rankings = [
+  {
+    key: "global",
+    title: "🏆 Ranking Global",
+    users: getUserRanking(),
+    group: "global"
+  },
+  {
+    key: "trainer",
+    title: SHOW_GYM_LEADERS_AS_TRAINERS_IN_RANKING
+      ? "🟢 Ranking Trainers + Gym Leaders"
+      : "🟢 Ranking Trainers",
+    users: getUserRanking("trainer"),
+    group: "trainer"
+  },
+  {
+    key: "eliteFour",
+    title: "🟣 Ranking Elite Four",
+    users: getUserRanking("eliteFour"),
+    group: "eliteFour"
+  }
+];
 
     for (const ranking of rankings) {
       const file = await buildRankingPanel(
