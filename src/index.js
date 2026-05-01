@@ -1988,9 +1988,8 @@ ctx.fillStyle = group === "global" ? "#ff4d4d" : accent;
 ctx.font = "32px Righteous";
 ctx.fillText(rankNumber, 65, y + 52);
 
-    ctx.fillStyle = accent;
-    ctx.font = "30px Righteous";
-    ctx.fillText(medal, 55, y + 52);
+const rankNumber = `${i + 1}`;
+
 
     // Nombre
     ctx.fillStyle = "#ffffff";
