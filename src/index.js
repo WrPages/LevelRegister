@@ -2037,7 +2037,7 @@ async function updateRanking() {
     const channel = await client.channels.fetch(process.env.RANKING_CHANNEL_ID);
     if (!channel) return;
 
-    rankingMessageIds = userSettings.rankingMessageIds || {};
+    rarankingMessageId = userSettings.rankingMessageId || null;
 
     const rankings = [
       {
