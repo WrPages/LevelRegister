@@ -139,6 +139,7 @@ let usersByGroup = {};
 let liveTracker = {};
 let userPanels = {};
 let rankingMessageId = null;
+let rankingMessageIds = {};
 let userSettings = {};
 let userProfiles = {};
 let profileEditState = {};
@@ -1981,10 +1982,11 @@ async function buildRankingPanel(title, users, group = "global") {
     ctx.fillRect(30, y + 8, width - 60, rowHeight - 10);
 
     // Ranking
-    let medal = `#${i + 1}`;
-    if (i === 0) medal = "🥇";
-    if (i === 1) medal = "🥈";
-    if (i === 2) medal = "🥉";
+const rankNumber = `${i + 1}`;
+
+ctx.fillStyle = group === "global" ? "#ff4d4d" : accent;
+ctx.font = "32px Righteous";
+ctx.fillText(rankNumber, 65, y + 52);
 
     ctx.fillStyle = accent;
     ctx.font = "30px Righteous";
@@ -2036,40 +2038,66 @@ async function updateRanking() {
     const channel = await client.channels.fetch(process.env.RANKING_CHANNEL_ID);
     if (!channel) return;
 
-    const globalRanking = getUserRanking();
-    const trainerRanking = getUserRanking("trainer");
-    const gymLeaderRanking = getUserRanking("gymLeader");
-    const eliteFourRanking = getUserRanking("eliteFour");
+    rankingMessageIds = userSettings.rankingMessageIds || {};
 
-    const files = [
-      await buildRankingPanel("🏆 Ranking Global", globalRanking, "global"),
-      await buildRankingPanel("🟢 Ranking Trainers", trainerRanking, "trainer"),
-      await buildRankingPanel("🔵 Ranking Gym Leaders", gymLeaderRanking, "gymLeader"),
-      await buildRankingPanel("🟣 Ranking Elite Four", eliteFourRanking, "eliteFour")
+    const rankings = [
+      {
+        key: "global",
+        title: "🏆 Ranking Global",
+        users: getUserRanking(),
+        group: "global"
+      },
+      {
+        key: "trainer",
+        title: "🟢 Ranking Trainers",
+        users: getUserRanking("trainer"),
+        group: "trainer"
+      },
+      {
+        key: "gymLeader",
+        title: "🔵 Ranking Gym Leaders",
+        users: getUserRanking("gymLeader"),
+        group: "gymLeader"
+      },
+      {
+        key: "eliteFour",
+        title: "🟣 Ranking Elite Four",
+        users: getUserRanking("eliteFour"),
+        group: "eliteFour"
+      }
     ];
 
-    let message = null;
+    for (const ranking of rankings) {
+      const file = await buildRankingPanel(
+        ranking.title,
+        ranking.users,
+        ranking.group
+      );
 
-    if (rankingMessageId) {
-      message = await channel.messages.fetch(rankingMessageId).catch(() => null);
+      let message = null;
+
+      if (rankingMessageIds[ranking.key]) {
+        message = await channel.messages
+          .fetch(rankingMessageIds[ranking.key])
+          .catch(() => null);
+      }
+
+      const payload = {
+        content: `**${ranking.title}**`,
+        files: [file],
+        attachments: []
+      };
+
+      if (message) {
+        await message.edit(payload);
+      } else {
+        const sent = await channel.send(payload);
+        rankingMessageIds[ranking.key] = sent.id;
+      }
     }
 
-    const payload = {
-      content: "🏆 **Rankings de Rerollers**",
-      files,
-      attachments: []
-    };
-
-    if (message) {
-      await message.edit(payload);
-    } else {
-      const sent = await channel.send(payload);
-      rankingMessageId = sent.id;
-
-      if (!userSettings.global) userSettings.global = {};
-      userSettings.rankingMessageId = rankingMessageId;
-      saveSettings();
-    }
+    userSettings.rankingMessageIds = rankingMessageIds;
+    saveSettings();
 
   } catch (err) {
     console.log("❌ Error actualizando ranking:", err.message);
