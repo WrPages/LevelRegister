@@ -1988,7 +1988,6 @@ ctx.fillStyle = group === "global" ? "#ff4d4d" : accent;
 ctx.font = "32px Righteous";
 ctx.fillText(rankNumber, 65, y + 52);
 
-const rankNumber = `${i + 1}`;
 
 
     // Nombre
@@ -2037,7 +2036,7 @@ async function updateRanking() {
     const channel = await client.channels.fetch(process.env.RANKING_CHANNEL_ID);
     if (!channel) return;
 
-    rarankingMessageId = userSettings.rankingMessageId || null;
+    rankingMessageIds = userSettings.rankingMessageIds || {};
 
     const rankings = [
       {
