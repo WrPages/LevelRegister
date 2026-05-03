@@ -102,6 +102,25 @@ const client = new Client({
   ],
 });
 const CHAMPION_ROLE_ID = "1486206362332434634";
+const ROLE_PRIORITY = [
+  { key: "champion", label: "Champion", color: "#ffd700", id: CHAMPION_ROLE_ID },
+  { key: "eliteFour", label: "Elite Four", color: "#b84dff", id: "ID_DEL_ROL_ELITE_FOUR" },
+  { key: "gymLeader", label: "Gym Leader", color: "#00aaff", id: "ID_DEL_ROL_GYM_LEADER" },
+  { key: "trainer", label: "Trainer", color: "#00ff88", id: "ID_DEL_ROL_TRAINER" }
+];
+
+async function getHighestActiveRole(userId) {
+  const guild = client.guilds.cache.get("1483615153743462571");
+  const member = await guild?.members.fetch(userId).catch(() => null);
+
+  if (!member) return { key: "reroller", label: "Reroller", color: "#aaaaaa" };
+
+  return ROLE_PRIORITY.find(r => member.roles.cache.has(r.id)) || {
+    key: "reroller",
+    label: "Reroller",
+    color: "#aaaaaa"
+  };
+}
 
 
 const USERS_GP_GIST_ID = "5131a73fcee46b4a5c7b7faeea16efe9"; // 🔥 users_gp.json
@@ -1042,26 +1061,50 @@ async function loadPokemonGenerations() {
   return map;
 }
 
+async function urlExists(url) {
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function getPokemonGifUrl(rawName) {
   const parsed = parsePokemonName(rawName);
   const generations = await loadPokemonGenerations();
 
   const gen = generations.get(parsed.cleanName);
-
   if (!gen) return null;
 
-  const folder = parsed.isShiny ? "Shiny" : "Normal";
-  const fileName = parsed.isShiny
-    ? `s_${parsed.cleanName}.gif`
-    : `${parsed.cleanName}.gif`;
+  const normalFile = `${parsed.cleanName}.gif`;
+  const shinyFile = `s_${parsed.cleanName}.gif`;
+
+  const candidates = [];
 
   if (gen === "Legendary") {
-    return `${POKEMON_GIF_BASE_URL}/Legendary/${fileName}`;
+    if (parsed.isShiny) {
+      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/Shiny/${shinyFile}`);
+      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/${shinyFile}`);
+    } else {
+      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/Normal/${normalFile}`);
+      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/${normalFile}`);
+    }
+  } else {
+    if (parsed.isShiny) {
+      candidates.push(`${POKEMON_GIF_BASE_URL}/Gen${gen}/Shiny/${shinyFile}`);
+    } else {
+      candidates.push(`${POKEMON_GIF_BASE_URL}/Gen${gen}/Normal/${normalFile}`);
+    }
   }
 
-  return `${POKEMON_GIF_BASE_URL}/Gen${gen}/${folder}/${fileName}`;
-}
+  for (const url of candidates) {
+    if (await urlExists(url)) return url;
+  }
 
+  console.log("GIF registrado pero archivo no encontrado:", rawName, candidates);
+  return null;
+}
 
 
 async function buildPokemonFavoriteEmbeds(id) {
@@ -1078,7 +1121,15 @@ async function buildPokemonFavoriteEmbeds(id) {
     const searchName = p.isShiny ? `s_${p.name}` : p.name;
     const gifUrl = await getPokemonGifUrl(searchName);
 
-    if (!gifUrl) continue;
+    if (!gifUrl) {
+  embeds.push(
+    new EmbedBuilder()
+      .setColor(0xff4444)
+      .setTitle(`❌ ${p.displayName}`)
+      .setDescription("Está en el registro, pero no encontré el archivo GIF real.")
+  );
+  continue;
+}
 
     embeds.push(
       new EmbedBuilder()
@@ -1413,8 +1464,8 @@ const menu = new ActionRowBuilder().addComponents(
         value: "mostValuableCard"
       },
       {
-        label: "👤 B | Carta más rara",
-        description: "Sube la imagen de tu carta más rara",
+label: "👤 B | Carta más deseada",
+description: "Sube la imagen de tu carta más deseada",
         value: "rarestCard"
       },
       {
@@ -1515,7 +1566,7 @@ if (option === "mostValuableCard") {
 if (option === "rarestCard") {
   profileEditState[i.user.id] = "rarestCard";
   return i.reply({
-    content: "🌟 Sube una imagen de tu carta más rara.",
+   content: "🌟 Sube una imagen de tu carta más deseada.",
     ephemeral: true
   });
 }
@@ -1908,34 +1959,36 @@ function getRankingGroup(userGroup) {
   return userGroup;
 }
 
-function getUserRanking(groupFilter = null) {
-  return Object.entries(eliteUsers)
-    .map(([id, user]) => {
-      const rankingGroup = getRankingGroup(user.group);
+async function getUserRanking(groupFilter = null) {
+  const rows = [];
 
-      if (groupFilter && rankingGroup !== groupFilter) return null;
+  for (const [id, user] of Object.entries(eliteUsers)) {
+    const activeRole = await getHighestActiveRole(id);
+    const rankingGroup = getRankingGroup(activeRole.key);
 
-      const data = trackingData[id] || {};
-      const session = liveTracker[id] || {};
+    if (groupFilter && rankingGroup !== groupFilter) continue;
 
-      const totalXP = (data.xp || 0) + (session.sessionXP || 0);
-      const level = Math.floor(totalXP / 20);
+    const data = trackingData[id] || {};
+    const session = liveTracker[id] || {};
 
-      return {
-        id,
-        name: user.name || data.name || session.name || "Unknown",
-        group: rankingGroup,
-        realGroup: user.group,
-        roles: user.groups || [user.group],
-        level,
-        xp: Math.floor(totalXP),
-        gp: data.gp || 0,
-        packs: (data.totalpacks || 0) + (data.currentpacks || 0),
-        instances: data.recordInstances || 0
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.level - a.level || b.xp - a.xp);
+    const totalXP = (data.xp || 0) + (session.sessionXP || 0);
+    const level = Math.floor(totalXP / 20);
+
+    rows.push({
+      id,
+      name: user.name || data.name || session.name || "Unknown",
+      group: rankingGroup,
+      realGroup: activeRole.key,
+      activeRole,
+      level,
+      xp: Math.floor(totalXP),
+      gp: data.gp || 0,
+      packs: (data.totalpacks || 0) + (data.currentpacks || 0),
+      instances: data.recordInstances || 0
+    });
+  }
+
+  return rows.sort((a, b) => b.level - a.level || b.xp - a.xp);
 }
 
 function groupLabel(group) {
@@ -2033,17 +2086,9 @@ if (group === "global") {
   roleColor = groupColor(user.realGroup || user.group);
 }
 
-const roles = user.roles || [user.realGroup || user.group];
-
-let roleX = 130;
-
-for (const role of roles) {
-  ctx.fillStyle = groupColor(role);
-  ctx.font = "17px Righteous";
-  ctx.fillText(groupLabel(role), roleX, y + 63);
-
-  roleX += ctx.measureText(groupLabel(role)).width + 16;
-}
+ctx.fillStyle = user.activeRole?.color || groupColor(user.realGroup || user.group);
+ctx.font = "17px Righteous";
+ctx.fillText(user.activeRole?.label || groupLabel(user.realGroup || user.group), 130, y + 63);
 
     // Stats
     ctx.fillStyle = "#ffffff";
@@ -2095,7 +2140,7 @@ const rankings = [
     title: SHOW_GYM_LEADERS_AS_TRAINERS_IN_RANKING
       ? "🟢 Ranking Trainers + Gym Leaders"
       : "🟢 Ranking Trainers",
-    users: getUserRanking("trainer"),
+    users: await getUserRanking("trainer"),
     group: "trainer"
   },
   {
