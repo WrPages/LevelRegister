@@ -1427,73 +1427,73 @@ const sent = await channel.send({
 const menu = new ActionRowBuilder().addComponents(
   new StringSelectMenuBuilder()
     .setCustomId(`menu_${id}`)
-    .setPlaceholder("Elige qué panel quieres personalizar")
+    .setPlaceholder("Choose what you want to customize")
     .addOptions([
       {
-        label: "📊 A | Cambiar fondo",
-        description: "Fondo del panel principal de estadísticas",
+        label: "📊 A | Change background",
+        description: "Main stats panel background",
         value: "bg"
       },
       {
-        label: "📊 A | Color nombre",
-        description: "Color del nombre en el panel principal",
+        label: "📊 A | Name color",
+        description: "Name color on the main panel",
         value: "name"
       },
       {
-        label: "📊 A | Color texto",
-        description: "Color del texto en el panel principal",
+        label: "📊 A | Text color",
+        description: "Text color on the main panel",
         value: "text"
       },
       {
-        label: "👤 B | Pokémon favorito",
-        description: "Agrega hasta 3 Pokémon favoritos",
+        label: "👤 B | Favorite Pokémon",
+        description: "Add up to 3 favorite Pokémon",
         value: "pokemon"
       },
       {
-        label: "👤 B | Carta favorita",
-        description: "Sube la imagen de tu carta favorita",
+        label: "👤 B | Favorite card",
+        description: "Upload your favorite card image",
         value: "favoriteCard"
       },
       {
-        label: "👤 B | Mazo favorito",
-        description: "Sube la imagen de tu mazo favorito",
+        label: "👤 B | Favorite deck",
+        description: "Upload your favorite deck image",
         value: "favoriteDeck"
       },
       {
-        label: "👤 B | Carta más valiosa",
-        description: "Sube la imagen de tu carta más valiosa",
+        label: "👤 B | Most valuable card",
+        description: "Upload your most valuable card image",
         value: "mostValuableCard"
       },
       {
-label: "👤 B | Carta más deseada",
-description: "Sube la imagen de tu carta más deseada",
+        label: "👤 B | Most wanted card",
+        description: "Upload your most wanted card image",
         value: "rarestCard"
       },
       {
-        label: "👤 B | Mejor GP",
-        description: "Sube la imagen de tu mejor GP",
+        label: "👤 B | Best GP",
+        description: "Upload your best GP image",
         value: "bestGP"
       },
       {
-        label: "👤 B | Rango máximo",
-        description: "Sube la imagen de tu rango máximo",
+        label: "👤 B | Highest rank",
+        description: "Upload your highest rank image",
         value: "maxRank"
       },
       {
-        label: "👤 B | Fondo del perfil",
-        description: "Cambia el fondo del segundo panel",
+        label: "👤 B | Profile background",
+        description: "Change the second panel background",
         value: "profileBg"
       },
       {
-  label: "👤 PERSONAL | Color texto",
-  description: "Cambia el color del texto del segundo panel",
-  value: "profileText"
-      },
+        label: "👤 PERSONAL | Text color",
+        description: "Change the second panel text color",
+        value: "profileText"
+      }
     ])
 );
 
 const menuMsg = await post.send({
-  content: "🎮 Personaliza tu panel desde este menú:",
+  content: "🎮 Customize your panel from this menu:",
   components: [menu],
 });
 
@@ -1518,16 +1518,25 @@ client.on("interactionCreate", async (i) => {
   // =============================
   // 🎮 MENU PRINCIPAL
   // =============================
-  if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
+if (i.isStringSelectMenu() && i.customId.startsWith("menu_")) {
 
-    const id = i.user.id;
-    const option = i.values[0];
+  const [, panelOwnerId] = i.customId.split("_");
+
+  if (i.user.id !== panelOwnerId) {
+    return i.reply({
+      content: "❌ You can only edit your own panel.",
+      ephemeral: true
+    });
+  }
+
+  const id = panelOwnerId;
+  const option = i.values[0];
 
 if (option === "bg") {
   profileEditState[i.user.id] = "panelBg";
 
   return i.reply({
-    content: "🖼️ Sube una imagen para el fondo del panel principal.",
+    content: "🖼️ Upload an image for the main panel background.",
     ephemeral: true
   });
 }
@@ -1535,7 +1544,7 @@ if (option === "bg") {
     if (option === "pokemon") {
   profileEditState[i.user.id] = "pokemon";
   return i.reply({
-    content: "❤️ Escribe el nombre del Pokémon favorito. Máximo 3 Pokémon.",
+    content: "❤️ Type your favorite Pokémon name. Maximum 3 Pokémon.",
     ephemeral: true
   });
 }
@@ -1543,7 +1552,7 @@ if (option === "bg") {
 if (option === "favoriteCard") {
   profileEditState[i.user.id] = "favoriteCard";
   return i.reply({
-    content: "🎴 Sube una imagen de tu carta favorita.",
+    content: "🎴 Upload your favorite card image.",
     ephemeral: true
   });
 }
@@ -1551,7 +1560,7 @@ if (option === "favoriteCard") {
 if (option === "favoriteDeck") {
   profileEditState[i.user.id] = "favoriteDeck";
   return i.reply({
-    content: "🃏 Sube una imagen de tu mazo favorito.",
+    content: "🃏 Upload your favorite deck image.",
     ephemeral: true
   });
 }
@@ -1559,7 +1568,7 @@ if (option === "favoriteDeck") {
 if (option === "mostValuableCard") {
   profileEditState[i.user.id] = "mostValuableCard";
   return i.reply({
-    content: "💎 Sube una imagen de tu carta más valiosa.",
+    content: "💎 Upload your most valuable card image.",
     ephemeral: true
   });
 }
@@ -1567,7 +1576,7 @@ if (option === "mostValuableCard") {
 if (option === "rarestCard") {
   profileEditState[i.user.id] = "rarestCard";
   return i.reply({
-   content: "🌟 Sube una imagen de tu carta más deseada.",
+   content: "🌟 Upload your most wanted card image.",
     ephemeral: true
   });
 }
@@ -1575,7 +1584,7 @@ if (option === "rarestCard") {
 if (option === "bestGP") {
   profileEditState[i.user.id] = "bestGP";
   return i.reply({
-    content: "🥇 Sube una imagen de tu mejor GP obtenido.",
+    content: "🥇 Upload your best GP image.",
     ephemeral: true
   });
 }
@@ -1583,14 +1592,14 @@ if (option === "bestGP") {
 if (option === "maxRank") {
   profileEditState[i.user.id] = "maxRank";
   return i.reply({
-    content: "🏅 Sube una imagen de tu rango máximo alcanzado.",
+    content: "🏅 Upload your highest rank image.",
     ephemeral: true
   });
 }
     if (option === "profileBg") {
   profileEditState[i.user.id] = "profileBg";
   return i.reply({
-    content: "🖼️ Sube la imagen que quieres usar como fondo del perfil.",
+    content: "🖼️ Upload the image you want to use as your profile background.",
     ephemeral: true
   });
 }
@@ -1598,7 +1607,7 @@ if (option === "maxRank") {
 if (option === "status") {
   profileEditState[i.user.id] = "status";
   return i.reply({
-    content: "🔥 Escribe tu estado. Ejemplo: Competitivo, Farmeando, Descanso.",
+    content: "🔥 Type your status. Example: Competitive, Farming, Resting.",
     ephemeral: true
   });
 }
@@ -1606,14 +1615,14 @@ if (option === "status") {
 if (option === "quote") {
   profileEditState[i.user.id] = "quote";
   return i.reply({
-    content: "💬 Escribe tu frase personalizada.",
+    content: "💬 Type your custom quote.",
     ephemeral: true
   });
 }
 
    if (option === "name" || option === "text" || option === "profileText") {
   return i.reply({
-    content: "🎨 Elige una categoría:",
+    content: "🎨 Choose a category:",
     components: [createCategoryMenu(option, id)],
     ephemeral: true
   });
@@ -1629,7 +1638,7 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
 
   if (i.user.id !== userId) {
     return i.reply({
-      content: "❌ No puedes editar este panel",
+      content: "❌ You cannot edit this panel",
       ephemeral: true
     });
   }
@@ -1637,7 +1646,7 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
   const category = i.values[0];
 
   return i.update({
-    content: "🎨 Ahora elige un color:",
+    content: "🎨 Now choose a color:",
     components: [createColorMenu(type, userId, category)]
   });
 }
@@ -1651,7 +1660,7 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
   // 🔒 Seguridad: solo el dueño puede usarlo
   if (i.user.id !== userId) {
     return i.reply({
-      content: "❌ No puedes editar este panel",
+      content: "❌ You cannot edit this panel",
       ephemeral: true
     });
   }
@@ -1659,10 +1668,11 @@ if (i.isStringSelectMenu() && i.customId.startsWith("cat_")) {
   const entry = Object.entries(userPanels)
     .find(([_, data]) => data.postId === i.channel.id);
   if (!entry) {
-    return i.reply({ content: "Error: panel no encontrado.", ephemeral: true });
+   return i.reply({ content: "Error: panel not found.", ephemeral: true });
   }
 
   const [id] = entry;
+   
 
   if (!userSettings[id]) userSettings[id] = {};
 
@@ -1686,7 +1696,7 @@ if (type === "profileText") {
 }
 
 await i.update({
-  content: `✅ Color aplicado`,
+  content: "✅ Color applied.",
   components: []
 });
 
@@ -1706,7 +1716,7 @@ client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
   if (msg.content.toLowerCase().trim() === "ranking update") {
   await updateRanking();
-  return msg.reply("✅ Ranking actualizado.");
+  return msg.reply("✅ Ranking updated.");
 }
 
   // =============================
@@ -1727,6 +1737,10 @@ client.on("messageCreate", async (msg) => {
   if (!entry) return;
 
   const [id] = entry;
+  if (msg.author.id !== id) {
+  return replyAndDelete(msg, "❌ You can only edit your own panel.");
+}
+  
 
   if (!userSettings[id]) userSettings[id] = {};
 
@@ -1738,12 +1752,13 @@ const activeProfileEdit = profileEditState[msg.author.id];
   profile.favoritePokemon = [];
   saveProfiles();
   await updateUserProfilePost(id);
-  return replyAndDelete(msg, "✅ Pokémon favoritos reiniciados.");
+  return replyAndDelete(msg, "✅ Favorite Pokémon reset.");
 }
 
-if (content === "perfil actualizar") {
+if (content === "profile update" || content === "perfil actualizar") {
   await updateUserProfilePost(id);
-return replyAndDelete(msg, "✅ Perfil actualizado.");}
+  return replyAndDelete(msg, "✅ Profile updated.");
+}
 
   // =============================
   // 🎨 COLOR
@@ -1762,9 +1777,9 @@ return replyAndDelete(msg, "✅ Perfil actualizado.");}
       let color = value;
 
       if (!isValidColor(color)) {
-        return msg.reply(`❌ Color inválido / Invalid color
+return msg.reply(`❌ Invalid color.
 
-Ejemplos:
+Examples:
 red, blue, gold
 #ff0000
 rgb(255,0,0)`);
@@ -1789,7 +1804,7 @@ if (type === "profileText") {
   await updateUserProfilePost(id);
 }
 
-      return msg.reply(`✅ Color aplicado: ${color}`);
+      return msg.reply(`✅ Color applied: ${color}`);
     }
   }
 
@@ -1797,19 +1812,19 @@ if (activeProfileEdit === "pokemon") {
   const pokemonName = msg.content.trim();
 
   if (!pokemonName) {
-    return msg.reply("❌ Escribe un nombre válido.");
+    return msg.reply("❌ Please type a valid name.");
   }
 
   if (profile.favoritePokemon.length >= 3) {
     delete profileEditState[msg.author.id];
-    return msg.reply("❌ Ya tienes 3 Pokémon favoritos. Usa `pokemon reset` para borrar la lista.");
+    return msg.reply("❌ You already have 3 favorite Pokémon. Use `pokemon reset` to clear the list.");
   }
 
 const parsed = parsePokemonName(pokemonName);
 const gifUrl = await getPokemonGifUrl(pokemonName);
 
   if (!gifUrl) {
-    return msg.reply("❌ No encontré ese GIF en las carpetas Gen1 a Gen8. Revisa el nombre.");
+    return msg.reply("❌ I could not find that GIF. Please check the Pokémon name.");
   }
 
   profile.favoritePokemon.push({
@@ -1823,7 +1838,7 @@ const gifUrl = await getPokemonGifUrl(pokemonName);
 
   await updateUserProfilePost(id);
 
-  return replyAndDelete(msg, `✅ Pokémon favorito agregado: **${pokemonName}**`);
+  return replyAndDelete(msg, `✅ Favorite Pokémon added: **${pokemonName}**`);
 }
 
 if (activeProfileEdit === "status") {
@@ -1831,7 +1846,7 @@ if (activeProfileEdit === "status") {
   delete profileEditState[msg.author.id];
   saveProfiles();
   await updateUserProfilePost(id);
-  return replyAndDelete(msg, "✅ Estado actualizado.");
+  return replyAndDelete(msg, "✅ Status updated.");
 }
 
 if (activeProfileEdit === "quote") {
@@ -1839,7 +1854,7 @@ if (activeProfileEdit === "quote") {
   delete profileEditState[msg.author.id];
   saveProfiles();
   await updateUserProfilePost(id);
-  return replyAndDelete(msg, "✅ Frase actualizada.");
+  return replyAndDelete(msg, "✅ Quote updated.");
 }
 
 
@@ -1850,11 +1865,11 @@ if (msg.attachments.size > 0) {
   const file = msg.attachments.first();
 
   if (!activeProfileEdit) {
-    return replyAndDelete(msg, "❌ Primero selecciona en el menú qué imagen quieres cambiar.");
+    return replyAndDelete(msg, "❌ First select what image you want to change from the menu.");
   }
 
   if (!file.url.match(/\.(png|jpg|jpeg|webp)(\?.*)?$/i)) {
-    return replyAndDelete(msg, "❌ Solo se aceptan imágenes png, jpg, jpeg o webp.");
+    return replyAndDelete(msg, "❌ Only png, jpg, jpeg, or webp images are accepted.");
   }
 
   const res = await fetch(file.url);
@@ -1882,7 +1897,7 @@ if (msg.attachments.size > 0) {
     saveProfiles();
     await updateUserProfilePost(id);
 
-    return replyAndDelete(msg, `✅ Imagen actualizada en perfil: ${activeProfileEdit}`);
+    return replyAndDelete(msg, `✅ Profile image updated: ${activeProfileEdit}`);
   }
 
   if (activeProfileEdit === "panelBg") {
@@ -1896,7 +1911,7 @@ if (msg.attachments.size > 0) {
     saveSettings();
     await forceRender(id);
 
-    return replyAndDelete(msg, "✅ Fondo del panel principal actualizado.");
+    return replyAndDelete(msg, "✅ Main panel background updated.");
   }
 
   return msg.reply(`❌ Tipo de edición no reconocido: ${activeProfileEdit}`);
