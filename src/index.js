@@ -101,26 +101,27 @@ const client = new Client({
     GatewayIntentBits.GuildMembers // 🔥 NECESARIO
   ],
 });
-const CHAMPION_ROLE_ID = "1486206362332434634";
-const ROLE_PRIORITY = [
-  { key: "champion", label: "Champion", color: "#ffd700", id: CHAMPION_ROLE_ID },
-  { key: "eliteFour", label: "Elite Four", color: "#b84dff", id: "ID_DEL_ROL_ELITE_FOUR" },
-  { key: "gymLeader", label: "Gym Leader", color: "#00aaff", id: "ID_DEL_ROL_GYM_LEADER" },
-  { key: "trainer", label: "Trainer", color: "#00ff88", id: "ID_DEL_ROL_TRAINER" }
-];
+const GUILD_ID = "1483615153743462571";
 
-async function getHighestActiveRole(userId) {
-  const guild = client.guilds.cache.get("1483615153743462571");
+const ROLE_IDS = {
+  trainer: "1484470626185121804",
+  gymLeader: "1486205371256148108",
+  eliteFour: "1483858384498462730"
+};
+
+async function getHighestActiveRankingRole(userId) {
+  const guild = client.guilds.cache.get(GUILD_ID);
   const member = await guild?.members.fetch(userId).catch(() => null);
 
-  if (!member) return { key: "reroller", label: "Reroller", color: "#aaaaaa" };
+  if (!member) return "trainer";
 
-  return ROLE_PRIORITY.find(r => member.roles.cache.has(r.id)) || {
-    key: "reroller",
-    label: "Reroller",
-    color: "#aaaaaa"
-  };
+  if (member.roles.cache.has(ROLE_IDS.eliteFour)) return "eliteFour";
+  if (member.roles.cache.has(ROLE_IDS.gymLeader)) return "gymLeader";
+  if (member.roles.cache.has(ROLE_IDS.trainer)) return "trainer";
+
+  return "trainer";
 }
+const CHAMPION_ROLE_ID = "1486206362332434634";
 
 
 const USERS_GP_GIST_ID = "5131a73fcee46b4a5c7b7faeea16efe9"; // 🔥 users_gp.json
@@ -1963,8 +1964,8 @@ async function getUserRanking(groupFilter = null) {
   const rows = [];
 
   for (const [id, user] of Object.entries(eliteUsers)) {
-    const activeRole = await getHighestActiveRole(id);
-    const rankingGroup = getRankingGroup(activeRole.key);
+    const activeGroup = await getHighestActiveRankingRole(id);
+    const rankingGroup = getRankingGroup(activeGroup);
 
     if (groupFilter && rankingGroup !== groupFilter) continue;
 
@@ -1978,8 +1979,8 @@ async function getUserRanking(groupFilter = null) {
       id,
       name: user.name || data.name || session.name || "Unknown",
       group: rankingGroup,
-      realGroup: activeRole.key,
-      activeRole,
+      realGroup: activeGroup,
+      activeRole: getUserRoleByGroup(activeGroup),
       level,
       xp: Math.floor(totalXP),
       gp: data.gp || 0,
@@ -2088,7 +2089,7 @@ if (group === "global") {
 
 ctx.fillStyle = user.activeRole?.color || groupColor(user.realGroup || user.group);
 ctx.font = "17px Righteous";
-ctx.fillText(user.activeRole?.label || groupLabel(user.realGroup || user.group), 130, y + 63);
+ctx.fillText(user.activeRole?.name || groupLabel(user.realGroup || user.group), 130, y + 63);
 
     // Stats
     ctx.fillStyle = "#ffffff";
@@ -2132,7 +2133,7 @@ const rankings = [
   {
     key: "global",
     title: "🏆 Ranking Global",
-    users: getUserRanking(),
+    users: await getUserRanking(),
     group: "global"
   },
   {
@@ -2146,7 +2147,7 @@ const rankings = [
   {
     key: "eliteFour",
     title: "🟣 Ranking Elite Four",
-    users: getUserRanking("eliteFour"),
+    users: await getUserRanking("eliteFour"),
     group: "eliteFour"
   }
 ];
@@ -2190,12 +2191,11 @@ const rankings = [
 
 
 function startLoop() {
-
-  // Ejecuta inmediatamente
   runTrackingCycle();
+  setInterval(runTrackingCycle, 300000);
 
-  // Luego cada 5 minutos
-  setInterval(runTrackingCycle, 300000); // 5 minutos
+  updateRanking();
+  setInterval(updateRanking, 300000);
 }
 
 
