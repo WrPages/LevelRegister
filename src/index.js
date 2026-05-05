@@ -15,43 +15,63 @@ import path from "path";
 import fs from "fs";
 import fetch from "node-fetch";
 import { createCanvas, loadImage, registerFont } from "canvas";
-import { getGist, updateGist } from "./gist.js";
+import { Redis } from "@upstash/redis";
 import { fileURLToPath } from "url";
 
 
 
 dotenv.config();
 
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN
+});
 
-async function loadUserGPs() {
-  try {
-    const res = await fetch(`https://api.github.com/gists/${USERS_GP_GIST_ID}?t=${Date.now()}`, {
-      headers: {
-        Authorization: `token ${process.env.GITHUB_TOKEN}`
-      }
-    });
-
-    const data = await res.json();
-
-    const fileKey = Object.keys(data.files || {})[0];
-    if (!fileKey) return {};
-
-    return JSON.parse(data.files[fileKey].content);
-
-  } catch (err) {
-    console.error("❌ ERROR cargando users_gp:", err);
-    return {};
-  }
+if (!process.env.UPSTASH_REDIS_REST_URL) {
+  throw new Error("❌ FALTA UPSTASH_REDIS_REST_URL en Railway");
 }
 
+if (!process.env.UPSTASH_REDIS_REST_TOKEN) {
+  throw new Error("❌ FALTA UPSTASH_REDIS_REST_TOKEN en Railway");
+}
 
 let gpCache = null;
 let gpLastFetch = 0;
 
+function safeParse(data, fallback = {}) {
+  try {
+    if (!data) return fallback;
+    if (typeof data === "object") return data;
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("❌ Error parseando JSON:", err.message);
+    return fallback;
+  }
+}
+
+async function loadUserGPs() {
+  try {
+    const data = await redis.hgetall("gp_users");
+
+    if (!data || typeof data !== "object") return {};
+
+    const out = {};
+
+    for (const id in data) {
+      out[id] = safeParse(data[id], {});
+    }
+
+    return out;
+  } catch (err) {
+    console.error("❌ ERROR cargando gp_users desde Redis:", err);
+    return {};
+  }
+}
+
 async function loadUserGPsCached() {
   const now = Date.now();
 
-  if (gpCache && (now - gpLastFetch < 60000)) {
+  if (gpCache && now - gpLastFetch < 60000) {
     return gpCache;
   }
 
@@ -63,12 +83,7 @@ async function loadUserGPsCached() {
 // =============================
 // 🛑 VALIDACIÓN ENV
 // =============================
-if (!process.env.GIST_SETTINGS) {
-  throw new Error("❌ FALTA GIST_SETTINGS en Railway");
-}
-if (!process.env.GIST_PROFILES) {
-  throw new Error("❌ FALTA GIST_PROFILES en Railway");
-}
+
 if (!process.env.PROFILE_FORUM_CHANNEL_ID) {
   throw new Error("❌ FALTA PROFILE_FORUM_CHANNEL_ID en Railway");
 }
@@ -124,32 +139,91 @@ async function getHighestActiveRankingRole(userId) {
 const CHAMPION_ROLE_ID = "1486206362332434634";
 
 
-const USERS_GP_GIST_ID = "5131a73fcee46b4a5c7b7faeea16efe9"; // 🔥 users_gp.json
 const GLOBAL_HEARTBEAT_CHANNEL_ID = "1492795826857054301";
 // =============================
 // 📌 CANALES Y GISTS POR GRUPO
 // =============================
 const GROUPS = {
   trainer: {
-//    heartbeatChannelId: "1486243169422020648", // canal donde se registra XP, tiempo, packs
-    gpChannelId: "1484015417411244082",               // canal donde se cuentan GP
-   usersGistId: "1c066922bc39ac136b6f234fad6d9420",
-    onlineGistId: "4edcf4d341cd4f7d5d0fb8a50f8b8c3c"     // Gist con usuarios online
+    redisGroup: "Trainer",
+    gpChannelId: "1484015417411244082"
   },
   gymLeader: {
- //   heartbeatChannelId: "1491238609578360833",
-    gpChannelId: "1484015417411244082",
-    usersGistId: "a3f5f3d8a2e6ddf2378fb3481dff49f6",
-    onlineGistId: "e110c37b3e0b8de83a33a1b0a5eb64e8"
+    redisGroup: "Gym_Leader",
+    gpChannelId: "1484015417411244082"
   },
   eliteFour: {
- //   heartbeatChannelId: "1483616146996465735",
-    gpChannelId: "1484015417411244082",
-   // gpChannelId: "1486277594629275770",
-  usersGistId: "bb18eda2ea748723d8fe0131dd740b70",
-    onlineGistId: "d9db3a72fed74c496fd6cc830f9ca6e9"
+    redisGroup: "Elite_Four",
+    gpChannelId: "1484015417411244082"
   }
 };
+function usersKey(group) {
+  return `users:${group}`;
+}
+
+function onlineKey(group) {
+  return `online:${group}`;
+}
+
+function redisJsonKey(name) {
+  return name;
+}
+
+function normalizeId(id) {
+  return String(id || "").trim().replace(/\D/g, "");
+}
+
+async function redisGetJSON(key, fallback = {}) {
+  try {
+    const data = await redis.get(key);
+    return safeParse(data, fallback);
+  } catch (err) {
+    console.error(`❌ Error leyendo Redis key ${key}:`, err);
+    return fallback;
+  }
+}
+
+async function redisSetJSON(key, value) {
+  try {
+    await redis.set(key, JSON.stringify(value || {}));
+  } catch (err) {
+    console.error(`❌ Error guardando Redis key ${key}:`, err);
+  }
+}
+
+async function redisLoadUsers(redisGroup) {
+  try {
+    const data = await redis.hgetall(usersKey(redisGroup));
+
+    if (!data || typeof data !== "object") return {};
+
+    const out = {};
+
+    for (const id in data) {
+      out[id] = safeParse(data[id], {});
+    }
+
+    return out;
+  } catch (err) {
+    console.error(`❌ Error cargando users:${redisGroup}`, err);
+    return {};
+  }
+}
+
+async function redisLoadOnlineIds(redisGroup) {
+  try {
+    const ids = await redis.smembers(onlineKey(redisGroup));
+
+    if (!Array.isArray(ids)) return [];
+
+    return ids
+      .map(normalizeId)
+      .filter(id => /^\d{16}$/.test(id));
+  } catch (err) {
+    console.error(`❌ Error cargando online:${redisGroup}`, err);
+    return [];
+  }
+}
 
 
 // =============================
@@ -171,11 +245,17 @@ let lastRun = Date.now();
 let groupOnlineMap = {};  // 🔥 GLOBAL
 
 let panelSaveTimeout;
-
 function savePanels() {
   clearTimeout(panelSaveTimeout);
   panelSaveTimeout = setTimeout(() => {
-    updateGist(process.env.GIST_PANELS, userPanels, "panels.json");
+    redisSetJSON("user_panels", userPanels);
+  }, 2000);
+}
+
+function saveSettings() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    redisSetJSON("panel_settings", userSettings);
   }, 2000);
 }
 // =============================
@@ -220,18 +300,13 @@ console.log("ONLINE IDS:", onlineIds.slice(0, 10));
 // =============================
 let saveTimeout;
 
-function saveSettings() {
-  clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(() => {
-    updateGist(process.env.GIST_SETTINGS, userSettings, "settings.json");
-  }, 2000);
-}
+
 let profileSaveTimeout;
 
 function saveProfiles() {
   clearTimeout(profileSaveTimeout);
   profileSaveTimeout = setTimeout(() => {
-    updateGist(process.env.GIST_PROFILES, userProfiles, "profiles.json");
+    redisSetJSON("user_profiles", userProfiles);
   }, 2000);
 }
 function deleteLater(message, delay = 60_000) {
@@ -402,30 +477,31 @@ client.once("clientReady", async () => {
   // =============================
   // 1️⃣ CARGAR USUARIOS
   // =============================
-  eliteUsers = {};
+eliteUsers = {};
 
-  for (const [groupName, group] of Object.entries(GROUPS)) {
+for (const [groupName, group] of Object.entries(GROUPS)) {
+  const usersData = await redisLoadUsers(group.redisGroup);
 
-    const usersData = await getParsedGist(group.usersGistId);
-
-    for (const [id, user] of Object.entries(usersData)) {
+  for (const [id, user] of Object.entries(usersData)) {
     if (!eliteUsers[id]) {
-  eliteUsers[id] = {
-    ...user,
-    group: groupName,
-    groups: [groupName]
-  };
-} else {
-  if (!eliteUsers[id].groups) eliteUsers[id].groups = [eliteUsers[id].group];
+      eliteUsers[id] = {
+        ...user,
+        group: groupName,
+        groups: [groupName]
+      };
+    } else {
+      if (!eliteUsers[id].groups) {
+        eliteUsers[id].groups = [eliteUsers[id].group];
+      }
 
-  if (!eliteUsers[id].groups.includes(groupName)) {
-    eliteUsers[id].groups.push(groupName);
-  }
+      if (!eliteUsers[id].groups.includes(groupName)) {
+        eliteUsers[id].groups.push(groupName);
+      }
 
-  eliteUsers[id].group = eliteUsers[id].groups[0];
-}
+      eliteUsers[id].group = eliteUsers[id].groups[0];
     }
   }
+}
 
   console.log("Usuarios totales cargados:", Object.keys(eliteUsers).length);
 
@@ -471,10 +547,10 @@ onlineIds = onlineData.onlineIds;
   // =============================
   // 5️⃣ CARGAR TRACKING Y SETTINGS
   // =============================
-userPanels = await getParsedGist(process.env.GIST_PANELS, "panels.json");
-trackingData = await getParsedGist(process.env.GIST_TRACKING, "tracking.json");
-userSettings = await getParsedGist(process.env.GIST_SETTINGS, "settings.json");
-userProfiles = await getParsedGist(process.env.GIST_PROFILES, "profiles.json");
+userPanels = await redisGetJSON("user_panels", {});
+trackingData = await redisGetJSON("tracking_data", {});
+userSettings = await redisGetJSON("panel_settings", {});
+userProfiles = await redisGetJSON("user_profiles", {});
 
 rankingMessageId = userSettings.rankingMessageId || null;
 
@@ -490,7 +566,7 @@ await runTrackingCycle();
 await scanHeartbeats();
 await updateRanking();
 
-await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
+await redisSetJSON("tracking_data", trackingData);
 
   console.log("✅ Datos sincronizados al iniciar");
 
@@ -547,12 +623,13 @@ for (const id in liveTracker) {
 
 // 🔥 CARGAR GP DESDE GIST
 const gpData = await loadUserGPsCached();
+    
 
 for (const [id, data] of Object.entries(gpData)) {
 
   if (!trackingData[id]) {
     trackingData[id] = {
-      name: data.username || "Unknown",
+      name: data.name || data.username || "Unknown",
       xp: 0,
       time: 0,
       totalpacks: 0,
@@ -936,7 +1013,7 @@ liveTracker[id].instances = instances;
     }
  
 
-    await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
+    await redisSetJSON("tracking_data", trackingData);
 
   } catch (err) {
     console.error("❌ Error escaneando heartbeat global:", err.message);
@@ -2236,36 +2313,12 @@ trackingData[id].role = getUserRoleByGroup(s.group).name;
       s.sessionTime = 0;
     }
 
-    await updateGist(process.env.GIST_TRACKING, trackingData, "tracking.json");
+    await redisSetJSON("tracking_data", trackingData);
   }, 600000);
 }
 
 // =============================
-function safeParse(data) {
-  try {
-    if (!data) return {};
 
-    if (typeof data === "object") return data;
-
-    if (typeof data === "string") {
-      const parsed = JSON.parse(data);
-
-      if (typeof parsed === "object" && parsed !== null) {
-        return parsed;
-      }
-    }
-
-    return {};
-  } catch (err) {
-    console.error("❌ Error parseando JSON:", err.message);
-    return {};
-  }
-}
-
-async function getParsedGist(id, file) {
-  const raw = await getGist(id, file);
-  return safeParse(raw);
-}
 
 function sanitizeTracking() {
   if (typeof trackingData !== "object" || trackingData === null) {
@@ -2292,24 +2345,14 @@ function sanitizeTracking() {
   }
 }
 
-function cleanOnlineIds(raw) {
-  if (!raw || typeof raw !== "string") return [];
-
-  return raw
-    .split(/\r?\n/)
-    .map(x => x.trim())
-    .filter(x => x.length > 0);
-}
 async function loadOnlineData() {
   const entries = Object.entries(GROUPS);
 
   const results = await Promise.all(
-    entries.map(([groupName, group]) =>
-      getGist(group.onlineGistId).then(raw => ({
-        groupName,
-        ids: cleanOnlineIds(raw)
-      }))
-    )
+    entries.map(async ([groupName, group]) => ({
+      groupName,
+      ids: await redisLoadOnlineIds(group.redisGroup)
+    }))
   );
 
   const map = {};
