@@ -100,6 +100,41 @@ const commandMap = {
 };
 const SHOW_GYM_LEADERS_AS_TRAINERS_IN_RANKING = true;///GymLEaderonTrainer
 // =============================
+// XP CONFIG
+// =============================
+
+// XP base por minuto online.
+// Con 8 horas/día:
+// 1 XP/min = 480 XP por día antes de multiplicadores.
+const BASE_XP_PER_MINUTE = 0.25;
+
+// Bonus pequeño por instancia activa.
+// Ejemplo: 5 instancias = +0.5 XP/min.
+const XP_PER_INSTANCE_PER_MINUTE = 0.03;
+
+// Trainer gana 1.5x XP.
+const GROUP_XP_MULTIPLIERS = {
+  trainer: 1.5,
+  gymLeader: 1,
+  eliteFour: 1
+};
+
+// XP extra cuando el usuario encuentra un GP.
+const XP_PER_GP_FOUND = 100;
+const XP_PER_LEVEL = 250;
+function getUserLevel(totalXP) {
+  return Math.floor((Number(totalXP) || 0) / XP_PER_LEVEL) + 1;
+}
+
+function getXPIntoCurrentLevel(totalXP) {
+  return Math.floor((Number(totalXP) || 0) % XP_PER_LEVEL);
+}
+
+function getXPToNextLevel(totalXP) {
+  const current = getXPIntoCurrentLevel(totalXP);
+  return XP_PER_LEVEL - current;
+}
+// =============================
 // 🧠 FONT
 // =============================
 const fontPath = path.join(process.cwd(), "assets/fonts/Righteous-Regular.ttf");
@@ -438,6 +473,7 @@ function getUserRoleByGroup(group) {
   return { name: "Reroller", color: "#aaaaaa" };
 }
 
+
 // =============================pokepokepoke
 
 // =============================fin poke finfin
@@ -626,6 +662,7 @@ const gpData = await loadUserGPsCached();
     
 
 for (const [id, data] of Object.entries(gpData)) {
+  const newGpCount = Number(data.gp) || 0;
 
   if (!trackingData[id]) {
     trackingData[id] = {
@@ -635,14 +672,31 @@ for (const [id, data] of Object.entries(gpData)) {
       totalpacks: 0,
       currentpacks: 0,
       gp: 0,
+      lastGpCount: newGpCount,
       recordInstances: 0
     };
   }
 
-  // 🔥 AQUÍ SE SINCRONIZA
-  trackingData[id].gp = data.gp || 0;
-}
+  if (trackingData[id].lastGpCount === undefined) {
+    trackingData[id].lastGpCount = Number(trackingData[id].gp) || 0;
+  }
 
+  const oldGpCount = Number(trackingData[id].lastGpCount) || 0;
+  const gpDiff = Math.max(0, newGpCount - oldGpCount);
+
+  if (gpDiff > 0) {
+    const bonusXP = gpDiff * XP_PER_GP_FOUND;
+
+    trackingData[id].xp = (Number(trackingData[id].xp) || 0) + bonusXP;
+
+    console.log(
+      `🌟 GP XP BONUS: ${trackingData[id].name || id} +${bonusXP} XP (${gpDiff} GP)`
+    );
+  }
+
+  trackingData[id].gp = newGpCount;
+  trackingData[id].lastGpCount = newGpCount;
+}
     
     // 🔥 XP / TIEMPO
   for (const uid of onlineIds) {
@@ -693,12 +747,21 @@ if (id && eliteUsers[id]) {
  // const seconds = 60;
   t.sessionTime += seconds;
 
-  let xpPerSecond = (1 + t.instances * 0.1) / 60;
+const groupMultiplier = GROUP_XP_MULTIPLIERS[userGroup] || 1;
 
-  if (Date.now() < t.boostUntil)
-    xpPerSecond *= 2;
+let xpPerMinute =
+  BASE_XP_PER_MINUTE +
+  ((Number(t.instances) || 1) * XP_PER_INSTANCE_PER_MINUTE);
 
-  t.sessionXP += xpPerSecond * seconds;
+xpPerMinute *= groupMultiplier;
+
+if (Date.now() < t.boostUntil) {
+  xpPerMinute *= 2;
+}
+
+const xpPerSecond = xpPerMinute / 60;
+
+t.sessionXP += xpPerSecond * seconds;
     // 🔥 XP independiente para Pokémon
 
 
@@ -738,7 +801,7 @@ async function renderPanel(id, channel) {
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
   const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
   
- const userLevel = Math.floor(totalXP / 20);
+const userLevel = getUserLevel(totalXP);
 
 // 🔥 Nivel del Pokémon separado
 //if (!trackingData[id].pokemonXP) {
@@ -834,7 +897,7 @@ ctx.fillText(`Lv ${userLevel}`, 620, 80); // SOLO nivel usuario
   ctx.fillStyle = settings.textColor;
   ctx.font = "24px Righteous";
 
-  ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
+  ctx.fillText(`XP: ${Math.floor(totalXP)}`, 40, 170);
   ctx.fillText(`Time: ${totalTime}m`, 40, 210);
   ctx.fillText(`Instances: ${t.recordInstances || 0}`, 40, 250);
   const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
@@ -1060,19 +1123,19 @@ function buildProfileMainEmbed(id) {
   const s = liveTracker[id] || {};
 
   const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-  const level = Math.floor(totalXP / 20);
+  const userLevel = getUserLevel(totalXP);
 
   return new EmbedBuilder()
     .setTitle(`📘 Perfil de ${t.name || s.name || "Usuario"}`)
     .setColor("#00ffcc")
     .setDescription(profile.quote || "Perfil de reroll TCG Pocket")
     .addFields(
-      { name: "⭐ Nivel", value: `${level}`, inline: true },
+      { name: "⭐ Level", value: `${userLevel}`, inline: true },
       { name: "✨ XP", value: `${Math.floor(totalXP)}`, inline: true },
-      { name: "🏆 GP actual", value: `${t.gp || 0}`, inline: true },
-      { name: "🥇 Mejor GP", value: profile.bestGP ? "Imagen subida ✅" : "No definido", inline: true },
-{ name: "🏅 Rango máximo", value: profile.maxRank ? "Imagen subida ✅" : "No definido", inline: true },
-      { name: "🔥 Estado", value: profile.status || "No definido", inline: true }
+      { name: "🏆 Current GP", value: `${t.gp || 0}`, inline: true },
+      { name: "🥇 Best GP", value: profile.bestGP ? "Uploaded ✅" : "Not set", inline: true },
+      { name: "🏅 Highest Rank", value: profile.maxRank ? "Uploaded ✅" : "Not set", inline: true },
+      { name: "🔥 Status", value: profile.status || "Not set", inline: true }
     );
 }
 
@@ -2083,8 +2146,7 @@ async function getUserRanking(groupFilter = null) {
     const session = liveTracker[id] || {};
 
     const totalXP = (data.xp || 0) + (session.sessionXP || 0);
-    const level = Math.floor(totalXP / 20);
-
+    const level = getUserLevel(totalXP);
     rows.push({
       id,
       name: user.name || data.name || session.name || "Unknown",
@@ -2353,6 +2415,7 @@ function sanitizeTracking() {
     trackingData[k].xp = Number(trackingData[k].xp) || 0;
     trackingData[k].time = Number(trackingData[k].time) || 0;
     trackingData[k].gp = Number(trackingData[k].gp) || 0;
+    trackingData[k].lastGpCount = Number(trackingData[k].lastGpCount) || Number(trackingData[k].gp) || 0;
     trackingData[k].recordInstances = Number(trackingData[k].recordInstances) || 0;
    trackingData[k].totalpacks = Number(trackingData[k].totalpacks) || 0;
     trackingData[k].currentpacks = Number(trackingData[k].currentpacks) || 0;
