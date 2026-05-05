@@ -1461,9 +1461,15 @@ if (userPanels[id]?.messageId) {
     // 🔁 Editar panel
 const post = await client.channels.fetch(userPanels[id].postId).catch(() => null);
 
+const username =
+  liveTracker[id]?.name ||
+  trackingData[id]?.name ||
+  eliteUsers[id]?.name ||
+  "user";
+
 await msg.edit({
   files: [file],
-  components: post ? [buildProfileButton(post, displayName)] : []
+  components: post ? [buildProfileButton(post, username)] : []
 });
 
 if (!post) {
@@ -2025,9 +2031,15 @@ if (!liveTracker[id]) {
 
 const post = await client.channels.fetch(userPanels[id].postId).catch(() => null);
 
+const username =
+  liveTracker[id]?.name ||
+  trackingData[id]?.name ||
+  eliteUsers[id]?.name ||
+  "user";
+
 await msg.edit({
   files: [file],
-  components: post ? [buildProfileButton(post, displayName)] : []
+  components: post ? [buildProfileButton(post, username)] : []
 });
 }
 
