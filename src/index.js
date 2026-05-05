@@ -1322,7 +1322,7 @@ const slots = [
     ctx.fillStyle = profile.textColor || "#cbd5e1";
     ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Sin imagen", x + w / 2, y + h / 2 + 8);
+    ctx.fillText("no image", x + w / 2, y + h / 2 + 8);
   }
 
   async function drawSlot(slot) {
