@@ -835,8 +835,8 @@ ctx.fillText(`Lv ${userLevel}`, 620, 80); // SOLO nivel usuario
   ctx.font = "24px Righteous";
 
   ctx.fillText(`XP: ${totalXP.toFixed(0)}`, 40, 170);
-  ctx.fillText(`Tiempo: ${totalTime}m`, 40, 210);
-  ctx.fillText(`Instancias: ${t.recordInstances || 0}`, 40, 250);
+  ctx.fillText(`Time: ${totalTime}m`, 40, 210);
+  ctx.fillText(`Instances: ${t.recordInstances || 0}`, 40, 250);
   const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
 ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
@@ -1492,7 +1492,7 @@ const post = await forum.threads.create({
   name: `Perfil de ${liveTracker[id]?.name || trackingData[id]?.name || id}`,
   autoArchiveDuration: 1440,
   message: {
-    content: "🎮 Perfil completo del usuario"
+    content: "🎮 User Profile"
   }
 });
 
