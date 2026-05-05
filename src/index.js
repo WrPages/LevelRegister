@@ -415,10 +415,10 @@ function getProfilePostUrl(post) {
   return `https://discord.com/channels/${post.guildId}/${post.id}`;
 }
 
-function buildProfileButton(post) {
+function buildProfileButton(post, username = "user") {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setLabel("Ver perfil completo")
+      .setLabel(`View ${username}'s full profile`)
       .setStyle(ButtonStyle.Link)
       .setURL(getProfilePostUrl(post))
   );
@@ -1463,7 +1463,7 @@ const post = await client.channels.fetch(userPanels[id].postId).catch(() => null
 
 await msg.edit({
   files: [file],
-  components: post ? [buildProfileButton(post)] : []
+  components: post ? [buildProfileButton(post, displayName)] : []
 });
 
 if (!post) {
@@ -1496,9 +1496,15 @@ const post = await forum.threads.create({
   }
 });
 
+const username =
+  liveTracker[id]?.name ||
+  trackingData[id]?.name ||
+  eliteUsers[id]?.name ||
+  "user";
+
 const sent = await channel.send({
   files: [file],
-  components: [buildProfileButton(post)]
+  components: [buildProfileButton(post, username)]
 });
 
 const menu = new ActionRowBuilder().addComponents(
@@ -2021,7 +2027,7 @@ const post = await client.channels.fetch(userPanels[id].postId).catch(() => null
 
 await msg.edit({
   files: [file],
-  components: post ? [buildProfileButton(post)] : []
+  components: post ? [buildProfileButton(post, displayName)] : []
 });
 }
 
