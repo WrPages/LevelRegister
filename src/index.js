@@ -1186,7 +1186,7 @@ async function buildProfileCollage(id) {
 const slots = [
   {
     key: "favoriteCard",
-    label: label("favoriteCard", "Carta favorita"),
+    label: label("favoriteCard", "Favorite Card"),
     x: 55,
     y: 70,
     w: 220,
@@ -1194,7 +1194,7 @@ const slots = [
   },
   {
     key: "mostValuableCard",
-    label: label("mostValuableCard", "Carta más valiosa"),
+    label: label("mostValuableCard", "Most Valuable Card"),
     x: 340,
     y: 70,
     w: 220,
@@ -1202,7 +1202,7 @@ const slots = [
   },
   {
     key: "rarestCard",
-    label: label("rarestCard", "Carta más deseada"),
+    label: label("rarestCard", "Most Wanted Card"),
     x: 625,
     y: 70,
     w: 220,
@@ -1211,7 +1211,7 @@ const slots = [
 
   {
     key: "favoriteDeck",
-    label: label("favoriteDeck", "Mazo favorito"),
+    label: label("favoriteDeck", "Favorite Deck"),
     x: 110,
     y: 460,
     w: 680,
@@ -1220,7 +1220,7 @@ const slots = [
 
   {
     key: "maxRank",
-    label: label("maxRank", "Rango máximo alcanzado"),
+    label: label("maxRank", "Highest Rank"),
     x: 55,
     y: 1090,
     w: 360,
@@ -1228,7 +1228,7 @@ const slots = [
   },
   {
     key: "bestGP",
-    label: label("bestGP", "Mejor GP"),
+    label: label("bestGP", "Best GP"),
     x: 465,
     y: 1090,
     w: 380,
