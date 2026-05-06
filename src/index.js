@@ -913,16 +913,16 @@ function createCategoryMenu(type, userId) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`cat_${type}_${userId}`)
-      .setPlaceholder("Elige categoría")
+      .setPlaceholder("Choose category")
       .addOptions([
-        { label: "🔴 Rojos", value: "red" },
-        { label: "🔵 Azules", value: "blue" },
-        { label: "🟢 Verdes", value: "green" },
-        { label: "🟡 Amarillos", value: "yellow" },
-        { label: "🟣 Morados", value: "purple" },
-        { label: "🌸 Rosas", value: "pink" },
-        { label: "⚫ Neutros", value: "neutral" },
-        { label: "🌈 Especiales", value: "special" },
+        { label: "🔴 Reds", value: "red" },
+        { label: "🔵 Blues", value: "blue" },
+        { label: "🟢 Greens", value: "green" },
+        { label: "🟡 Yellows", value: "yellow" },
+        { label: "🟣 Purples", value: "purple" },
+        { label: "🌸 Roses", value: "pink" },
+        { label: "⚫ Neutrals", value: "neutral" },
+        { label: "🌈 Specials", value: "special" },
         { label: "⚡ Neon", value: "neon" },
       ])
   );
@@ -1272,12 +1272,10 @@ async function buildPokemonFavoriteEmbeds(id) {
   continue;
 }
 
-    embeds.push(
-      new EmbedBuilder()
-        .setColor(p.isShiny ? 0xffd700 : 0x00ffff)
-        .setTitle(`${p.isShiny ? "✨" : "❤️"} ${p.displayName}`)
-        .setImage(gifUrl)
-    );
+embeds.push(
+  new EmbedBuilder()
+    .setImage(gifUrl)
+);
   }
 
   return { embeds, files: [] };
@@ -1597,6 +1595,11 @@ const menu = new ActionRowBuilder().addComponents(
         value: "text"
       },
       {
+  label: "📊 A | Preview main panel",
+  description: "Preview your current main stats panel",
+  value: "previewPanel"
+},
+      {
         label: "👤 B | Favorite Pokémon",
         description: "Add up to 3 favorite Pokémon",
         value: "pokemon"
@@ -1691,6 +1694,38 @@ if (option === "bg") {
     content: "🖼️ Upload an image for the main panel background.",
     ephemeral: true
   });
+}
+  if (option === "previewPanel") {
+  try {
+    if (!liveTracker[id]) {
+      liveTracker[id] = {
+        sessionXP: 0,
+        sessionTime: 0,
+        instances: 1,
+        boostUntil: 0,
+        name: trackingData[id]?.name || eliteUsers[id]?.name || "Unknown",
+        packs: 0,
+        gp: 0,
+        group: eliteUsers[id]?.group || "trainer"
+      };
+    }
+
+    const { file } = await renderPanel(id, null);
+
+    return i.reply({
+      content: "📊 Main panel preview:",
+      files: [file],
+      ephemeral: true
+    });
+
+  } catch (err) {
+    console.error("Preview panel error:", err);
+
+    return i.reply({
+      content: "❌ Could not generate preview.",
+      ephemeral: true
+    });
+  }
 }
 
     if (option === "pokemon") {
