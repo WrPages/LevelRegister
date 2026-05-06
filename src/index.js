@@ -1293,17 +1293,17 @@ async function buildProfileCollage(id) {
     try {
       const bg = await loadImage(Buffer.from(profile.profileBg.data, "base64"));
 
-const ratio = Math.max(1200 / bg.width, 2000 / bg.height);
-const w = bg.width * ratio;
-const h = bg.height * ratio;
+      const ratio = Math.max(900 / bg.width, 1600 / bg.height);
+      const w = bg.width * ratio;
+      const h = bg.height * ratio;
 
-ctx.drawImage(bg, (1200 - w) / 2, (2000 - h) / 2, w, h);
+      ctx.drawImage(bg, (900 - w) / 2, (1600 - h) / 2, w, h);
     } catch {
       const gradient = ctx.createLinearGradient(0, 0, 900, 1600);
       gradient.addColorStop(0, "#111827");
       gradient.addColorStop(1, "#020617");
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 1200, 2000);
+      ctx.fillRect(0, 0, 900, 1600);
     }
   } else {
     const gradient = ctx.createLinearGradient(0, 0, 900, 1600);
@@ -1325,52 +1325,52 @@ const slots = [
   {
     key: "favoriteCard",
     label: label("favoriteCard", "Favorite Card"),
-    x: 80,
-    y: 90,
-    w: 300,
-    h: 410
+    x: 55,
+    y: 70,
+    w: 220,
+    h: 300
   },
   {
     key: "mostValuableCard",
     label: label("mostValuableCard", "Most Valuable Card"),
-    x: 450,
-    y: 90,
-    w: 300,
-    h: 410
+    x: 340,
+    y: 70,
+    w: 220,
+    h: 300
   },
   {
     key: "rarestCard",
     label: label("rarestCard", "Most Wanted Card"),
-    x: 820,
-    y: 90,
-    w: 300,
-    h: 410
+    x: 625,
+    y: 70,
+    w: 220,
+    h: 300
   },
 
   {
     key: "favoriteDeck",
     label: label("favoriteDeck", "Favorite Deck"),
-    x: 120,
-    y: 650,
-    w: 960,
-    h: 560
+    x: 110,
+    y: 460,
+    w: 680,
+    h: 520
   },
 
   {
     key: "maxRank",
     label: label("maxRank", "Highest Rank"),
-    x: 90,
-    y: 1450,
-    w: 480,
-    h: 360
+    x: 55,
+    y: 1090,
+    w: 360,
+    h: 300
   },
   {
     key: "bestGP",
     label: label("bestGP", "Best GP"),
-    x: 630,
-    y: 1450,
-    w: 480,
-    h: 360
+    x: 465,
+    y: 1090,
+    w: 380,
+    h: 340
   }
 ];
 
@@ -1381,14 +1381,14 @@ const slots = [
     ctx.fill();
 
     ctx.fillStyle = profile.textColor || "#cbd5e1";
-    ctx.font = "bold 32px sans-serif";
+    ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("no image", x + w / 2, y + h / 2 + 8);
   }
 
   async function drawSlot(slot) {
 ctx.fillStyle = profile.textColor || "#ffffff";
-ctx.font = "bold 36px sans-serif";
+ctx.font = "bold 28px sans-serif";
 ctx.textAlign = "center";
 ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y);
 
