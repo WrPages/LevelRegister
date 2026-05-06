@@ -225,7 +225,117 @@ async function redisSetJSON(key, value) {
     console.error(`❌ Error guardando Redis key ${key}:`, err);
   }
 }
+const PROFILE_IMAGE_FIELDS = [
+  "favoriteCard",
+  "favoriteDeck",
+  "mostValuableCard",
+  "rarestCard",
+  "bestGP",
+  "maxRank",
+  "profileBg"
+];
 
+function profileImageKey(id, field) {
+  return `profile_image:${id}:${field}`;
+}
+
+async function saveProfileImage(id, field, imageObj) {
+  const key = profileImageKey(id, field);
+
+  await redisSetJSON(key, imageObj);
+
+  if (!userProfiles[id]) {
+    userProfiles[id] = ensureUserProfile(id);
+  }
+
+  userProfiles[id][field] = {
+    type: "redisImage",
+    key
+  };
+
+  await redisSetJSON("user_profiles", userProfiles);
+}
+
+async function getProfileImage(id, field) {
+  const profile = ensureUserProfile(id);
+  const ref = profile[field];
+
+  if (!ref) return null;
+
+  // Formato viejo
+  if (ref.data) return ref;
+
+  // Formato nuevo
+  if (ref.type === "redisImage" && ref.key) {
+    return await redisGetJSON(ref.key, null);
+  }
+
+  return null;
+}
+
+async function attachmentToStoredImage(file) {
+  const res = await fetch(file.url);
+
+  if (!res.ok) {
+    throw new Error(`Failed to download image: ${res.status}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  const originalBuffer = Buffer.from(arrayBuffer);
+
+  // Primero intentamos comprimir.
+  try {
+    const img = await loadImage(originalBuffer);
+
+    const maxWidth = 900;
+    const maxHeight = 900;
+
+    const ratio = Math.min(
+      maxWidth / img.width,
+      maxHeight / img.height,
+      1
+    );
+
+    const width = Math.max(1, Math.round(img.width * ratio));
+    const height = Math.max(1, Math.round(img.height * ratio));
+
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const outputBuffer = canvas.toBuffer("image/jpeg", {
+      quality: 0.8
+    });
+
+    return {
+      type: "base64",
+      mime: "image/jpeg",
+      data: outputBuffer.toString("base64"),
+      width,
+      height,
+      size: outputBuffer.length
+    };
+
+  } catch (err) {
+    console.log("⚠️ No se pudo comprimir, guardando imagen original:", {
+      name: file.name,
+      contentType: file.contentType,
+      size: file.size,
+      error: err.message
+    });
+
+    // Si viene de móvil y canvas no la puede leer, igual la guardamos.
+    // Puede que no se dibuje en canvas si es HEIC, pero no se perderá en redeploy.
+    return {
+      type: "base64",
+      mime: file.contentType || "application/octet-stream",
+      name: file.name || "upload",
+      data: originalBuffer.toString("base64"),
+      size: originalBuffer.length
+    };
+  }
+}
 async function redisLoadUsers(redisGroup) {
   try {
     const data = await redis.hgetall(usersKey(redisGroup));
@@ -1338,9 +1448,11 @@ async function buildProfileCollage(id) {
   const ctx = canvas.getContext("2d");
 
   // Fondo personalizado o fondo default
-  if (profile.profileBg?.data) {
-    try {
-      const bg = await loadImage(Buffer.from(profile.profileBg.data, "base64"));
+const profileBgObj = await getProfileImage(id, "profileBg");
+
+if (profileBgObj?.data) {
+  try {
+    const bg = await loadImage(Buffer.from(profileBgObj.data, "base64"));
 
       const ratio = Math.max(900 / bg.width, 1600 / bg.height);
       const w = bg.width * ratio;
@@ -1446,13 +1558,12 @@ ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y);
     const imgW = slot.w;
     const imgH = slot.h;
 
-    const imgObj = profile[slot.key];
+const imgObj = await getProfileImage(id, slot.key);
 
-    if (!imgObj?.data) {
-      drawPlaceholder(imgX, imgY, imgW, imgH);
-      return;
-    }
-
+if (!imgObj?.data) {
+  drawPlaceholder(imgX, imgY, imgW, imgH);
+  return;
+}
     try {
       const img = await loadImage(Buffer.from(imgObj.data, "base64"));
 
@@ -2111,24 +2222,23 @@ if (msg.attachments.size > 0) {
     return replyAndDelete(msg, "❌ First select what image you want to change from the menu.");
   }
 
-  if (!file.url.match(/\.(png|jpg|jpeg|webp)(\?.*)?$/i)) {
-    return replyAndDelete(msg, "❌ Only png, jpg, jpeg, or webp images are accepted.");
-  }
+console.log("📸 IMAGE UPLOAD:", {
+  field: activeProfileEdit,
+  name: file.name,
+  contentType: file.contentType,
+  size: file.size
+});
 
-let compressedImage;
+let storedImage;
 
 try {
-  compressedImage = await imageUrlToCompressedBase64(file.url, {
-    maxWidth: activeProfileEdit === "profileBg" ? 1200 : 900,
-    maxHeight: activeProfileEdit === "profileBg" ? 2000 : 900,
-    quality: 0.82
-  });
+  storedImage = await attachmentToStoredImage(file);
 } catch (err) {
-  console.error("❌ Error compressing uploaded image:", err);
+  console.error("❌ Error saving uploaded image:", err);
 
   return replyAndDelete(
     msg,
-    "❌ I could not process that image. Try uploading a smaller JPG/PNG."
+    "❌ I could not save that image. Try sending it again as JPG or PNG."
   );
 }
 
@@ -2143,18 +2253,16 @@ try {
   ];
 
 if (profileFields.includes(activeProfileEdit)) {
-  profile[activeProfileEdit] = compressedImage;
-
   delete profileEditState[msg.author.id];
 
-  await saveProfilesNow();
+  await saveProfileImage(id, activeProfileEdit, storedImage);
   await updateUserProfilePost(id);
 
   return replyAndDelete(msg, `✅ Profile image updated: ${activeProfileEdit}`);
 }
 
 if (activeProfileEdit === "panelBg") {
-  userSettings[id].bg = compressedImage;
+  userSettings[id].bg = storedImage;
 
   delete profileEditState[msg.author.id];
 
@@ -2162,9 +2270,6 @@ if (activeProfileEdit === "panelBg") {
   await forceRender(id);
 
   return replyAndDelete(msg, "✅ Main panel background updated.");
-}
-
-  return msg.reply(`❌ Tipo de edición no reconocido: ${activeProfileEdit}`);
 }
 });
 
