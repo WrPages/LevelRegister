@@ -1416,7 +1416,7 @@ ctx.fillText(slot.label, slot.x + slot.w / 2, slot.y);
       const dx = imgX + (imgW - w) / 2;
       const dy = imgY + (imgH - h) / 2;
 
-ctx.globalAlpha = 0.4;
+ctx.globalAlpha = 0.7;
 ctx.drawImage(img, dx, dy, w, h);
 ctx.globalAlpha = 1;
     } catch (err) {
