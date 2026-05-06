@@ -264,7 +264,6 @@ async function saveProfileImage(id, field, imageObj) {
 async function getProfileImage(id, field) {
   const cacheKey = profileImageCacheKey(id, field);
 
-  // 🔥 Primero usar memoria, mucho más rápido
   if (profileImageCache.has(cacheKey)) {
     return profileImageCache.get(cacheKey);
   }
@@ -274,13 +273,11 @@ async function getProfileImage(id, field) {
 
   if (!ref) return null;
 
-  // Formato viejo
-  if (ref.data) {
+  if (ref.data || ref.url) {
     profileImageCache.set(cacheKey, ref);
     return ref;
   }
 
-  // Formato nuevo
   if (ref.type === "redisImage" && ref.key) {
     const img = await redisGetJSON(ref.key, null);
 
@@ -292,6 +289,41 @@ async function getProfileImage(id, field) {
   }
 
   return null;
+}
+async function loadStoredImage(imgObj) {
+  if (!imgObj) return null;
+
+  if (imgObj.data) {
+    return await loadImage(Buffer.from(imgObj.data, "base64"));
+  }
+
+  if (imgObj.url) {
+    const res = await fetch(imgObj.url);
+    const buffer = await res.arrayBuffer();
+    return await loadImage(Buffer.from(buffer));
+  }
+
+  return null;
+}
+
+function setTemporaryProfileImage(id, field, file) {
+  const tempImage = {
+    type: "tempUrl",
+    url: file.url,
+    name: file.name || "upload",
+    mime: file.contentType || "image/unknown",
+    size: file.size || 0
+  };
+
+  profileImageCache.set(profileImageCacheKey(id, field), tempImage);
+
+  if (!userProfiles[id]) {
+    userProfiles[id] = ensureUserProfile(id);
+  }
+
+  userProfiles[id][field] = tempImage;
+
+  return tempImage;
 }
 
 async function attachmentToStoredImage(file) {
@@ -1054,9 +1086,8 @@ if (!displayName || displayName === "Unknown") {
 }
   
 
-if (settings.bg?.type === "base64") {
-  const buffer = Buffer.from(settings.bg.data, "base64");
-  bg = await loadImage(buffer);
+if (settings.bg?.data || settings.bg?.url) {
+  bg = await loadStoredImage(settings.bg);
 } else {
   bg = await loadImageCached("./assets/card.png");
 }
@@ -1478,7 +1509,7 @@ const profileBgObj = await getProfileImage(id, "profileBg");
 
 if (profileBgObj?.data) {
   try {
-    const bg = await loadImage(Buffer.from(profileBgObj.data, "base64"));
+    const bg = await loadStoredImage(profileBgObj);
 
       const ratio = Math.max(900 / bg.width, 1600 / bg.height);
       const w = bg.width * ratio;
@@ -1591,7 +1622,11 @@ if (!imgObj?.data) {
   return;
 }
     try {
-      const img = await loadImage(Buffer.from(imgObj.data, "base64"));
+      const img = await loadStoredImage(imgObj);
+      if (!img) {
+  drawPlaceholder(imgX, imgY, imgW, imgH);
+  return;
+}
 
       // Muestra la imagen completa, sin cortarla
       const ratio = Math.min(imgW / img.width, imgH / img.height);
@@ -2255,18 +2290,6 @@ console.log("📸 IMAGE UPLOAD:", {
   size: file.size
 });
 
-let storedImage;
-
-try {
-  storedImage = await attachmentToStoredImage(file);
-} catch (err) {
-  console.error("❌ Error saving uploaded image:", err);
-
-  return replyAndDelete(
-    msg,
-    "❌ I could not save that image. Try sending it again as JPG or PNG."
-  );
-}
 
   const profileFields = [
     "favoriteCard",
@@ -2279,23 +2302,50 @@ try {
   ];
 
 if (profileFields.includes(activeProfileEdit)) {
+  const field = activeProfileEdit;
+
   delete profileEditState[msg.author.id];
 
-  await saveProfileImage(id, activeProfileEdit, storedImage);
+  // 1️⃣ Mostrar rápido usando la URL temporal de Discord
+  setTemporaryProfileImage(id, field, file);
+
   await updateUserProfilePost(id);
 
-  return replyAndDelete(msg, `✅ Profile image updated: ${activeProfileEdit}`);
+  const reply = await replyAndDelete(msg, `✅ Profile image updated: ${field}`);
+
+  // 2️⃣ Guardar permanente sin hacer esperar al usuario
+  attachmentToStoredImage(file)
+    .then(savedImage => saveProfileImage(id, field, savedImage))
+    .then(() => console.log(`✅ Image persisted in Redis: ${id} ${field}`))
+    .catch(err => console.error(`❌ Error persisting image ${id} ${field}:`, err));
+
+  return reply;
 }
 
 if (activeProfileEdit === "panelBg") {
-  userSettings[id].bg = storedImage;
-
   delete profileEditState[msg.author.id];
 
-  await redisSetJSON("panel_settings", userSettings);
+  userSettings[id].bg = {
+    type: "tempUrl",
+    url: file.url,
+    name: file.name || "upload",
+    mime: file.contentType || "image/unknown",
+    size: file.size || 0
+  };
+
   await forceRender(id);
 
-  return replyAndDelete(msg, "✅ Main panel background updated.");
+  const reply = await replyAndDelete(msg, "✅ Main panel background updated.");
+
+  attachmentToStoredImage(file)
+    .then(savedImage => {
+      userSettings[id].bg = savedImage;
+      return redisSetJSON("panel_settings", userSettings);
+    })
+    .then(() => console.log(`✅ Main panel background persisted: ${id}`))
+    .catch(err => console.error(`❌ Error persisting panel background ${id}:`, err));
+
+  return reply;
 }
 
 return replyAndDelete(msg, `❌ Unknown edit type: ${activeProfileEdit}`);
