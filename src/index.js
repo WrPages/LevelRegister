@@ -344,6 +344,55 @@ function saveProfiles() {
     redisSetJSON("user_profiles", userProfiles);
   }, 2000);
 }
+async function saveProfilesNow() {
+  clearTimeout(profileSaveTimeout);
+  await redisSetJSON("user_profiles", userProfiles);
+}
+async function imageUrlToCompressedBase64(url, options = {}) {
+  const {
+    maxWidth = 900,
+    maxHeight = 900,
+    quality = 0.82
+  } = options;
+
+  const res = await fetch(url);
+
+  if (!res.ok) {
+    throw new Error(`Image download failed: ${res.status}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  const originalBuffer = Buffer.from(arrayBuffer);
+
+  const img = await loadImage(originalBuffer);
+
+  const ratio = Math.min(
+    maxWidth / img.width,
+    maxHeight / img.height,
+    1
+  );
+
+  const width = Math.max(1, Math.round(img.width * ratio));
+  const height = Math.max(1, Math.round(img.height * ratio));
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const outputBuffer = canvas.toBuffer("image/jpeg", {
+    quality
+  });
+
+  return {
+    type: "base64",
+    mime: "image/jpeg",
+    data: outputBuffer.toString("base64"),
+    width,
+    height,
+    size: outputBuffer.length
+  };
+}
 function deleteLater(message, delay = 60_000) {
   if (!message || !message.deletable) return;
 
@@ -1446,7 +1495,14 @@ async function updateUserProfilePost(id) {
   const post = await client.channels.fetch(panel.postId).catch(() => null);
   if (!post) return;
 
-  const collage = await buildProfileCollage(id);
+  let collage;
+
+try {
+  collage = await buildProfileCollage(id);
+} catch (err) {
+  console.error("❌ Error building profile collage:", err);
+  return;
+}
 
   let profileMsg = null;
 
@@ -2059,9 +2115,22 @@ if (msg.attachments.size > 0) {
     return replyAndDelete(msg, "❌ Only png, jpg, jpeg, or webp images are accepted.");
   }
 
-  const res = await fetch(file.url);
-  const buffer = await res.arrayBuffer();
-  const base64 = Buffer.from(buffer).toString("base64");
+let compressedImage;
+
+try {
+  compressedImage = await imageUrlToCompressedBase64(file.url, {
+    maxWidth: activeProfileEdit === "profileBg" ? 1200 : 900,
+    maxHeight: activeProfileEdit === "profileBg" ? 2000 : 900,
+    quality: 0.82
+  });
+} catch (err) {
+  console.error("❌ Error compressing uploaded image:", err);
+
+  return replyAndDelete(
+    msg,
+    "❌ I could not process that image. Try uploading a smaller JPG/PNG."
+  );
+}
 
   const profileFields = [
     "favoriteCard",
@@ -2073,33 +2142,27 @@ if (msg.attachments.size > 0) {
     "profileBg"
   ];
 
-  if (profileFields.includes(activeProfileEdit)) {
-    profile[activeProfileEdit] = {
-      type: "base64",
-      data: base64
-    };
+if (profileFields.includes(activeProfileEdit)) {
+  profile[activeProfileEdit] = compressedImage;
 
-    delete profileEditState[msg.author.id];
+  delete profileEditState[msg.author.id];
 
-    saveProfiles();
-    await updateUserProfilePost(id);
+  await saveProfilesNow();
+  await updateUserProfilePost(id);
 
-    return replyAndDelete(msg, `✅ Profile image updated: ${activeProfileEdit}`);
-  }
+  return replyAndDelete(msg, `✅ Profile image updated: ${activeProfileEdit}`);
+}
 
-  if (activeProfileEdit === "panelBg") {
-    userSettings[id].bg = {
-      type: "base64",
-      data: base64
-    };
+if (activeProfileEdit === "panelBg") {
+  userSettings[id].bg = compressedImage;
 
-    delete profileEditState[msg.author.id];
+  delete profileEditState[msg.author.id];
 
-    saveSettings();
-    await forceRender(id);
+  await redisSetJSON("panel_settings", userSettings);
+  await forceRender(id);
 
-    return replyAndDelete(msg, "✅ Main panel background updated.");
-  }
+  return replyAndDelete(msg, "✅ Main panel background updated.");
+}
 
   return msg.reply(`❌ Tipo de edición no reconocido: ${activeProfileEdit}`);
 }
