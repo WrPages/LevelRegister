@@ -242,23 +242,22 @@ function profileImageKey(id, field) {
 async function saveProfileImage(id, field, imageObj) {
   const key = profileImageKey(id, field);
 
-  // 🔥 Guardar en memoria primero para que el panel se actualice rápido
-  profileImageCache.set(profileImageCacheKey(id, field), imageObj);
-
-  // 🔥 Guardar imagen real en Redis
   await redisSetJSON(key, imageObj);
 
   if (!userProfiles[id]) {
     userProfiles[id] = ensureUserProfile(id);
   }
 
-  // 🔥 En user_profiles solo guardar referencia pequeña
   userProfiles[id][field] = {
     type: "redisImage",
     key
   };
 
+  profileImageCache.set(profileImageCacheKey(id, field), imageObj);
+
   await redisSetJSON("user_profiles", userProfiles);
+
+  console.log(`✅ Saved profile image: ${id} ${field}`);
 }
 
 async function getProfileImage(id, field) {
@@ -273,7 +272,7 @@ async function getProfileImage(id, field) {
 
   if (!ref) return null;
 
-  if (ref.data || ref.url) {
+  if (ref.data) {
     profileImageCache.set(cacheKey, ref);
     return ref;
   }
@@ -283,47 +282,16 @@ async function getProfileImage(id, field) {
 
     if (img?.data) {
       profileImageCache.set(cacheKey, img);
+      return img;
     }
-
-    return img;
   }
 
   return null;
 }
 async function loadStoredImage(imgObj) {
-  if (!imgObj) return null;
+  if (!imgObj?.data) return null;
 
-  if (imgObj.data) {
-    return await loadImage(Buffer.from(imgObj.data, "base64"));
-  }
-
-  if (imgObj.url) {
-    const res = await fetch(imgObj.url);
-    const buffer = await res.arrayBuffer();
-    return await loadImage(Buffer.from(buffer));
-  }
-
-  return null;
-}
-
-function setTemporaryProfileImage(id, field, file) {
-  const tempImage = {
-    type: "tempUrl",
-    url: file.url,
-    name: file.name || "upload",
-    mime: file.contentType || "image/unknown",
-    size: file.size || 0
-  };
-
-  profileImageCache.set(profileImageCacheKey(id, field), tempImage);
-
-  if (!userProfiles[id]) {
-    userProfiles[id] = ensureUserProfile(id);
-  }
-
-  userProfiles[id][field] = tempImage;
-
-  return tempImage;
+  return await loadImage(Buffer.from(imgObj.data, "base64"));
 }
 
 async function attachmentToStoredImage(file) {
@@ -336,58 +304,37 @@ async function attachmentToStoredImage(file) {
   const arrayBuffer = await res.arrayBuffer();
   const originalBuffer = Buffer.from(arrayBuffer);
 
-  // Primero intentamos comprimir.
-  try {
-    const img = await loadImage(originalBuffer);
+  const img = await loadImage(originalBuffer);
 
-    const maxWidth = 700;
-    const maxHeight = 700;
+  const maxWidth = 900;
+  const maxHeight = 900;
 
-    const ratio = Math.min(
-      maxWidth / img.width,
-      maxHeight / img.height,
-      1
-    );
+  const ratio = Math.min(
+    maxWidth / img.width,
+    maxHeight / img.height,
+    1
+  );
 
-    const width = Math.max(1, Math.round(img.width * ratio));
-    const height = Math.max(1, Math.round(img.height * ratio));
+  const width = Math.max(1, Math.round(img.width * ratio));
+  const height = Math.max(1, Math.round(img.height * ratio));
 
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
 
-    ctx.drawImage(img, 0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
 
-    const outputBuffer = canvas.toBuffer("image/jpeg", {
-      quality: 0.72
-    });
+  const outputBuffer = canvas.toBuffer("image/jpeg", {
+    quality: 0.76
+  });
 
-    return {
-      type: "base64",
-      mime: "image/jpeg",
-      data: outputBuffer.toString("base64"),
-      width,
-      height,
-      size: outputBuffer.length
-    };
-
-  } catch (err) {
-    console.log("⚠️ No se pudo comprimir, guardando imagen original:", {
-      name: file.name,
-      contentType: file.contentType,
-      size: file.size,
-      error: err.message
-    });
-
-    // Si viene de móvil y canvas no la puede leer, igual la guardamos.
-    // Puede que no se dibuje en canvas si es HEIC, pero no se perderá en redeploy.
-    return {
-      type: "base64",
-      mime: file.contentType || "application/octet-stream",
-      name: file.name || "upload",
-      data: originalBuffer.toString("base64"),
-      size: originalBuffer.length
-    };
-  }
+  return {
+    type: "base64",
+    mime: "image/jpeg",
+    data: outputBuffer.toString("base64"),
+    width,
+    height,
+    size: outputBuffer.length
+  };
 }
 async function redisLoadUsers(redisGroup) {
   try {
@@ -1086,7 +1033,7 @@ if (!displayName || displayName === "Unknown") {
 }
   
 
-if (settings.bg?.data || settings.bg?.url) {
+if (settings.bg?.data) {
   bg = await loadStoredImage(settings.bg);
 } else {
   bg = await loadImageCached("./assets/card.png");
@@ -2291,61 +2238,58 @@ console.log("📸 IMAGE UPLOAD:", {
 });
 
 
-  const profileFields = [
-    "favoriteCard",
-    "favoriteDeck",
-    "mostValuableCard",
-    "rarestCard",
-    "bestGP",
-    "maxRank",
-    "profileBg"
-  ];
+const profileFields = [
+  "favoriteCard",
+  "favoriteDeck",
+  "mostValuableCard",
+  "rarestCard",
+  "bestGP",
+  "maxRank"
+];
 
 if (profileFields.includes(activeProfileEdit)) {
   const field = activeProfileEdit;
 
-  delete profileEditState[msg.author.id];
+  try {
+    const storedImage = await attachmentToStoredImage(file);
 
-  // 1️⃣ Mostrar rápido usando la URL temporal de Discord
-  setTemporaryProfileImage(id, field, file);
+    await saveProfileImage(id, field, storedImage);
 
-  await updateUserProfilePost(id);
+    delete profileEditState[msg.author.id];
 
-  const reply = await replyAndDelete(msg, `✅ Profile image updated: ${field}`);
+    await updateUserProfilePost(id);
 
-  // 2️⃣ Guardar permanente sin hacer esperar al usuario
-  attachmentToStoredImage(file)
-    .then(savedImage => saveProfileImage(id, field, savedImage))
-    .then(() => console.log(`✅ Image persisted in Redis: ${id} ${field}`))
-    .catch(err => console.error(`❌ Error persisting image ${id} ${field}:`, err));
+    return replyAndDelete(msg, `✅ Profile image updated: ${field}`);
+  } catch (err) {
+    console.error(`❌ Error saving profile image ${field}:`, err);
 
-  return reply;
+    return replyAndDelete(
+      msg,
+      "❌ Could not save that image. Please upload it as JPG, PNG, or WEBP."
+    );
+  }
 }
 
 if (activeProfileEdit === "panelBg") {
-  delete profileEditState[msg.author.id];
+  try {
+    const storedImage = await attachmentToStoredImage(file);
 
-  userSettings[id].bg = {
-    type: "tempUrl",
-    url: file.url,
-    name: file.name || "upload",
-    mime: file.contentType || "image/unknown",
-    size: file.size || 0
-  };
+    userSettings[id].bg = storedImage;
 
-  await forceRender(id);
+    delete profileEditState[msg.author.id];
 
-  const reply = await replyAndDelete(msg, "✅ Main panel background updated.");
+    await redisSetJSON("panel_settings", userSettings);
+    await forceRender(id);
 
-  attachmentToStoredImage(file)
-    .then(savedImage => {
-      userSettings[id].bg = savedImage;
-      return redisSetJSON("panel_settings", userSettings);
-    })
-    .then(() => console.log(`✅ Main panel background persisted: ${id}`))
-    .catch(err => console.error(`❌ Error persisting panel background ${id}:`, err));
+    return replyAndDelete(msg, "✅ Main panel background updated.");
+  } catch (err) {
+    console.error("❌ Error saving main panel background:", err);
 
-  return reply;
+    return replyAndDelete(
+      msg,
+      "❌ Could not save that background. Please upload it as JPG, PNG, or WEBP."
+    );
+  }
 }
 
 return replyAndDelete(msg, `❌ Unknown edit type: ${activeProfileEdit}`);
