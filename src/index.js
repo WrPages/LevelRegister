@@ -2271,6 +2271,10 @@ if (activeProfileEdit === "panelBg") {
 
   return replyAndDelete(msg, "✅ Main panel background updated.");
 }
+
+return replyAndDelete(msg, `❌ Unknown edit type: ${activeProfileEdit}`);
+}
+
 });
 
 // =============================
