@@ -242,12 +242,17 @@ function profileImageKey(id, field) {
 async function saveProfileImage(id, field, imageObj) {
   const key = profileImageKey(id, field);
 
+  // 🔥 Guardar en memoria primero para que el panel se actualice rápido
+  profileImageCache.set(profileImageCacheKey(id, field), imageObj);
+
+  // 🔥 Guardar imagen real en Redis
   await redisSetJSON(key, imageObj);
 
   if (!userProfiles[id]) {
     userProfiles[id] = ensureUserProfile(id);
   }
 
+  // 🔥 En user_profiles solo guardar referencia pequeña
   userProfiles[id][field] = {
     type: "redisImage",
     key
@@ -257,17 +262,33 @@ async function saveProfileImage(id, field, imageObj) {
 }
 
 async function getProfileImage(id, field) {
+  const cacheKey = profileImageCacheKey(id, field);
+
+  // 🔥 Primero usar memoria, mucho más rápido
+  if (profileImageCache.has(cacheKey)) {
+    return profileImageCache.get(cacheKey);
+  }
+
   const profile = ensureUserProfile(id);
   const ref = profile[field];
 
   if (!ref) return null;
 
   // Formato viejo
-  if (ref.data) return ref;
+  if (ref.data) {
+    profileImageCache.set(cacheKey, ref);
+    return ref;
+  }
 
   // Formato nuevo
   if (ref.type === "redisImage" && ref.key) {
-    return await redisGetJSON(ref.key, null);
+    const img = await redisGetJSON(ref.key, null);
+
+    if (img?.data) {
+      profileImageCache.set(cacheKey, img);
+    }
+
+    return img;
   }
 
   return null;
@@ -287,8 +308,8 @@ async function attachmentToStoredImage(file) {
   try {
     const img = await loadImage(originalBuffer);
 
-    const maxWidth = 900;
-    const maxHeight = 900;
+    const maxWidth = 700;
+    const maxHeight = 700;
 
     const ratio = Math.min(
       maxWidth / img.width,
@@ -305,7 +326,7 @@ async function attachmentToStoredImage(file) {
     ctx.drawImage(img, 0, 0, width, height);
 
     const outputBuffer = canvas.toBuffer("image/jpeg", {
-      quality: 0.8
+      quality: 0.72
     });
 
     return {
@@ -407,6 +428,11 @@ function saveSettings() {
 // ⚡ CACHE DE IMÁGENES
 // =============================
 const imageCache = new Map();
+const profileImageCache = new Map();
+
+function profileImageCacheKey(id, field) {
+  return `${id}:${field}`;
+}
 
 async function loadImageCached(src) {
   try {
