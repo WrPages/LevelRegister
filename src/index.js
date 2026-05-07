@@ -2269,6 +2269,26 @@ if (profileFields.includes(activeProfileEdit)) {
     );
   }
 }
+  if (activeProfileEdit === "profileBg" || activeProfileEdit === "profileBG") {
+  try {
+    const storedImage = await attachmentToStoredImage(file);
+
+    await saveProfileImage(id, "profileBg", storedImage);
+
+    delete profileEditState[msg.author.id];
+
+    await updateUserProfilePost(id);
+
+    return replyAndDelete(msg, "✅ Profile background updated.");
+  } catch (err) {
+    console.error("❌ Error saving profile background:", err);
+
+    return replyAndDelete(
+      msg,
+      "❌ Could not save that profile background. Please upload it as JPG, PNG, or WEBP."
+    );
+  }
+}
 
 if (activeProfileEdit === "panelBg") {
   try {
