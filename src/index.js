@@ -1308,25 +1308,28 @@ const __dirname = path.dirname(__filename);
 const POKEMON_GIF_BASE_URL =
   "https://raw.githubusercontent.com/WrPages/gif_database/main";
 
-const POKEMON_DATASET_URL =
-  `${POKEMON_GIF_BASE_URL}/pokemon_dataset.json`;
-
-let pokemonGenerationCache = null;
 
 function normalizePokemonName(name) {
-  return name
+  return String(name || "")
     .toLowerCase()
     .trim()
     .replace(/\.(gif|png|webp)$/i, "")
     .replace(/^s[_\-\s]/i, "")
     .replace(/^shiny\s+/i, "")
+    .replace(/♀/g, "-f")
+    .replace(/♂/g, "-m")
+    .replace(/[’']/g, "")
+    .replace(/\./g, "")
+    .replace(/_/g, "-")
     .replace(/\s+/g, "-")
+    .replace(/--+/g, "-")
+    .replace(/^-+|-+$/g, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 }
 
 function parsePokemonName(rawName) {
-  const raw = rawName.trim();
+  const raw = String(rawName || "").trim();
 
   const isShiny =
     /^s[_\-\s]/i.test(raw) ||
@@ -1339,31 +1342,6 @@ function parsePokemonName(rawName) {
   };
 }
 
-async function loadPokemonGenerations() {
-  if (pokemonGenerationCache) return pokemonGenerationCache;
-
-  const res = await fetch(POKEMON_DATASET_URL);
-  const data = await res.json();
-
-  const map = new Map();
-
-  for (const line of data.evolution_lines || []) {
-    for (const name of line.stages || []) {
-      map.set(normalizePokemonName(name), line.generation);
-    }
-
-    for (const name of line.branch_evolutions || []) {
-      map.set(normalizePokemonName(name), line.generation);
-    }
-  }
-
-  for (const name of data.legendary || []) {
-    map.set(normalizePokemonName(name), "Legendary");
-  }
-
-  pokemonGenerationCache = map;
-  return map;
-}
 
 async function urlExists(url) {
   try {
@@ -1376,37 +1354,47 @@ async function urlExists(url) {
 
 async function getPokemonGifUrl(rawName) {
   const parsed = parsePokemonName(rawName);
-  const generations = await loadPokemonGenerations();
+  const clean = parsed.cleanName;
 
-  const gen = generations.get(parsed.cleanName);
-  if (!gen) return null;
-
-  const normalFile = `${parsed.cleanName}.gif`;
-  const shinyFile = `s_${parsed.cleanName}.gif`;
+  const normalFile = `${clean}.gif`;
+  const shinyFile = `s_${clean}.gif`;
 
   const candidates = [];
 
-  if (gen === "Legendary") {
-    if (parsed.isShiny) {
-      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/Shiny/${shinyFile}`);
-      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/${shinyFile}`);
-    } else {
-      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/Normal/${normalFile}`);
-      candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/${normalFile}`);
-    }
-  } else {
+  // Gen1 a Gen8, cada una con Normal y Shiny
+  for (let gen = 1; gen <= 8; gen++) {
     if (parsed.isShiny) {
       candidates.push(`${POKEMON_GIF_BASE_URL}/Gen${gen}/Shiny/${shinyFile}`);
+      candidates.push(`${POKEMON_GIF_BASE_URL}/Gen${gen}/Shiny/${normalFile}`);
     } else {
       candidates.push(`${POKEMON_GIF_BASE_URL}/Gen${gen}/Normal/${normalFile}`);
     }
   }
 
-  for (const url of candidates) {
-    if (await urlExists(url)) return url;
+  // También buscar en Legendary/Normal y Legendary/Shiny
+  if (parsed.isShiny) {
+    candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/Shiny/${shinyFile}`);
+    candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/Shiny/${normalFile}`);
+  } else {
+    candidates.push(`${POKEMON_GIF_BASE_URL}/Legendary/Normal/${normalFile}`);
   }
 
-  console.log("GIF registrado pero archivo no encontrado:", rawName, candidates);
+  const uniqueCandidates = [...new Set(candidates)];
+
+  for (const url of uniqueCandidates) {
+    if (await urlExists(url)) {
+      console.log("✅ GIF found:", rawName, "->", url);
+      return url;
+    }
+  }
+
+  console.log("❌ GIF not found:", {
+    rawName,
+    clean,
+    isShiny: parsed.isShiny,
+    tried: uniqueCandidates
+  });
+
   return null;
 }
 
@@ -1425,13 +1413,8 @@ async function buildPokemonFavoriteEmbeds(id) {
     const searchName = p.isShiny ? `s_${p.name}` : p.name;
     const gifUrl = await getPokemonGifUrl(searchName);
 
-    if (!gifUrl) {
-  embeds.push(
-    new EmbedBuilder()
-      .setColor(0xff4444)
-      .setTitle(`❌ ${p.displayName}`)
-      .setDescription("Está en el registro, pero no encontré el archivo GIF real.")
-  );
+if (!gifUrl) {
+  console.log("❌ Favorite Pokémon GIF not found:", p.displayName);
   continue;
 }
 
