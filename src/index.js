@@ -49,6 +49,67 @@ function safeParse(data, fallback = {}) {
   }
 }
 
+function normalizeNameForMatch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[*_`~|>]/g, "")
+    .replace(/^@+/, "")
+    .replace(/[:：]+$/g, "")
+    .replace(/[^\w]/g, "")
+    .trim();
+}
+
+function getUserNameCandidates(user) {
+  return [
+    user?.name,
+    user?.heartbeatName,
+    user?.displayName,
+    user?.display_name,
+    user?.username,
+    ...(Array.isArray(user?.aliases) ? user.aliases : [])
+  ].filter(Boolean);
+}
+
+function heartbeatMatchesUser(rawHeartbeatName, user) {
+  const hb = normalizeNameForMatch(rawHeartbeatName);
+
+  if (!hb) return false;
+
+  return getUserNameCandidates(user).some(candidate => {
+    const cleanCandidate = normalizeNameForMatch(candidate);
+
+    if (!cleanCandidate) return false;
+
+    return (
+      cleanCandidate === hb ||
+      cleanCandidate.includes(hb) ||
+      hb.includes(cleanCandidate)
+    );
+  });
+}
+
+function getDisplayNameForUser(id) {
+  return (
+    eliteUsers[id]?.name ||
+    trackingData[id]?.name ||
+    liveTracker[id]?.name ||
+    "Unknown"
+  );
+}
+
+function getHeartbeatNameForUser(id) {
+  return (
+    eliteUsers[id]?.heartbeatName ||
+    eliteUsers[id]?.name ||
+    trackingData[id]?.name ||
+    liveTracker[id]?.name ||
+    "Unknown"
+  );
+}
+
 async function loadUserGPs() {
   try {
     const data = await redis.hgetall("gp_users");
@@ -892,16 +953,17 @@ if (id && eliteUsers[id]) {
   if (!userGroup) continue;
 
   if (!liveTracker[id]) {
-    liveTracker[id] = {
-      sessionXP: 0,
-      sessionTime: 0,
-      instances: 1,
-      boostUntil: 0,
-      name: user.name,
-      packs: 0,
-      gp: 0,
-      group: userGroup
-    };
+liveTracker[id] = {
+  sessionXP: 0,
+  sessionTime: 0,
+  instances: 1,
+  boostUntil: 0,
+  name: user.name || "Unknown",
+  heartbeatName: user.heartbeatName || user.name || "Unknown",
+  packs: 0,
+  gp: 0,
+  group: userGroup
+};
   } else {
     liveTracker[id].group = userGroup;
   }
@@ -1106,12 +1168,6 @@ function createColorMenu(type, userId, category) {
  async function scanHeartbeats() {
   console.log("🔎 Escaneando heartbeats (GLOBAL)...");
 
-const normalize = str =>
-  str
-    ?.toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // quita acentos
-    .replace(/[^\w]/g, "");
 
   try {
 
@@ -1138,20 +1194,27 @@ if (!lines.length) continue;
 
 // 🔥 nombre correcto
 const rawName = lines[0].trim();
-    
-const cleanName = normalize(rawName);
 
 const userEntry = Object.entries(eliteUsers)
-  .find(([id, user]) =>
-    normalize(user.name) === cleanName ||
-    normalize(user.name).includes(cleanName)
-  );
-    console.log("RAW:", rawName);
-console.log("CLEAN:", cleanName);
-    
-      if (!userEntry) continue;
+  .find(([id, user]) => heartbeatMatchesUser(rawName, user));
 
-      const [id] = userEntry;
+console.log("RAW HEARTBEAT:", rawName);
+
+if (!userEntry) {
+  console.log("⚠️ HEARTBEAT SIN MATCH:", rawName);
+  continue;
+}
+
+const [id, matchedUser] = userEntry;
+
+console.log(
+  "✅ HEARTBEAT MATCH:",
+  rawName,
+  "=>",
+  matchedUser.name,
+  "| heartbeatName:",
+  matchedUser.heartbeatName || "none"
+);
 
       if (!latestByUser[id]) {
         latestByUser[id] = msg;
@@ -1162,13 +1225,14 @@ console.log("CLEAN:", cleanName);
     for (const [id, msg] of Object.entries(latestByUser)) {
 
       if (!trackingData[id]) {
-      trackingData[id] = {
-  name: eliteUsers[id].name,
+ trackingData[id] = {
+  name: eliteUsers[id].name || "Unknown",
+  heartbeatName: eliteUsers[id].heartbeatName || eliteUsers[id].name || "Unknown",
   xp: 0,
   time: 0,
   totalpacks: 0,
   currentpacks: 0,
-  lastHeartbeatPacks: 0, 
+  lastHeartbeatPacks: 0,
   gp: 0,
   recordInstances: 0,
   lastHeartbeatMessageId: null
@@ -1233,7 +1297,13 @@ liveTracker[id].instances = instances;
           trackingData[id].recordInstances = instances;
         }
 
-        console.log("🥇 INSTANCES:", eliteUsers[id].name, instances);
+        console.log(
+  "🥇 INSTANCES:",
+  eliteUsers[id].name,
+  "| heartbeat:",
+  eliteUsers[id].heartbeatName || eliteUsers[id].name,
+  instances
+);
       }
 
     }
@@ -1289,7 +1359,7 @@ function buildProfileMainEmbed(id) {
   const userLevel = getUserLevel(totalXP);
 
   return new EmbedBuilder()
-    .setTitle(`📘 Perfil de ${t.name || s.name || "Usuario"}`)
+    .setTitle(`📘 Perfil de ${getDisplayNameForUser(id)}`)
     .setColor("#00ffcc")
     .setDescription(profile.quote || "Perfil de reroll TCG Pocket")
     .addFields(
@@ -2380,6 +2450,7 @@ async function getUserRanking(groupFilter = null) {
     rows.push({
       id,
       name: user.name || data.name || session.name || "Unknown",
+heartbeatName: user.heartbeatName || data.heartbeatName || session.heartbeatName || user.name || "Unknown",
       group: rankingGroup,
       realGroup: activeGroup,
       activeRole: getUserRoleByGroup(activeGroup),
