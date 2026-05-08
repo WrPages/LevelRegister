@@ -2319,51 +2319,7 @@ client.on("messageCreate", async (msg) => {
 
   return msg.reply("✅ XP reset. GP bonus is still active.");
 }
-  //Temporal resetea packs///
-  //*******//
-  if (msg.content.toLowerCase().trim() === "reset packs") {
-  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
 
-  if (!isChampion) {
-    return msg.reply("❌ Only Champions can reset packs.");
-  }
-
-  for (const id in trackingData) {
-    trackingData[id].totalpacks = 0;
-    trackingData[id].currentpacks = 0;
-    trackingData[id].lastHeartbeatPacks = 0;
-  }
-
-  await redisSetJSON("tracking_data", trackingData);
-  await updateRanking();
-
-  return msg.reply("✅ Packs reset in tracking_data.");
-}
-  //******//
-
-  //reset time
-if (msg.content.toLowerCase().trim() === "reset time") {
-  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
-
-  if (!isChampion) {
-    return msg.reply("❌ Only Champions can reset time.");
-  }
-
-  for (const id in trackingData) {
-    trackingData[id].time = 0;
-  }
-
-  for (const id in liveTracker) {
-    liveTracker[id].sessionTime = 0;
-  }
-
-  await redisSetJSON("tracking_data", trackingData);
-  await updateRanking();
-  await updatePanels();
-
-  return msg.reply("✅ Time reset. Online time will start counting from 0.");
-}
-  ///
   
 if (msg.content.toLowerCase().trim() === "reorder panels") {
   const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
