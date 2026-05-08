@@ -1141,8 +1141,8 @@ ctx.fillText(`Lv ${userLevel}`, 620, 80); // SOLO nivel usuario
   ctx.fillText(`XP: ${Math.floor(totalXP)}`, 40, 170);
   ctx.fillText(`Time: ${totalTime}m`, 40, 210);
   ctx.fillText(`Instances: ${t.recordInstances || 0}`, 40, 250);
-  const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
-ctx.fillText(`Packs: ${totalPacks}`, 40, 290);
+const totalPacks = (t.totalpacks || 0) + (t.currentpacks || 0);
+ctx.fillText(`Packs: ${formatCompactNumber(totalPacks)}`, 40, 290);
   ctx.fillText(`GP: ${t.gp || 0}`, 40, 330);
 
 return {
@@ -2298,6 +2298,27 @@ client.on("messageCreate", async (msg) => {
   await updateRanking();
   return msg.reply("✅ Ranking updated.");
 }
+  if (msg.content.toLowerCase().trim() === "reset xp") {
+  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
+
+  if (!isChampion) {
+    return msg.reply("❌ Only Champions can reset XP.");
+  }
+
+  for (const id in trackingData) {
+    trackingData[id].xp = 0;
+  }
+
+  for (const id in liveTracker) {
+    liveTracker[id].sessionXP = 0;
+  }
+
+  await redisSetJSON("tracking_data", trackingData);
+  await updateRanking();
+  await updatePanels();
+
+  return msg.reply("✅ XP reset. GP bonus is still active.");
+}
   //Temporal resetea packs///
   //*******//
   if (msg.content.toLowerCase().trim() === "reset packs") {
@@ -2319,6 +2340,30 @@ client.on("messageCreate", async (msg) => {
   return msg.reply("✅ Packs reset in tracking_data.");
 }
   //******//
+
+  //reset time
+if (msg.content.toLowerCase().trim() === "reset time") {
+  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
+
+  if (!isChampion) {
+    return msg.reply("❌ Only Champions can reset time.");
+  }
+
+  for (const id in trackingData) {
+    trackingData[id].time = 0;
+  }
+
+  for (const id in liveTracker) {
+    liveTracker[id].sessionTime = 0;
+  }
+
+  await redisSetJSON("tracking_data", trackingData);
+  await updateRanking();
+  await updatePanels();
+
+  return msg.reply("✅ Time reset. Online time will start counting from 0.");
+}
+  ///
   
 if (msg.content.toLowerCase().trim() === "reorder panels") {
   const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
