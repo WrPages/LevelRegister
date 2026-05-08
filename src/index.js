@@ -1727,7 +1727,16 @@ const payload = {
 }
 
 function hasCustomPanelBackground(id) {
-  return Boolean(userSettings[id]?.bg?.data);
+  const bg = userSettings[id]?.bg;
+
+  return Boolean(
+    userSettings[id]?.panelHasCustomBg === true ||
+    bg?.data ||
+    bg?.key ||
+    bg?.url ||
+    bg?.type === "base64" ||
+    bg?.type === "redisImage"
+  );
 }
 
 function getPanelDisplayName(id) {
@@ -1783,33 +1792,51 @@ async function reorderPanelsByBackground() {
   try {
     const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
+    // 1. Tomar todos los usuarios que tienen panel registrado
     const ids = sortPanelIdsForDisplay(
       Object.keys(userPanels)
-        .filter(id => userPanels[id]?.messageId)
+        .filter(id => userPanels[id]?.postId)
         .filter(id => eliteUsers[id] || trackingData[id] || liveTracker[id])
     );
 
     console.log(
-      "🔄 Reordering panels:",
+      "🔄 Rebuilding panels:",
       ids.map(id => ({
+        id,
         name: getPanelDisplayName(id),
         customBg: hasCustomPanelBackground(id)
       }))
     );
 
+    // 2. Borrar mensajes viejos del canal de stats que sean paneles del bot
+    const messages = await channel.messages.fetch({ limit: 100 });
+
+    for (const msg of messages.values()) {
+      if (msg.author.id !== client.user.id) continue;
+
+      const isKnownPanel = Object.values(userPanels)
+        .some(panel => panel?.messageId === msg.id);
+
+      const hasCardAttachment = msg.attachments.some(att =>
+        String(att.name || "").toLowerCase() === "card.png"
+      );
+
+      const hasProfileButton = msg.components?.some(row =>
+        row.components?.some(component =>
+          String(component.label || "").toLowerCase().startsWith("view ")
+        )
+      );
+
+      if (isKnownPanel || hasCardAttachment || hasProfileButton) {
+        await msg.delete().catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    // 3. Reenviar todos los paneles en orden correcto
     for (const id of ids) {
       try {
         ensureLiveTrackerForRender(id);
-
-        const oldMessageId = userPanels[id]?.messageId;
-
-        if (oldMessageId) {
-          const oldMsg = await channel.messages.fetch(oldMessageId).catch(() => null);
-
-          if (oldMsg) {
-            await oldMsg.delete().catch(() => {});
-          }
-        }
 
         const { file } = await renderPanel(id, channel);
 
@@ -1822,17 +1849,20 @@ async function reorderPanelsByBackground() {
 
         userPanels[id].messageId = sent.id;
 
-        // Pequeña pausa para evitar rate limit y mantener orden
+        console.log(
+          `✅ Rebuilt panel: ${getPanelDisplayName(id)} | customBg=${hasCustomPanelBackground(id)}`
+        );
+
         await new Promise(resolve => setTimeout(resolve, 1200));
 
       } catch (err) {
-        console.error(`❌ Error reordering panel ${id}:`, err);
+        console.error(`❌ Error rebuilding panel ${id}:`, err);
       }
     }
 
     await redisSetJSON("user_panels", userPanels);
 
-    console.log("✅ Panels reordered by background.");
+    console.log("✅ Panels rebuilt and grouped by background.");
 
   } finally {
     reorderPanelsRunning = false;
@@ -1841,6 +1871,10 @@ async function reorderPanelsByBackground() {
 //let updatingPanels = false;
 // =============================
 async function updatePanels() {
+  if (reorderPanelsRunning) {
+  console.log("⏳ updatePanels skipped because reorder is running");
+  return;
+}
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
   const panelIds = sortPanelIdsForDisplay(Object.keys(liveTracker));
@@ -2495,6 +2529,7 @@ if (activeProfileEdit === "panelBg") {
     const storedImage = await attachmentToStoredImage(file);
 
     userSettings[id].bg = storedImage;
+    userSettings[id].panelHasCustomBg = true;
 
     delete profileEditState[msg.author.id];
 
