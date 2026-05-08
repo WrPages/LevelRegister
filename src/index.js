@@ -264,6 +264,18 @@ const GROUPS = {
     gpChannelId: "1484015417411244082"
   }
 };
+
+let reorderPanelsTimeout = null;
+
+function schedulePanelReorder() {
+  clearTimeout(reorderPanelsTimeout);
+
+  reorderPanelsTimeout = setTimeout(() => {
+    reorderPanelsByBackground().catch(err => {
+      console.error("❌ Error auto-reordering panels:", err);
+    });
+  }, 10_000);
+}
 function usersKey(group) {
   return `users:${group}`;
 }
@@ -1897,6 +1909,15 @@ userPanels[id] = {
 savePanels();
 
 await updateUserProfilePost(id);
+
+schedulePanelReorder();
+
+// Reordenar solo cuando se crea un panel nuevo
+setTimeout(() => {
+  reorderPanelsByBackground().catch(err => {
+    console.error("❌ Error auto-reordering panels:", err);
+  });
+}, 3000);
   }
 }
 
@@ -2360,6 +2381,7 @@ if (activeProfileEdit === "panelBg") {
 
     await redisSetJSON("panel_settings", userSettings);
     await forceRender(id);
+    schedulePanelReorder();
 
     return replyAndDelete(msg, "✅ Main panel background updated.");
   } catch (err) {
