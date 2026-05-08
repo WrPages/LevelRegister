@@ -266,6 +266,7 @@ const GROUPS = {
 };
 
 let reorderPanelsTimeout = null;
+let reorderPanelsRunning = false;
 
 function schedulePanelReorder() {
   clearTimeout(reorderPanelsTimeout);
@@ -1725,13 +1726,126 @@ const payload = {
   }
 }
 
+function hasCustomPanelBackground(id) {
+  return Boolean(userSettings[id]?.bg?.data);
+}
 
+function getPanelDisplayName(id) {
+  return (
+    liveTracker[id]?.name ||
+    trackingData[id]?.name ||
+    eliteUsers[id]?.name ||
+    "user"
+  );
+}
+
+function ensureLiveTrackerForRender(id) {
+  if (!liveTracker[id]) {
+    liveTracker[id] = {
+      sessionXP: 0,
+      sessionTime: 0,
+      instances: trackingData[id]?.recordInstances || 1,
+      boostUntil: 0,
+      name: trackingData[id]?.name || eliteUsers[id]?.name || "Unknown",
+      heartbeatName:
+        trackingData[id]?.heartbeatName ||
+        eliteUsers[id]?.heartbeatName ||
+        trackingData[id]?.name ||
+        "Unknown",
+      packs: 0,
+      gp: trackingData[id]?.gp || 0,
+      group: eliteUsers[id]?.group || "trainer"
+    };
+  }
+}
+
+function sortPanelIdsForDisplay(ids) {
+  return ids.sort((a, b) => {
+    const customA = hasCustomPanelBackground(a) ? 1 : 0;
+    const customB = hasCustomPanelBackground(b) ? 1 : 0;
+
+    // Default primero, custom al final.
+    // Como Discord muestra lo más reciente abajo, los custom quedan juntos abajo.
+    if (customA !== customB) return customA - customB;
+
+    return getPanelDisplayName(a).localeCompare(getPanelDisplayName(b));
+  });
+}
+
+async function reorderPanelsByBackground() {
+  if (reorderPanelsRunning) {
+    console.log("⏳ Reorder already running, skipping...");
+    return;
+  }
+
+  reorderPanelsRunning = true;
+
+  try {
+    const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
+
+    const ids = sortPanelIdsForDisplay(
+      Object.keys(userPanels)
+        .filter(id => userPanels[id]?.messageId)
+        .filter(id => eliteUsers[id] || trackingData[id] || liveTracker[id])
+    );
+
+    console.log(
+      "🔄 Reordering panels:",
+      ids.map(id => ({
+        name: getPanelDisplayName(id),
+        customBg: hasCustomPanelBackground(id)
+      }))
+    );
+
+    for (const id of ids) {
+      try {
+        ensureLiveTrackerForRender(id);
+
+        const oldMessageId = userPanels[id]?.messageId;
+
+        if (oldMessageId) {
+          const oldMsg = await channel.messages.fetch(oldMessageId).catch(() => null);
+
+          if (oldMsg) {
+            await oldMsg.delete().catch(() => {});
+          }
+        }
+
+        const { file } = await renderPanel(id, channel);
+
+        const post = await client.channels.fetch(userPanels[id].postId).catch(() => null);
+
+        const sent = await channel.send({
+          files: [file],
+          components: post ? [buildProfileButton(post, getPanelDisplayName(id))] : []
+        });
+
+        userPanels[id].messageId = sent.id;
+
+        // Pequeña pausa para evitar rate limit y mantener orden
+        await new Promise(resolve => setTimeout(resolve, 1200));
+
+      } catch (err) {
+        console.error(`❌ Error reordering panel ${id}:`, err);
+      }
+    }
+
+    await redisSetJSON("user_panels", userPanels);
+
+    console.log("✅ Panels reordered by background.");
+
+  } finally {
+    reorderPanelsRunning = false;
+  }
+}
 //let updatingPanels = false;
 // =============================
 async function updatePanels() {
   const channel = await client.channels.fetch(process.env.STATS_CHANNEL_ID);
 
-  for (const [id] of Object.entries(liveTracker)) {
+  const panelIds = sortPanelIdsForDisplay(Object.keys(liveTracker));
+
+  for (const id of panelIds) {
 
     if (
       userPanels[id] &&
@@ -1911,13 +2025,6 @@ savePanels();
 await updateUserProfilePost(id);
 
 schedulePanelReorder();
-
-// Reordenar solo cuando se crea un panel nuevo
-setTimeout(() => {
-  reorderPanelsByBackground().catch(err => {
-    console.error("❌ Error auto-reordering panels:", err);
-  });
-}, 3000);
   }
 }
 
@@ -2161,7 +2268,19 @@ client.on("messageCreate", async (msg) => {
   await updateRanking();
   return msg.reply("✅ Ranking updated.");
 }
+if (msg.content.toLowerCase().trim() === "reorder panels") {
+  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
 
+  if (!isChampion) {
+    return msg.reply("❌ Only Champions can reorder panels.");
+  }
+
+  await msg.reply("🔄 Reordering panels...");
+
+  await reorderPanelsByBackground();
+
+  return msg.reply("✅ Panels reordered. Custom backgrounds are now grouped at the bottom.");
+}
   // =============================
   // 🔥 1. TRACKING GLOBAL (SIEMPRE)
   // =============================
