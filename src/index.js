@@ -175,7 +175,7 @@ const XP_PER_INSTANCE_PER_MINUTE = 0.03;
 
 // Trainer gana 1.5x XP.
 const GROUP_XP_MULTIPLIERS = {
-  trainer: 1.5,
+  trainer: 1.2,
   gymLeader: 1,
   eliteFour: 1
 };
@@ -995,11 +995,7 @@ liveTracker[id] = {
 
 const groupMultiplier = GROUP_XP_MULTIPLIERS[userGroup] || 1;
 
-let xpPerMinute =
-  BASE_XP_PER_MINUTE +
-  ((Number(t.instances) || 1) * XP_PER_INSTANCE_PER_MINUTE);
-
-xpPerMinute *= groupMultiplier;
+let xpPerMinute = BASE_XP_PER_MINUTE * groupMultiplier;
 
 if (Date.now() < t.boostUntil) {
   xpPerMinute *= 2;
@@ -2302,6 +2298,28 @@ client.on("messageCreate", async (msg) => {
   await updateRanking();
   return msg.reply("✅ Ranking updated.");
 }
+  //Temporal resetea packs///
+  //*******//
+  if (msg.content.toLowerCase().trim() === "reset packs") {
+  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
+
+  if (!isChampion) {
+    return msg.reply("❌ Only Champions can reset packs.");
+  }
+
+  for (const id in trackingData) {
+    trackingData[id].totalpacks = 0;
+    trackingData[id].currentpacks = 0;
+    trackingData[id].lastHeartbeatPacks = 0;
+  }
+
+  await redisSetJSON("tracking_data", trackingData);
+  await updateRanking();
+
+  return msg.reply("✅ Packs reset in tracking_data.");
+}
+  //******//
+  
 if (msg.content.toLowerCase().trim() === "reorder panels") {
   const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
 
@@ -2629,23 +2647,25 @@ async function getUserRanking(groupFilter = null) {
     const session = liveTracker[id] || {};
 
 const totalXP = getTotalXPForLevel(data, session);
-const level = getUserLevel(totalXP);
-    rows.push({
-      id,
-      name: user.name || data.name || session.name || "Unknown",
-heartbeatName: user.heartbeatName || data.heartbeatName || session.heartbeatName || user.name || "Unknown",
-      group: rankingGroup,
-      realGroup: activeGroup,
-      activeRole: getUserRoleByGroup(activeGroup),
-      level,
-      xp: Math.floor(totalXP),
-      gp: data.gp || 0,
-      packs: (data.totalpacks || 0) + (data.currentpacks || 0),
-      instances: data.recordInstances || 0
-    });
+const totalTime = (data.time || 0) + Math.floor((session.sessionTime || 0) / 60);
+
+rows.push({
+  id,
+  name: user.name || data.name || session.name || "Unknown",
+  group: rankingGroup,
+  level: getUserLevel(totalXP),
+  xp: Math.floor(totalXP),
+  gp: Number(data.gp) || 0,
+  time: totalTime,
+  instances: Number(data.recordInstances) || 0
+});
   }
 
-  return rows.sort((a, b) => b.level - a.level || b.xp - a.xp);
+  return rows.sort((a, b) =>
+  b.xp - a.xp ||
+  b.gp - a.gp ||
+  b.time - a.time
+);
 }
 
 function groupLabel(group) {
@@ -2677,6 +2697,22 @@ function formatCompactNumber(value) {
 
   return String(Math.floor(n));
 }
+function formatDurationCompact(totalMinutes) {
+  const minutes = Number(totalMinutes) || 0;
+
+  if (minutes >= 1440) {
+    const days = minutes / 1440;
+    return `${days.toFixed(days >= 10 ? 1 : 2)}d`;
+  }
+
+  if (minutes >= 60) {
+    const hours = minutes / 60;
+    return `${hours.toFixed(hours >= 10 ? 1 : 2)}h`;
+  }
+
+  return `${Math.floor(minutes)}m`;
+}
+
 async function buildRankingPanel(title, users, group = "global") {
 const width = 900;
 const height = 1280;
@@ -2709,7 +2745,7 @@ ctx.fillText(cleanTitle, 40, 65);
 
   ctx.fillStyle = "#cbd5e1";
   ctx.font = "22px Righteous";
-  ctx.fillText("Sorted by activity score", 42, 105);
+  ctx.fillText("Sorted by total XP", 42, 105);
 
   ctx.fillStyle = accent;
   ctx.fillRect(40, 125, width - 80, 4);
@@ -2777,7 +2813,7 @@ ctx.fillText(user.activeRole?.name || groupLabel(user.realGroup || user.group), 
 
     ctx.fillStyle = "#94a3b8";
     ctx.font = "17px Righteous";
-    ctx.fillText(`${formatCompactNumber(user.packs)} packs`, 660, y + 63);
+    ctx.fillText(`${formatDurationCompact(user.time)}`, 660, y + 63);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "22px Righteous";
