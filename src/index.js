@@ -181,10 +181,21 @@ const GROUP_XP_MULTIPLIERS = {
 };
 
 // XP extra cuando el usuario encuentra un GP.
-const XP_PER_GP_FOUND = 100;
+const XP_PER_GP_LEVEL_BONUS = 175;
 const XP_PER_LEVEL = 250;
 function getUserLevel(totalXP) {
   return Math.floor((Number(totalXP) || 0) / XP_PER_LEVEL) + 1;
+}
+
+function getTotalXPForLevel(data = {}, session = {}) {
+  const baseXP =
+    (Number(data.xp) || 0) +
+    (Number(session.sessionXP) || 0);
+
+  const gpBonusXP =
+    (Number(data.gp) || 0) * XP_PER_GP_LEVEL_BONUS;
+
+  return baseXP + gpBonusXP;
 }
 
 function getXPIntoCurrentLevel(totalXP) {
@@ -909,15 +920,11 @@ for (const [id, data] of Object.entries(gpData)) {
   const oldGpCount = Number(trackingData[id].lastGpCount) || 0;
   const gpDiff = Math.max(0, newGpCount - oldGpCount);
 
-  if (gpDiff > 0) {
-    const bonusXP = gpDiff * XP_PER_GP_FOUND;
-
-    trackingData[id].xp = (Number(trackingData[id].xp) || 0) + bonusXP;
-
-    console.log(
-      `🌟 GP XP BONUS: ${trackingData[id].name || id} +${bonusXP} XP (${gpDiff} GP)`
-    );
-  }
+if (gpDiff > 0) {
+  console.log(
+    `🌟 GP detected for ${trackingData[id].name || id}: +${gpDiff} GP`
+  );
+}
 
   trackingData[id].gp = newGpCount;
   trackingData[id].lastGpCount = newGpCount;
@@ -1024,9 +1031,9 @@ async function renderPanel(id, channel) {
 
   const settings = userSettings[id];
 
-  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-  const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
-  
+const totalXP = getTotalXPForLevel(t, s);
+const totalTime = (t.time || 0) + Math.floor((s.sessionTime || 0) / 60);
+
 const userLevel = getUserLevel(totalXP);
 
 // 🔥 Nivel del Pokémon separado
@@ -1355,8 +1362,8 @@ function buildProfileMainEmbed(id) {
   const t = trackingData[id] || {};
   const s = liveTracker[id] || {};
 
-  const totalXP = (t.xp || 0) + (s.sessionXP || 0);
-  const userLevel = getUserLevel(totalXP);
+const totalXP = getTotalXPForLevel(t, s);
+const userLevel = getUserLevel(totalXP);
 
   return new EmbedBuilder()
     .setTitle(`📘 Perfil de ${getDisplayNameForUser(id)}`)
@@ -2445,8 +2452,8 @@ async function getUserRanking(groupFilter = null) {
     const data = trackingData[id] || {};
     const session = liveTracker[id] || {};
 
-    const totalXP = (data.xp || 0) + (session.sessionXP || 0);
-    const level = getUserLevel(totalXP);
+const totalXP = getTotalXPForLevel(data, session);
+const level = getUserLevel(totalXP);
     rows.push({
       id,
       name: user.name || data.name || session.name || "Unknown",
@@ -2479,6 +2486,21 @@ function groupColor(group) {
   return "#ffd700";
 }
 
+function formatCompactNumber(value) {
+  const n = Number(value) || 0;
+
+  if (n >= 1_000_000) {
+    const v = n / 1_000_000;
+    return `${v.toFixed(v >= 10 ? 1 : 2)}M`;
+  }
+
+  if (n >= 1000) {
+    const v = n / 1000;
+    return `${v.toFixed(v >= 10 ? 1 : 2)}k`;
+  }
+
+  return String(Math.floor(n));
+}
 async function buildRankingPanel(title, users, group = "global") {
 const width = 900;
 const height = 1280;
@@ -2511,7 +2533,7 @@ ctx.fillText(cleanTitle, 40, 65);
 
   ctx.fillStyle = "#cbd5e1";
   ctx.font = "22px Righteous";
-  ctx.fillText("Sorted by user level", 42, 105);
+  ctx.fillText("Sorted by activity score", 42, 105);
 
   ctx.fillStyle = accent;
   ctx.fillRect(40, 125, width - 80, 4);
@@ -2579,7 +2601,7 @@ ctx.fillText(user.activeRole?.name || groupLabel(user.realGroup || user.group), 
 
     ctx.fillStyle = "#94a3b8";
     ctx.font = "17px Righteous";
-    ctx.fillText(`${user.packs} packs`, 660, y + 63);
+    ctx.fillText(`${formatCompactNumber(user.packs)} packs`, 660, y + 63);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "22px Righteous";
