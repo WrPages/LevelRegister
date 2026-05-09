@@ -1303,8 +1303,22 @@ if (packsMatch) {
     x !== "main" &&
     x !== "none"
   ).length;
-        if (!liveTracker[id]) {
-  liveTracker[id] = {};
+if (!liveTracker[id]) {
+  liveTracker[id] = {
+    sessionXP: 0,
+    sessionTime: 0,
+    instances: 1,
+    boostUntil: 0,
+    name: trackingData[id]?.name || eliteUsers[id]?.name || "Unknown",
+    heartbeatName:
+      trackingData[id]?.heartbeatName ||
+      eliteUsers[id]?.heartbeatName ||
+      trackingData[id]?.name ||
+      "Unknown",
+    packs: 0,
+    gp: trackingData[id]?.gp || 0,
+    group: eliteUsers[id]?.group || "trainer"
+  };
 }
 
 liveTracker[id].instances = instances;
@@ -2320,6 +2334,30 @@ client.on("messageCreate", async (msg) => {
   return msg.reply("✅ XP reset. GP bonus is still active.");
 }
 
+  if (msg.content.toLowerCase().trim() === "fix tracking nulls") {
+  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
+
+  if (!isChampion) {
+    return msg.reply("❌ Only Champions can fix tracking data.");
+  }
+
+  sanitizeTracking();
+
+  for (const id in liveTracker) {
+    if (!liveTracker[id]) continue;
+
+    liveTracker[id].sessionXP = Number(liveTracker[id].sessionXP) || 0;
+    liveTracker[id].sessionTime = Number(liveTracker[id].sessionTime) || 0;
+    liveTracker[id].instances = Number(liveTracker[id].instances) || 1;
+  }
+
+  await redisSetJSON("tracking_data", trackingData);
+  await updateRanking();
+  await updatePanels();
+
+  return msg.reply("✅ tracking_data fixed. Null XP/time values were converted to 0.");
+}
+
   
 if (msg.content.toLowerCase().trim() === "reorder panels") {
   const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
@@ -2917,8 +2955,14 @@ function startBackupLoop() {
 
       const s = liveTracker[id];
 
-   trackingData[id].xp += s.sessionXP;
-trackingData[id].time += Math.floor(s.sessionTime / 60);
+trackingData[id].xp =
+  (Number(trackingData[id].xp) || 0) +
+  (Number(s.sessionXP) || 0);
+
+trackingData[id].time =
+  (Number(trackingData[id].time) || 0) +
+  Math.floor((Number(s.sessionTime) || 0) / 60);
+      //ggggggggg
 //trackingData[id].packs = s.packs;
 if (typeof s.gp === "number") {
   trackingData[id].gp = s.gp;
@@ -2928,7 +2972,7 @@ trackingData[id].role = getUserRoleByGroup(s.group).name;
       s.sessionXP = 0;
       s.sessionTime = 0;
     }
-
+sanitizeTracking();
     await redisSetJSON("tracking_data", trackingData);
   }, 600000);
 }
