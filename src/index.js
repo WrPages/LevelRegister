@@ -865,7 +865,63 @@ await redisSetJSON("tracking_data", trackingData);
 });
 
 // ============================= end cloentonce
+function ensureTrackingEntry(id, fallback = {}) {
+  if (!trackingData[id]) {
+    trackingData[id] = {
+      name: fallback.name || liveTracker[id]?.name || eliteUsers[id]?.name || "Unknown",
+      heartbeatName:
+        fallback.heartbeatName ||
+        liveTracker[id]?.heartbeatName ||
+        eliteUsers[id]?.heartbeatName ||
+        eliteUsers[id]?.name ||
+        "Unknown",
+      xp: 0,
+      time: 0,
+      totalpacks: 0,
+      currentpacks: 0,
+      lastHeartbeatPacks: 0,
+      gp: 0,
+      lastGpCount: 0,
+      recordInstances: 0
+    };
+  }
 
+  trackingData[id].xp = Number(trackingData[id].xp) || 0;
+  trackingData[id].time = Number(trackingData[id].time) || 0;
+  trackingData[id].totalpacks = Number(trackingData[id].totalpacks) || 0;
+  trackingData[id].currentpacks = Number(trackingData[id].currentpacks) || 0;
+  trackingData[id].gp = Number(trackingData[id].gp) || 0;
+
+  return trackingData[id];
+}
+
+function flushLiveSession(id, reason = "backup") {
+  const s = liveTracker[id];
+  if (!s) return;
+
+  const t = ensureTrackingEntry(id, s);
+
+  const sessionXP = Number(s.sessionXP) || 0;
+  const sessionSeconds = Number(s.sessionTime) || 0;
+
+  t.xp = (Number(t.xp) || 0) + sessionXP;
+  t.time = (Number(t.time) || 0) + Math.floor(sessionSeconds / 60);
+
+  if (typeof s.gp === "number") {
+    t.gp = s.gp;
+  }
+
+  if (s.group) {
+    t.role = getUserRoleByGroup(s.group).name;
+  }
+
+  s.sessionXP = 0;
+  s.sessionTime = 0;
+
+  console.log(
+    `💾 Session flushed (${reason}): ${t.name || id} +${sessionXP.toFixed(2)} XP +${Math.floor(sessionSeconds / 60)}m`
+  );
+}
 async function runTrackingCycle() {
   try {
     console.log("⏱ Ejecutando ciclo de tracking...", new Date().toLocaleTimeString());
@@ -893,17 +949,22 @@ for (const id in liveTracker) {
     }
   }
 
-  if (!stillOnline) {
+if (!stillOnline) {
+  ensureTrackingEntry(id, liveTracker[id]);
 
-    if (!trackingData[id]) continue;
+  // Guardar XP y tiempo de la sesión antes de borrar liveTracker.
+  flushLiveSession(id, "offline");
 
-    if (trackingData[id].currentpacks > 0) {
-      trackingData[id].totalpacks += trackingData[id].currentpacks;
-      trackingData[id].currentpacks = 0;
-    }
+  if (trackingData[id].currentpacks > 0) {
+    trackingData[id].totalpacks =
+      (Number(trackingData[id].totalpacks) || 0) +
+      (Number(trackingData[id].currentpacks) || 0);
 
-    delete liveTracker[id];
+    trackingData[id].currentpacks = 0;
   }
+
+  delete liveTracker[id];
+}
 }
 
 // 🔥 CARGAR GP DESDE GIST
@@ -2358,6 +2419,21 @@ client.on("messageCreate", async (msg) => {
   return msg.reply("✅ tracking_data fixed. Null XP/time values were converted to 0.");
 }
 
+  if (msg.content.toLowerCase().trim() === "reload tracking") {
+  const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
+
+  if (!isChampion) {
+    return msg.reply("❌ Only Champions can reload tracking data.");
+  }
+
+  trackingData = await redisGetJSON("tracking_data", {});
+  sanitizeTracking();
+
+  await updateRanking();
+  await updatePanels();
+
+  return msg.reply("✅ tracking_data reloaded from Redis and panels/ranking updated.");
+}
   
 if (msg.content.toLowerCase().trim() === "reorder panels") {
   const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
@@ -2948,32 +3024,19 @@ function startLoop() {
 // =============================
 function startBackupLoop() {
   setInterval(async () => {
-    for (const id in liveTracker) {
-      if (!trackingData[id]) {
-        trackingData[id] = { xp: 0, time: 0, name: liveTracker[id].name, packs: 0, gp: 0 };
+    try {
+      for (const id in liveTracker) {
+        flushLiveSession(id, "backup");
       }
 
-      const s = liveTracker[id];
+      sanitizeTracking();
 
-trackingData[id].xp =
-  (Number(trackingData[id].xp) || 0) +
-  (Number(s.sessionXP) || 0);
+      await redisSetJSON("tracking_data", trackingData);
 
-trackingData[id].time =
-  (Number(trackingData[id].time) || 0) +
-  Math.floor((Number(s.sessionTime) || 0) / 60);
-      //ggggggggg
-//trackingData[id].packs = s.packs;
-if (typeof s.gp === "number") {
-  trackingData[id].gp = s.gp;
-}
-trackingData[id].role = getUserRoleByGroup(s.group).name;
-
-      s.sessionXP = 0;
-      s.sessionTime = 0;
+      console.log("✅ tracking_data backup saved.");
+    } catch (err) {
+      console.error("❌ Error in startBackupLoop:", err);
     }
-sanitizeTracking();
-    await redisSetJSON("tracking_data", trackingData);
   }, 600000);
 }
 
