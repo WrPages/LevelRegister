@@ -1088,7 +1088,7 @@ t.sessionXP += xpPerSecond * seconds;
 
 // =============================
 async function renderPanel(id, channel) {
-  const s = liveTracker[id];
+  const s = liveTracker[id] || {};
   const t = trackingData[id] || {};
 
   if (!userSettings[id]) {
@@ -2419,7 +2419,7 @@ client.on("messageCreate", async (msg) => {
   return msg.reply("✅ tracking_data fixed. Null XP/time values were converted to 0.");
 }
 
-  if (msg.content.toLowerCase().trim() === "reload tracking") {
+if (msg.content.toLowerCase().trim() === "reload tracking") {
   const isChampion = msg.member?.roles?.cache?.has(CHAMPION_ROLE_ID);
 
   if (!isChampion) {
@@ -2429,10 +2429,36 @@ client.on("messageCreate", async (msg) => {
   trackingData = await redisGetJSON("tracking_data", {});
   sanitizeTracking();
 
+  gpCache = null;
+  gpLastFetch = 0;
+
+  for (const id in trackingData) {
+    if (!liveTracker[id]) {
+      liveTracker[id] = {
+        sessionXP: 0,
+        sessionTime: 0,
+        instances: trackingData[id]?.recordInstances || 1,
+        boostUntil: 0,
+        name: trackingData[id]?.name || eliteUsers[id]?.name || "Unknown",
+        heartbeatName:
+          trackingData[id]?.heartbeatName ||
+          eliteUsers[id]?.heartbeatName ||
+          trackingData[id]?.name ||
+          "Unknown",
+        packs: 0,
+        gp: trackingData[id]?.gp || 0,
+        group: eliteUsers[id]?.group || "trainer"
+      };
+    } else {
+      liveTracker[id].sessionXP = Number(liveTracker[id].sessionXP) || 0;
+      liveTracker[id].sessionTime = Number(liveTracker[id].sessionTime) || 0;
+    }
+  }
+
   await updateRanking();
   await updatePanels();
 
-  return msg.reply("✅ tracking_data reloaded from Redis and panels/ranking updated.");
+  return msg.reply("✅ tracking_data reloaded from Redis and all panels were refreshed.");
 }
   
 if (msg.content.toLowerCase().trim() === "reorder panels") {
