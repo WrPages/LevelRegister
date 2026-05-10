@@ -171,7 +171,7 @@ const BASE_XP_PER_MINUTE = 0.25;
 
 // Bonus pequeño por instancia activa.
 // Ejemplo: 5 instancias = +0.5 XP/min.
-const XP_PER_INSTANCE_PER_MINUTE = 0.03;
+const XP_PER_INSTANCE_PER_MINUTE = 0.1;
 
 // Trainer gana 1.5x XP.
 const GROUP_XP_MULTIPLIERS = {
