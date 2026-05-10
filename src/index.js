@@ -907,9 +907,7 @@ function flushLiveSession(id, reason = "backup") {
   t.xp = (Number(t.xp) || 0) + sessionXP;
   t.time = (Number(t.time) || 0) + Math.floor(sessionSeconds / 60);
 
-  if (typeof s.gp === "number") {
-    t.gp = s.gp;
-  }
+
 
   if (s.group) {
     t.role = getUserRoleByGroup(s.group).name;
@@ -968,7 +966,7 @@ if (!stillOnline) {
 }
 
 // 🔥 CARGAR GP DESDE GIST
-const gpData = await loadUserGPsCached();
+const gpData = await loadUserGPs();
     
 
 for (const [id, data] of Object.entries(gpData)) {
