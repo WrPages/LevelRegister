@@ -177,7 +177,8 @@ const XP_PER_INSTANCE_PER_MINUTE = 0.1;
 const GROUP_XP_MULTIPLIERS = {
   trainer: 1.2,
   gymLeader: 1,
-  eliteFour: 1
+  eliteFour: 1,
+  rivalDuo: 1.2
 };
 
 // XP extra cuando el usuario encuentra un GP.
@@ -228,7 +229,8 @@ const GUILD_ID = "1483615153743462571";
 const ROLE_IDS = {
   trainer: "1484470626185121804",
   gymLeader: "1486205371256148108",
-  eliteFour: "1483858384498462730"
+  eliteFour: "1483858384498462730",
+  rivalDuo: "1504617233433759834"
 };
 
 async function getHighestActiveRankingRole(userId) {
@@ -238,6 +240,7 @@ async function getHighestActiveRankingRole(userId) {
   if (!member) return "trainer";
 
   if (member.roles.cache.has(ROLE_IDS.eliteFour)) return "eliteFour";
+  if (member.roles.cache.has(ROLE_IDS.rivalDuo)) return "rivalDuo";
   if (member.roles.cache.has(ROLE_IDS.gymLeader)) return "gymLeader";
   if (member.roles.cache.has(ROLE_IDS.trainer)) return "trainer";
 
@@ -262,7 +265,12 @@ const GROUPS = {
   eliteFour: {
     redisGroup: "Elite_Four",
     gpChannelId: "1484015417411244082"
-  }
+  },
+  rivalDuo: {
+  name: "Rival Duo",
+  redisGroup: "Elite_Four",
+    gpChannelId: "1484015417411244082"
+}
 };
 
 let reorderPanelsTimeout = null;
@@ -283,6 +291,38 @@ function usersKey(group) {
 
 function onlineKey(group) {
   return `online:${group}`;
+}
+
+// =============================
+// 🤝 RIVAL DUO HELPERS
+// =============================
+
+const RIVAL_DUOS_KEY = "rival_duos";
+
+async function loadAllRivalDuosProfiles() {
+  try {
+    const data = await redis.hgetall(RIVAL_DUOS_KEY);
+
+    if (!data || typeof data !== "object") return {};
+
+    const out = {};
+
+    for (const duoId in data) {
+      out[duoId] = safeParse(data[duoId], null);
+    }
+
+    return out;
+  } catch (err) {
+    console.error("❌ Error loading Rival Duos:", err);
+    return {};
+  }
+}
+
+function getRivalDuoProfileMembers(duo) {
+  return Object.entries(duo?.members || {}).map(([discordId, member]) => ({
+    discordId,
+    ...member
+  }));
 }
 
 function redisJsonKey(name) {
@@ -719,7 +759,11 @@ function getUserRoleByGroup(group) {
   if (group === "trainer")
     return { name: "Trainer", color: "#00ff00" };
 
-  return { name: "Reroller", color: "#aaaaaa" };
+  
+  if (group === "rivalduo")
+    return { name: "Trainer", color: "#00ff00" };
+
+  return { name: "Reroller", color: "#0xff4d1a" };
 }
 
 
@@ -785,6 +829,29 @@ for (const [groupName, group] of Object.entries(GROUPS)) {
 
       eliteUsers[id].group = eliteUsers[id].groups[0];
     }
+  }
+}
+
+  const rivalDuos = await loadAllRivalDuosProfiles();
+
+for (const duo of Object.values(rivalDuos)) {
+  if (!duo) continue;
+
+  const members = getRivalDuoProfileMembers(duo);
+
+  for (const member of members) {
+    eliteUsers[member.discordId] = {
+      name: member.name || member.heartbeatName || "Unknown",
+      heartbeatName: member.heartbeatName || member.name || "Unknown",
+      main_id: member.gameId,
+      sec_id: null,
+      aliases: Array.isArray(member.aliases)
+        ? member.aliases
+        : [member.name, member.heartbeatName].filter(Boolean),
+      group: "rivalDuo",
+      groups: ["rivalDuo"],
+      role: "Rival Duo"
+    };
   }
 }
 
